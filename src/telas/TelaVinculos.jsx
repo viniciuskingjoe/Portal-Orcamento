@@ -12,17 +12,17 @@ export default function TelaVinculos({ tela, lista, onAdicionar, onEditar, onExc
   return (
     <main className="conteudo">
       <Cabecalho
-        titulo={ehCanal ? "Canais" : "Dedução"}
+        titulo={ehCanal ? "Canais" : "Despesas"}
         subtitulo={
           ehCanal
             ? "Agrupe as contas de receita que compõem cada canal de venda."
-            : "Agrupe separadamente as contas usadas nas deduções de vendas."
+            : "Agrupe as contas que compõem cada grupo de despesa."
         }
         onVoltar={onVoltar}
         acao={
           <Botao onClick={() => onAdicionar()}>
             <Icone nome="plus" tamanho={18} />
-            Adicionar {ehCanal ? "canal" : "dedução"}
+            Adicionar {ehCanal ? "canal" : "despesa"}
           </Botao>
         }
       />
@@ -31,7 +31,7 @@ export default function TelaVinculos({ tela, lista, onAdicionar, onEditar, onExc
           <article className="card-vinculo" key={item.id}>
             <div className="card-vinculo__topo">
               <div>
-                <span>{ehCanal ? "Canal de venda" : "Grupo de dedução"}</span>
+                <span>{ehCanal ? "Canal de venda" : "Grupo de despesa"}</span>
                 <h3>{item.nome}</h3>
               </div>
               <div className="linha-crud__acoes">
@@ -75,7 +75,7 @@ export default function TelaVinculos({ tela, lista, onAdicionar, onEditar, onExc
           </article>
         ))}
         {!lista.length ? (
-          <EstadoVazio texto={`Adicione ${ehCanal ? "um canal" : "uma dedução"}.`} />
+          <EstadoVazio texto={`Adicione ${ehCanal ? "um canal" : "uma despesa"}.`} />
         ) : null}
       </div>
     </main>

@@ -46,7 +46,7 @@ export default function TelaDeducao({
     ? "Somente leitura: total = percentual planejado × receita de vendas planejada."
     : podeEditar
       ? "Edição liberada: clique no percentual planejado."
-      : "Para editar, selecione filial, canal e dedução específicos.";
+      : "Para editar, selecione filial, canal e despesa específicos.";
 
   return (
     <main className="conteudo conteudo--orcamento">
@@ -66,7 +66,7 @@ export default function TelaDeducao({
           />
           <CheckOcultarCanais marcado={filtros.ocultarSemValores} onAlterar={alterarOcultar} />
           <ListaSelecao
-            titulo="Deduções"
+            titulo="Despesas"
             itens={plano.deducoes}
             selecionado={filtros.deducao}
             onSelecionar={(id) => onAlterarFiltro({ deducao: id })}

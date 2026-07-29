@@ -7,7 +7,7 @@ const ROTULO = {
   filiais: "filial",
   centros: "centro de custo",
   canais: "canal",
-  deducao: "dedução",
+  deducao: "despesa",
 };
 
 const TEM_CONTAS = new Set(["canais", "deducao"]);

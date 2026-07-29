@@ -68,7 +68,9 @@ export const MODULOS = {
   filiais: { titulo: "Filiais", tipo: "config", icone: "building" },
   centros: { titulo: "Centro de Custos", tipo: "config", icone: "layers" },
   canais: { titulo: "Canais", tipo: "config", icone: "route" },
-  deducao: { titulo: "Dedução", tipo: "config", icone: "percent" },
+  // Rótulo é "Despesas"; o id continua `deducao` porque é o que está gravado
+  // nos planos salvos e nas chaves de percentual.
+  deducao: { titulo: "Despesas", tipo: "config", icone: "percent" },
   vendas: { titulo: "Receita de Vendas", tipo: "receita", icone: "chart" },
   operacionais: { titulo: "Receitas Operacionais", tipo: "receita", icone: "coins" },
   deducaoVendas: { titulo: "Dedução de Vendas", tipo: "despesa", icone: "trendingDown" },
