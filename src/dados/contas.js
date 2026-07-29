@@ -1,0 +1,29 @@
+// Plano de contas usado para vincular canais e deduções.
+// No sistema real, virá de uma view do ERP (VW_..._) em vez destas constantes.
+
+export const CONTAS_RECEITA = [
+  { id: "3.1.1.01.001", codigo: "3.1.1.01.001", descricao: "VENDAS DE PRODUTOS - COLEÇÃO" },
+  { id: "3.1.1.01.002", codigo: "3.1.1.01.002", descricao: "VENDAS DE PRODUTOS - SALDO" },
+  { id: "3.1.1.01.003", codigo: "3.1.1.01.003", descricao: "VENDAS DE PRODUTOS - BAZAR" },
+  { id: "3.1.1.01.004", codigo: "3.1.1.01.004", descricao: "VENDAS DE PRODUTOS - E-COMMERCE" },
+  { id: "3.1.1.01.005", codigo: "3.1.1.01.005", descricao: "VENDAS DE PRODUTOS - MOSTRUÁRIO" },
+  { id: "3.1.1.01.006", codigo: "3.1.1.01.006", descricao: "VENDAS DE RESÍDUOS TÊXTEIS" },
+  { id: "3.1.1.01.007", codigo: "3.1.1.01.007", descricao: "VENDAS DE MERCADORIAS - COLEÇÃO" },
+  { id: "3.1.1.01.050", codigo: "3.1.1.01.050", descricao: "VENDAS DE PRODUTOS NO MERCADO EXTERNO" },
+  { id: "3.1.1.01.051", codigo: "3.1.1.01.051", descricao: "VENDAS DE MERCADORIAS NO MERCADO EXTERNO" },
+  { id: "3.1.1.01.052", codigo: "3.1.1.01.052", descricao: "VENDAS DE MERCADORIAS E PRODUTOS" },
+  { id: "3.1.1.01.060", codigo: "3.1.1.01.060", descricao: "FABRICAÇÃO POR ENCOMENDA" },
+  { id: "3.1.1.02.001", codigo: "3.1.1.02.001", descricao: "SERVIÇOS PRESTADOS MERCADO INTERNO" },
+  { id: "3.1.1.02.002", codigo: "3.1.1.02.002", descricao: "SERVIÇOS PRESTADOS MERCADO EXTERNO" },
+  { id: "3.1.1.05.001", codigo: "3.1.1.05.001", descricao: "VENDAS DE MERCADORIA - LOJAS" },
+];
+
+export const CONTAS_DEDUCAO = [
+  { id: "3.1.9.01.001", codigo: "3.1.9.01.001", descricao: "DEVOLUÇÕES DE VENDAS" },
+  { id: "3.1.9.01.002", codigo: "3.1.9.01.002", descricao: "ABATIMENTOS E DESCONTOS" },
+  { id: "3.1.9.02.001", codigo: "3.1.9.02.001", descricao: "ICMS SOBRE VENDAS" },
+  { id: "3.1.9.02.002", codigo: "3.1.9.02.002", descricao: "PIS SOBRE VENDAS" },
+  { id: "3.1.9.02.003", codigo: "3.1.9.02.003", descricao: "COFINS SOBRE VENDAS" },
+  { id: "3.1.9.02.004", codigo: "3.1.9.02.004", descricao: "IPI SOBRE VENDAS" },
+  { id: "3.1.9.02.005", codigo: "3.1.9.02.005", descricao: "SIMPLES NACIONAL" },
+];

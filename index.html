@@ -3,9 +3,24 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="theme-color" content="#181818" />
+    <meta name="theme-color" content="#0b0f0e" />
     <link rel="icon" href="data:," />
     <title>Planejamento Orçamentário</title>
+    <script>
+      // Aplicado antes do CSS pintar. No JS do fim do body a tela pisca branca
+      // a cada load (PADRAO-PROJETOS-AKR.md §3).
+      (function () {
+        try {
+          var salvo = localStorage.getItem("tema");
+          var escuro = salvo
+            ? salvo === "dark"
+            : matchMedia("(prefers-color-scheme: dark)").matches;
+          if (escuro) document.documentElement.setAttribute("data-theme", "dark");
+        } catch (e) {
+          /* modo privativo: segue no tema claro */
+        }
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>

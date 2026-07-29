@@ -1,0 +1,92 @@
+/* ==========================================================================
+   Tokens de cor — PADRAO-PROJETOS-AKR.md §2
+
+   Nenhuma regra de componente conhece o tema: só os tokens mudam. Não cravar
+   hex em componente. Faltando token para um caso novo, criar o token.
+   ========================================================================== */
+
+:root {
+  --bg: #eef3f1;
+  --surface: #ffffff;
+  --surface-soft: #f6f9f8;
+  --surface-hover: #edf2f0;
+  --surface-tint: #f8faf9;
+  --surface-accent: #e8f0fc;
+  --text: #17231f;
+  --text-soft: #405048;
+  --text-faint: #7b8982;
+  --muted: #68766f;
+  --border: #d7e2de;
+  --border-strong: #bdccc6;
+  --primary: #10201b;
+  --primary-hover: #000000;
+  --accent: #3f8ae0;
+  --accent-soft: #e6effc;
+  --warning: #b66a17;
+  --warning-soft: #fff2dc;
+  --danger: #b94a4a;
+  --danger-soft: #fde9e9;
+  --success: #227c5b;
+  --success-soft: #e5f5ed;
+  --info: #416b9b;
+  --info-soft: #eaf1fa;
+  --disabled-bg: #c9d3cf;
+  --disabled-fg: #6c7a74;
+  --sidebar-bg: #0b0f0e;
+  --on-dark: #ffffff;
+  --overlay: rgba(12, 27, 22, 0.46);
+  --shadow-sm: 0 1px 2px rgba(20, 45, 37, 0.05);
+  --shadow-md: 0 18px 42px rgba(22, 57, 47, 0.13);
+  --shadow-panel: 0 12px 28px rgba(16, 43, 35, 0.07), 0 1px 2px rgba(16, 43, 35, 0.05);
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --sidebar-width: 256px;
+
+  /* A sidebar é preta nos dois temas, então seus tons não pertencem ao par
+     claro/escuro — ficam fora do bloco [data-theme]. */
+  --sidebar-accent: #6aa8f2;
+  --sidebar-text: rgba(255, 255, 255, 0.7);
+  --sidebar-faint: rgba(255, 255, 255, 0.42);
+  --sidebar-hover: rgba(255, 255, 255, 0.06);
+  --sidebar-active: rgba(106, 168, 242, 0.13);
+  --sidebar-line: rgba(255, 255, 255, 0.09);
+}
+
+:root[data-theme="dark"] {
+  --bg: #12171a;
+  --surface: #1a2125;
+  --surface-soft: #202930;
+  --surface-hover: #26313a;
+  --surface-tint: #1d252a;
+  --surface-accent: #1c2b3d;
+  --text: #e6edf3;
+  --text-soft: #c2ced6;
+  --text-faint: #7d8d99;
+  --muted: #93a3ae;
+  --border: #2c3841;
+  --border-strong: #3d4c58;
+  --primary: #3f8ae0;
+  --primary-hover: #5b9de8;
+  --accent: #6aa8f2;
+  --accent-soft: #1e2f45;
+  --warning: #e0a25a;
+  --warning-soft: #3a2c17;
+  --danger: #e08585;
+  --danger-soft: #3d2020;
+  --success: #5fb98f;
+  --success-soft: #173024;
+  --info: #7aa8dd;
+  --info-soft: #1b2836;
+  --disabled-bg: #2c3841;
+  --disabled-fg: #6b7a86;
+  --overlay: rgba(0, 0, 0, 0.6);
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --shadow-md: 0 18px 42px rgba(0, 0, 0, 0.5);
+  --shadow-panel: 0 12px 28px rgba(0, 0, 0, 0.35), 0 1px 2px rgba(0, 0, 0, 0.3);
+  color-scheme: dark;
+}
+
+:root[data-theme="dark"] body {
+  background: var(--bg);
+}
