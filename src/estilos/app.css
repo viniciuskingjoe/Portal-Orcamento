@@ -1844,6 +1844,156 @@ dialog::backdrop {
   cursor: not-allowed;
 }
 
+/* --- controles inline da barra de módulo -------------------------------- */
+
+.campo-inline {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.campo-inline > span {
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.campo-inline select {
+  min-height: 34px;
+  max-width: 320px;
+  padding: 0 10px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  color: var(--text);
+  font-size: 13px;
+}
+
+.check-inline {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  color: var(--text-soft);
+  font-size: 12.5px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.check-inline input {
+  position: absolute;
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.check-inline input:checked + .checkbox-visual {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+
+/* Período do plano: valor fixo, não campo editável. */
+.campo-fixo {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 40px;
+  padding: 0 12px;
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--radius-md);
+  color: var(--text-soft);
+  font-size: 13.5px;
+}
+
+/* --- conta na lateral do orçamento -------------------------------------- */
+
+.selecao-item--conta {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 2px;
+  align-items: start;
+  text-align: left;
+  padding: 8px 10px;
+}
+
+.selecao-item--conta code {
+  color: var(--accent);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.selecao-item--conta > span {
+  font-size: 12px;
+  line-height: 1.25;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.selecao-item--conta.is-active code {
+  color: inherit;
+}
+
+.painel-selecao {
+  max-height: min(70vh, 640px);
+  overflow-y: auto;
+}
+
+/* --- lista do ERP com seleção ------------------------------------------- */
+
+.lista-crud__topo--filiais,
+.linha-crud--filiais {
+  grid-template-columns: 28px 100px 1fr 180px;
+  gap: 12px;
+}
+
+.lista-crud__topo--filiais {
+  grid-template-columns: 28px 100px 1fr 180px;
+}
+
+.linha-crud--filiais {
+  position: relative;
+  cursor: pointer;
+}
+
+.linha-crud--filiais input {
+  position: absolute;
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.linha-crud--filiais input:checked + .checkbox-visual {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+
+.linha-crud.is-inativa code,
+.linha-crud.is-inativa strong,
+.linha-crud.is-inativa .linha-crud__meta {
+  color: var(--text-faint);
+}
+
+.card-visao__grupo {
+  flex: 0 0 auto;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: var(--surface-soft);
+  border: 1px solid var(--border);
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 700;
+}
+
 .arvore-conta__abaixo {
   flex: 0 0 auto;
   min-width: 20px;

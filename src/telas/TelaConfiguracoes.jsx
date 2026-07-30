@@ -1,22 +1,26 @@
 import Cabecalho from "../componentes/Cabecalho.jsx";
 import Icone from "../componentes/Icone.jsx";
 
-export default function TelaConfiguracoes({ filiais, centros, catalogo, onAbrir }) {
+export default function TelaConfiguracoes({
+  filiais,
+  filiaisAtivas,
+  centros,
+  visoesContabeis,
+  onAbrir,
+}) {
   const cartoes = [
     {
       id: "filiais",
       titulo: "Filiais",
       icone: "building",
-      total: filiais.length,
-      rotulo: filiais.length === 1 ? "filial" : "filiais",
+      legenda: `${filiaisAtivas.length} de ${filiais.length} em uso`,
       origem: "dbo.FILIAIS",
     },
     {
       id: "centros",
       titulo: "Centro de Custos",
       icone: "layers",
-      total: centros.length,
-      rotulo: centros.length === 1 ? "centro ativo" : "centros ativos",
+      legenda: `${centros.length} ${centros.length === 1 ? "centro ativo" : "centros ativos"}`,
       origem: "dbo.CTB_CENTRO_CUSTO",
     },
   ];
@@ -42,7 +46,7 @@ export default function TelaConfiguracoes({ filiais, centros, catalogo, onAbrir 
             <span className="card-modulo__texto">
               <strong>{cartao.titulo}</strong>
               <small>
-                {cartao.total} {cartao.rotulo} · {cartao.origem}
+                {cartao.legenda} · {cartao.origem}
               </small>
             </span>
             <Icone nome="chevron" tamanho={17} />
@@ -52,8 +56,9 @@ export default function TelaConfiguracoes({ filiais, centros, catalogo, onAbrir 
 
       <p className="modulo-aviso">
         <Icone nome="info" tamanho={16} />
-        Estes cadastros são somente leitura: quem manda neles é o ERP. O plano de contas usado nas
-        visões tem {catalogo.lista.length} classificações e vem da mesma origem.
+        As listas são do ERP e não se editam aqui — o que o portal decide é quais filiais usar. O
+        plano de contas vem das {visoesContabeis.length} visões contábeis do Linx, escolhidas em
+        cada visão do portal.
       </p>
     </main>
   );

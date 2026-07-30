@@ -40,9 +40,7 @@ export default function TelaPlanos({ planos, visoes, onAbrir, onNovo, onExcluir 
                 </span>
                 <span className="card-plano__texto">
                   <strong>{plano.nome}</strong>
-                  <small>
-                    01/01/{plano.inicio} até 31/12/{plano.fim}
-                  </small>
+                  <small>Ano {plano.ano}</small>
                   <span className="card-plano__visao">
                     <Icone nome="eye" tamanho={13} />
                     {nomeDaVisao(plano.visaoId)}

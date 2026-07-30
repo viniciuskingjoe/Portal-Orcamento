@@ -51,10 +51,11 @@ async function buscar(caminho, parametros) {
 
 export const api = {
   health: () => buscar("/api/health"),
-  contas: () => buscar("/api/contas"),
+  visoesContabeis: () => buscar("/api/visoes-contabeis"),
+  contas: (visao) => buscar("/api/contas", { visao }),
   filiais: () => buscar("/api/filiais"),
   centrosDeCusto: () => buscar("/api/centros-de-custo"),
-  realizado: (ano, filialId) => buscar("/api/realizado", { ano, filial: filialId }),
+  realizado: (ano, visao, filialId) => buscar("/api/realizado", { ano, visao, filial: filialId }),
 };
 
 export { ErroDaApi };

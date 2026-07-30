@@ -6,6 +6,7 @@ import {
   listarContas,
   listarFiliais,
   listarRealizado,
+  listarVisoesContabeis,
 } from "./consultas.js";
 
 // ============================================================================
@@ -34,8 +35,13 @@ app.get(
 );
 
 app.get(
+  "/api/visoes-contabeis",
+  rota(async (_req, res) => res.json(await listarVisoesContabeis()))
+);
+
+app.get(
   "/api/contas",
-  rota(async (_req, res) => res.json(await listarContas()))
+  rota(async (req, res) => res.json(await listarContas({ visao: req.query.visao })))
 );
 
 app.get(
@@ -56,7 +62,7 @@ app.get(
       return res.status(400).json({ erro: "Parâmetro `ano` inválido." });
     }
     const filialId = req.query.filial ? String(req.query.filial) : null;
-    res.json(await listarRealizado({ ano, filialId }));
+    res.json(await listarRealizado({ ano, filialId, visao: req.query.visao }));
   })
 );
 

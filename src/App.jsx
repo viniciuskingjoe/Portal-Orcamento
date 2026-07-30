@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 
 import Sidebar from "./componentes/Sidebar.jsx";
 import DrawerNovoPlano from "./componentes/DrawerNovoPlano.jsx";
-import ModalNome from "./componentes/ModalNome.jsx";
+import ModalVisao from "./componentes/ModalVisao.jsx";
 import ModalConfirmacao from "./componentes/ModalConfirmacao.jsx";
 import { AvisoErro, Carregando } from "./componentes/Estados.jsx";
 
@@ -13,28 +13,33 @@ import TelaListaErp from "./telas/TelaListaErp.jsx";
 import TelaVisoes from "./telas/TelaVisoes.jsx";
 import TelaVisao from "./telas/TelaVisao.jsx";
 import TelaVisaoModulo from "./telas/TelaVisaoModulo.jsx";
-import TelaOrcamento from "./telas/TelaOrcamento.jsx";
+import TelaOrcamento, { TODAS_AS_CONTAS } from "./telas/TelaOrcamento.jsx";
 
 import { EMPRESA } from "./dados/seeds.js";
 import { ehModulo, modulo as definicaoDoModulo } from "./dados/modulos.js";
+import { chavePlanejado, criarLinhasOrcamento, criarPlano, gerarId } from "./dados/plano.js";
 import {
-  chavePlanejado,
-  criarLinhasOrcamento,
-  criarPlano,
-  gerarId,
-} from "./dados/plano.js";
-import { criarVisao, definirContasDoModulo } from "./dados/visao.js";
+  SEM_CENTRO,
+  contasEfetivasDoModulo,
+  criarVisao,
+  definirContasDaFilial,
+  definirContasDoCentro,
+  definirUsaCentroDeCusto,
+  usaCentroDeCusto,
+} from "./dados/visao.js";
+import { conta as buscarConta } from "./dados/contas.js";
 import { carregarEstado, salvarEstado } from "./lib/persistencia.js";
 import { formatarParaEdicao, parseNumeroPtBr } from "./lib/formato.js";
 import { aplicarTema, temaInicial } from "./lib/tema.js";
-import { useCadastrosDoErp, useRealizado } from "./lib/useErp.js";
+import { useCadastrosDoErp, useContas, useRealizado } from "./lib/useErp.js";
 
-const FILTROS_PADRAO = { filial: "total", ano: new Date().getFullYear() };
+const FILTROS_PADRAO = { filial: "total", centro: SEM_CENTRO, conta: TODAS_AS_CONTAS };
 const TELAS_ERP = new Set(["filiais", "centros"]);
 
 export default function PlanejamentoOrcamentario() {
   const inicial = useMemo(carregarEstado, []);
 
+  const [configuracao, setConfiguracao] = useState(inicial.configuracao);
   const [visoes, setVisoes] = useState(inicial.visoes);
   const [planos, setPlanos] = useState(inicial.planos);
 
@@ -45,11 +50,14 @@ export default function PlanejamentoOrcamentario() {
   const [tema, setTema] = useState(temaInicial);
 
   const [drawerAberto, setDrawerAberto] = useState(false);
-  const [novoPlano, setNovoPlano] = useState({ nome: "", inicio: "2024", fim: "2026", visaoId: null });
+  const [novoPlano, setNovoPlano] = useState({
+    nome: "",
+    ano: String(new Date().getFullYear() + 1),
+    visaoId: null,
+  });
   const [erroPlano, setErroPlano] = useState("");
 
   const [modalVisao, setModalVisao] = useState(null);
-  const [modalNome, setModalNome] = useState("");
   const [confirmacao, setConfirmacao] = useState(null);
 
   const [filtros, setFiltros] = useState(FILTROS_PADRAO);
@@ -57,52 +65,90 @@ export default function PlanejamentoOrcamentario() {
   const [avisoPersistencia, setAvisoPersistencia] = useState("");
 
   const erp = useCadastrosDoErp();
-  const realizado = useRealizado(filtros.ano);
 
   const planoAtivo = useMemo(
     () => planos.find((plano) => plano.id === planoAtivoId) ?? null,
     [planos, planoAtivoId]
   );
-
   const visaoDoPlano = useMemo(
     () => visoes.find((visao) => visao.id === planoAtivo?.visaoId) ?? null,
     [visoes, planoAtivo]
   );
-
   const visaoAberta = useMemo(
     () => visoes.find((visao) => visao.id === visaoAbertaId) ?? null,
     [visoes, visaoAbertaId]
   );
-
   const moduloDaTela = ehModulo(tela) ? definicaoDoModulo(tela) : null;
+
+  // Filiais que o portal usa. `null` = ainda não escolhidas, o que vale por todas.
+  const filiaisAtivas = useMemo(() => {
+    const escolhidas = configuracao.filiaisAtivas;
+    if (!escolhidas) return erp.filiais;
+    const marcadas = new Set(escolhidas);
+    return erp.filiais.filter((filial) => marcadas.has(filial.id));
+  }, [erp.filiais, configuracao.filiaisAtivas]);
+
+  // A visão contábil em uso depende de onde se está: montando uma visão ou
+  // orçando um plano.
+  const visaoContabil =
+    (tela === "visao" || tela === "visao-modulo" ? visaoAberta : visaoDoPlano)?.visaoContabil ?? null;
+
+  const contas = useContas(visaoContabil);
+  const realizado = useRealizado(planoAtivo?.ano ?? null, visaoDoPlano?.visaoContabil ?? null);
 
   useEffect(() => {
     aplicarTema(tema);
   }, [tema]);
 
   useEffect(() => {
-    const resultado = salvarEstado({ visoes, planos });
+    const resultado = salvarEstado({ configuracao, visoes, planos });
     setAvisoPersistencia(
       resultado.ok
         ? ""
         : "Não foi possível salvar neste navegador. As alterações valem só para esta sessão."
     );
-  }, [visoes, planos]);
+  }, [configuracao, visoes, planos]);
+
+  // --------------------------------------------------------------------------
+  // Orçamento em tela
+  // --------------------------------------------------------------------------
+
+  const filiaisDoFiltro = useMemo(() => {
+    if (filtros.filial === "total") return filiaisAtivas;
+    const escolhida = filiaisAtivas.find((filial) => filial.id === filtros.filial);
+    return escolhida ? [escolhida] : [];
+  }, [filiaisAtivas, filtros.filial]);
+
+  // Contas analíticas que a visão configurou para a combinação em tela. Só
+  // CLASSIFICACAO_ANALITICA = 0: sintética não recebe lançamento.
+  const contasDisponiveis = useMemo(() => {
+    if (!visaoDoPlano || !moduloDaTela) return [];
+    const codigos = new Set();
+    filiaisDoFiltro.forEach((filial) => {
+      contasEfetivasDoModulo(visaoDoPlano, moduloDaTela.id, filial.id, filtros.centro).forEach(
+        (codigo) => codigos.add(codigo)
+      );
+    });
+    return [...codigos]
+      .filter((codigo) => buscarConta(contas.catalogo, codigo)?.sintetica === false)
+      .sort();
+  }, [visaoDoPlano, moduloDaTela, filiaisDoFiltro, filtros.centro, contas.catalogo]);
+
+  const contasDaTabela =
+    filtros.conta === TODAS_AS_CONTAS ? contasDisponiveis : [filtros.conta];
 
   const linhasOrcamento = useMemo(() => {
     if (!planoAtivo || !moduloDaTela) return [];
     return criarLinhasOrcamento({
       plano: planoAtivo,
-      visao: visaoDoPlano,
-      filiais: erp.filiais,
-      catalogo: erp.catalogo,
+      moduloId: moduloDaTela.id,
+      filiais: filiaisDoFiltro,
+      centroId: filtros.centro,
+      contas: contasDaTabela,
       realizado: realizado.doAno,
       realizadoAnterior: realizado.doAnoAnterior,
-      moduloId: moduloDaTela.id,
-      filialId: filtros.filial,
-      ano: filtros.ano,
     });
-  }, [planoAtivo, visaoDoPlano, erp.filiais, erp.catalogo, realizado, moduloDaTela, filtros]);
+  }, [planoAtivo, moduloDaTela, filiaisDoFiltro, filtros.centro, contasDaTabela, realizado]);
 
   // --------------------------------------------------------------------------
   // Navegação
@@ -112,25 +158,29 @@ export default function PlanejamentoOrcamentario() {
     window.scrollTo({ top: 0, left: 0, behavior: "auto" });
   }
 
-  // Toda troca de filtro descarta a edição em curso: sem isso o valor digitado
-  // poderia ser gravado na combinação errada de filial/ano.
   function alterarFiltro(alteracoes) {
     setEditingCell(null);
-    setFiltros((atuais) => ({ ...atuais, ...alteracoes }));
+    setFiltros((atuais) => {
+      const proximos = { ...atuais, ...alteracoes };
+      // Trocar filial ou centro pode invalidar a conta escolhida.
+      if (alteracoes.filial !== undefined || alteracoes.centro !== undefined) {
+        proximos.conta = TODAS_AS_CONTAS;
+      }
+      return proximos;
+    });
   }
 
   function abrirPlano(id) {
-    const plano = planos.find((item) => item.id === id);
     setPlanoAtivoId(id);
     setTela("home");
-    setFiltros({ ...FILTROS_PADRAO, ano: plano?.fim ?? FILTROS_PADRAO.ano });
+    setFiltros(FILTROS_PADRAO);
     setEditingCell(null);
     irParaTopo();
   }
 
   function abrirModulo(moduloId) {
     setTela(moduloId);
-    setFiltros((atuais) => ({ ...FILTROS_PADRAO, ano: atuais.ano }));
+    setFiltros(FILTROS_PADRAO);
     setEditingCell(null);
     irParaTopo();
   }
@@ -139,12 +189,6 @@ export default function PlanejamentoOrcamentario() {
     setVisaoAbertaId(id);
     setModuloAbertoId(null);
     setTela("visao");
-    irParaTopo();
-  }
-
-  function abrirModuloDaVisao(moduloId) {
-    setModuloAbertoId(moduloId);
-    setTela("visao-modulo");
     irParaTopo();
   }
 
@@ -179,27 +223,21 @@ export default function PlanejamentoOrcamentario() {
   // --------------------------------------------------------------------------
 
   function salvarNovoPlano() {
-    const inicio = Number(novoPlano.inicio);
-    const fim = Number(novoPlano.fim);
-    if (!novoPlano.nome.trim()) {
-      setErroPlano("Informe um nome para o plano.");
-      return;
+    const ano = Number(novoPlano.ano);
+    if (!novoPlano.nome.trim()) return setErroPlano("Informe um nome para o plano.");
+    if (!novoPlano.visaoId) return setErroPlano("Selecione a visão que este plano vai orçar.");
+    if (!Number.isInteger(ano) || ano < 2000 || ano > 2100) {
+      return setErroPlano("Informe um ano válido.");
     }
-    if (!novoPlano.visaoId) {
-      setErroPlano("Selecione a visão que este plano vai orçar.");
-      return;
-    }
-    if (!Number.isInteger(inicio) || !Number.isInteger(fim) || inicio < 2000 || fim < inicio) {
-      setErroPlano("Informe um período válido.");
-      return;
-    }
+
     setPlanos((atuais) => [
       ...atuais,
-      criarPlano(gerarId("plano"), novoPlano.nome.trim(), inicio, fim, novoPlano.visaoId),
+      criarPlano(gerarId("plano"), novoPlano.nome.trim(), ano, novoPlano.visaoId),
     ]);
-    setNovoPlano({ nome: "", inicio: "2024", fim: "2026", visaoId: null });
+    setNovoPlano({ nome: "", ano: String(new Date().getFullYear() + 1), visaoId: null });
     setErroPlano("");
     setDrawerAberto(false);
+    return undefined;
   }
 
   // --------------------------------------------------------------------------
@@ -207,20 +245,34 @@ export default function PlanejamentoOrcamentario() {
   // --------------------------------------------------------------------------
 
   function abrirModalVisao(visao = null) {
-    setModalVisao({ id: visao?.id ?? null });
-    setModalNome(visao?.nome ?? "");
+    setModalVisao({
+      id: visao?.id ?? null,
+      nome: visao?.nome ?? "",
+      visaoContabil: visao?.visaoContabil ?? null,
+    });
   }
 
   function salvarVisao() {
-    const nome = modalNome.trim();
-    if (!nome) return;
+    const nome = modalVisao.nome.trim();
+    if (!nome || !modalVisao.visaoContabil) return;
 
     if (modalVisao.id) {
       setVisoes((atuais) =>
-        atuais.map((visao) => (visao.id === modalVisao.id ? { ...visao, nome } : visao))
+        atuais.map((visao) => {
+          if (visao.id !== modalVisao.id) return visao;
+          // Trocar a visão contábil invalida as contas: os códigos de uma não
+          // existem na outra.
+          const trocou = visao.visaoContabil !== modalVisao.visaoContabil;
+          return {
+            ...visao,
+            nome,
+            visaoContabil: modalVisao.visaoContabil,
+            modulos: trocou ? {} : visao.modulos,
+          };
+        })
       );
     } else {
-      const nova = criarVisao(gerarId("visao"), nome);
+      const nova = criarVisao(gerarId("visao"), nome, modalVisao.visaoContabil);
       setVisoes((atuais) => [...atuais, nova]);
       setVisaoAbertaId(nova.id);
       setTela("visao");
@@ -229,12 +281,23 @@ export default function PlanejamentoOrcamentario() {
     setModalVisao(null);
   }
 
-  function alterarContasDoModulo(visaoId, moduloId, contasIds) {
+  const atualizarVisaoAberta = (transformar) =>
     setVisoes((atuais) =>
-      atuais.map((visao) =>
-        visao.id === visaoId ? definirContasDoModulo(visao, moduloId, contasIds) : visao
-      )
+      atuais.map((visao) => (visao.id === visaoAbertaId ? transformar(visao) : visao))
     );
+
+  // --------------------------------------------------------------------------
+  // Configuração: filiais ativas
+  // --------------------------------------------------------------------------
+
+  function alternarFilialAtiva(filialId) {
+    setConfiguracao((atual) => {
+      const base = atual.filiaisAtivas ?? erp.filiais.map((filial) => filial.id);
+      const marcadas = new Set(base);
+      if (marcadas.has(filialId)) marcadas.delete(filialId);
+      else marcadas.add(filialId);
+      return { ...atual, filiaisAtivas: [...marcadas] };
+    });
   }
 
   // --------------------------------------------------------------------------
@@ -280,8 +343,16 @@ export default function PlanejamentoOrcamentario() {
     onCancelarEdicao: () => setEditingCell(null),
     onConfirmarEdicao: () => {
       if (!editingCell || !planoAtivo || !moduloDaTela) return;
+      if (filtros.filial === "total" || filtros.conta === TODAS_AS_CONTAS) return;
+
       const valor = Math.max(0, parseNumeroPtBr(editingCell.valor));
-      const chave = chavePlanejado(moduloDaTela.id, filtros.filial, filtros.ano, editingCell.mes);
+      const chave = chavePlanejado(
+        moduloDaTela.id,
+        filtros.filial,
+        filtros.centro,
+        filtros.conta,
+        editingCell.mes
+      );
       setPlanos((atuais) =>
         atuais.map((plano) =>
           plano.id === planoAtivoId
@@ -297,9 +368,6 @@ export default function PlanejamentoOrcamentario() {
   // Render
   // --------------------------------------------------------------------------
 
-  // Só as telas que dependem do ERP esperam por ele. Visões, planos e a grade de
-  // módulos são dados do portal: travar tudo na carga escondia o botão de criar
-  // visão quando a API estava fora.
   function exigirErp(conteudo) {
     if (erp.carregando) {
       return (
@@ -318,12 +386,15 @@ export default function PlanejamentoOrcamentario() {
     return conteudo;
   }
 
+  const nomeContabil = (id) => erp.visoesContabeis.find((item) => item.id === id)?.nome ?? null;
+
   function renderizarTela() {
     if (tela === "visoes") {
       return (
         <TelaVisoes
           visoes={visoes}
           planos={planos}
+          nomeContabil={nomeContabil}
           onAbrir={abrirVisao}
           onNova={() => abrirModalVisao()}
           onExcluir={pedirExclusao("visao")}
@@ -335,26 +406,39 @@ export default function PlanejamentoOrcamentario() {
       return (
         <TelaVisao
           visao={visaoAberta}
-          onAbrirModulo={abrirModuloDaVisao}
+          nomeContabil={nomeContabil(visaoAberta.visaoContabil)}
+          onAbrirModulo={(moduloId) => {
+            setModuloAbertoId(moduloId);
+            setTela("visao-modulo");
+            irParaTopo();
+          }}
           onRenomear={() => abrirModalVisao(visaoAberta)}
           onVoltar={voltar}
         />
       );
     }
 
-    // A árvore de contas trata carregando/erro por dentro, para o cabeçalho e o
-    // filtro continuarem visíveis.
     if (tela === "visao-modulo" && visaoAberta && ehModulo(moduloAbertoId)) {
       return (
         <TelaVisaoModulo
           visao={visaoAberta}
           modulo={definicaoDoModulo(moduloAbertoId)}
-          catalogo={erp.catalogo}
-          carregando={erp.carregando}
-          erro={erp.erro}
-          onRecarregar={erp.recarregar}
-          onAlterarContas={(contasIds) =>
-            alterarContasDoModulo(visaoAberta.id, moduloAbertoId, contasIds)
+          catalogo={contas.catalogo}
+          filiais={filiaisAtivas}
+          centros={erp.centros}
+          carregando={contas.carregando || erp.carregando}
+          erro={contas.erro || erp.erro}
+          onRecarregar={contas.recarregar}
+          onDefinirContasDaFilial={(moduloId, filialId, lista) =>
+            atualizarVisaoAberta((visao) => definirContasDaFilial(visao, moduloId, filialId, lista))
+          }
+          onDefinirContasDoCentro={(moduloId, filialId, centroId, lista) =>
+            atualizarVisaoAberta((visao) =>
+              definirContasDoCentro(visao, moduloId, filialId, centroId, lista)
+            )
+          }
+          onAlternarUsaCentro={(moduloId, usa) =>
+            atualizarVisaoAberta((visao) => definirUsaCentroDeCusto(visao, moduloId, usa))
           }
           onVoltar={voltar}
         />
@@ -365,8 +449,9 @@ export default function PlanejamentoOrcamentario() {
       return exigirErp(
         <TelaConfiguracoes
           filiais={erp.filiais}
+          filiaisAtivas={filiaisAtivas}
           centros={erp.centros}
-          catalogo={erp.catalogo}
+          visoesContabeis={erp.visoesContabeis}
           onAbrir={(id) => navegar(id)}
         />
       );
@@ -377,6 +462,9 @@ export default function PlanejamentoOrcamentario() {
         <TelaListaErp
           tela={tela}
           lista={tela === "filiais" ? erp.filiais : erp.centros}
+          ativas={configuracao.filiaisAtivas}
+          onAlternarAtiva={alternarFilialAtiva}
+          onDefinirAtivas={(ids) => setConfiguracao((atual) => ({ ...atual, filiaisAtivas: ids }))}
           onVoltar={voltar}
         />
       );
@@ -399,25 +487,16 @@ export default function PlanejamentoOrcamentario() {
         <TelaOrcamento
           plano={planoAtivo}
           visao={visaoDoPlano}
-          filiais={erp.filiais}
-          catalogo={erp.catalogo}
           modulo={moduloDaTela}
+          catalogo={contas.catalogo}
+          filiais={filiaisAtivas}
+          centros={erp.centros}
+          contasDisponiveis={contasDisponiveis}
           filtros={filtros}
           onAlterarFiltro={alterarFiltro}
           linhas={linhasOrcamento}
-          carregandoRealizado={realizado.carregando}
+          carregandoRealizado={realizado.carregando || contas.carregando}
           edicao={edicao}
-          onVoltar={voltar}
-        />
-      );
-    }
-
-    if (tela === "home" && planoAtivo) {
-      return (
-        <TelaHome
-          plano={planoAtivo}
-          visao={visaoDoPlano}
-          onAbrirModulo={abrirModulo}
           onVoltar={voltar}
         />
       );
@@ -438,7 +517,7 @@ export default function PlanejamentoOrcamentario() {
       <Sidebar
         empresa={EMPRESA}
         badgeConfiguracoes={
-          erp.carregando || erp.erro ? undefined : erp.filiais.length + erp.centros.length
+          erp.carregando || erp.erro ? undefined : filiaisAtivas.length + erp.centros.length
         }
         planoAtivo={planoAtivo}
         visaoDoPlano={visaoDoPlano}
@@ -480,16 +559,15 @@ export default function PlanejamentoOrcamentario() {
       ) : null}
 
       {modalVisao ? (
-        <ModalNome
-          titulo={modalVisao.id ? "Renomear visão" : "Criar visão"}
-          rotulo="Nome da visão"
-          ajuda={
-            modalVisao.id
-              ? undefined
-              : "Depois de criar, selecione as contas de cada módulo. Ex.: DRE 2025."
+        <ModalVisao
+          edicao={!!modalVisao.id}
+          nome={modalVisao.nome}
+          visaoContabil={modalVisao.visaoContabil}
+          visoesContabeis={erp.visoesContabeis}
+          onAlterarNome={(nome) => setModalVisao((atual) => ({ ...atual, nome }))}
+          onAlterarVisaoContabil={(visaoContabil) =>
+            setModalVisao((atual) => ({ ...atual, visaoContabil }))
           }
-          valor={modalNome}
-          onAlterar={setModalNome}
           onSalvar={salvarVisao}
           onFechar={() => setModalVisao(null)}
         />

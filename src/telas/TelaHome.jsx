@@ -1,11 +1,11 @@
 import Cabecalho from "../componentes/Cabecalho.jsx";
 import Icone from "../componentes/Icone.jsx";
 import { MODULOS_DESPESA, MODULOS_RECEITA } from "../dados/modulos.js";
-import { contasDoModulo, moduloConfigurado } from "../dados/visao.js";
+import { moduloConfigurado, resumoDoModulo } from "../dados/visao.js";
 
 function CardModulo({ modulo, visao, onAbrir }) {
   const configurado = moduloConfigurado(visao, modulo.id);
-  const contas = contasDoModulo(visao, modulo.id);
+  const resumo = resumoDoModulo(visao, modulo.id);
 
   return (
     <button
@@ -22,7 +22,9 @@ function CardModulo({ modulo, visao, onAbrir }) {
         <strong>{modulo.titulo}</strong>
         <small>
           {configurado
-            ? `${contas.length} ${contas.length === 1 ? "conta" : "contas"} · abrir planejamento`
+            ? `${resumo.filiais} ${resumo.filiais === 1 ? "filial" : "filiais"} · ${resumo.contas} ${
+                resumo.contas === 1 ? "conta" : "contas"
+              }${resumo.usaCentro ? " · por centro de custo" : ""}`
             : "sem contas nesta visão"}
         </small>
       </span>
@@ -41,7 +43,7 @@ export default function TelaHome({ plano, visao, onAbrirModulo, onVoltar }) {
     <main className="conteudo">
       <Cabecalho
         titulo={plano.nome}
-        subtitulo={`Período de ${plano.inicio} a ${plano.fim}${visao ? ` · visão ${visao.nome}` : ""}`}
+        subtitulo={`Ano ${plano.ano}${visao ? ` · visão ${visao.nome}` : ""}`}
         onVoltar={onVoltar}
       />
 
@@ -53,7 +55,7 @@ export default function TelaHome({ plano, visao, onAbrirModulo, onVoltar }) {
                 <span className="numero-secao">{grupo.numero}</span>
                 <h2>{grupo.titulo}</h2>
               </div>
-              <p>Planeje, compare e revise os resultados mensais.</p>
+              <p>Escolha a conta na lateral e lance o planejado mês a mês.</p>
             </div>
             <div className="grid-modulos grid-modulos--orcamento">
               {grupo.modulos.map((modulo) => (

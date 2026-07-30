@@ -5,7 +5,6 @@ import Icone from "../componentes/Icone.jsx";
 import { AvisoErro, Carregando } from "../componentes/Estados.jsx";
 import {
   ancestrais,
-  contasEfetivas,
   desmarcarEmCascata,
   estadoDaSelecao,
   filtrarPorGrupo,
@@ -14,12 +13,17 @@ import {
   resumirSelecao,
 } from "../dados/contas.js";
 import { GRUPOS } from "../dados/modulos.js";
-import { contasDoModulo } from "../dados/visao.js";
+import {
+  SEM_CENTRO,
+  centrosDaFilial,
+  contasDaFilial,
+  contasDoCentro,
+  usaCentroDeCusto,
+} from "../dados/visao.js";
 
-// `indeterminate` não existe como atributo HTML, só como propriedade do
-// elemento — sem escrever nela o estado parcial não aparece.
 function useIndeterminado(parcial) {
   const referencia = useRef(null);
+  // `indeterminate` não existe como atributo HTML, só como propriedade.
   useEffect(() => {
     if (referencia.current) referencia.current.indeterminate = parcial;
   }, [parcial]);
@@ -58,7 +62,6 @@ function Linha({ item, estado, marcadosAbaixo, onAlternar, onAlternarNo }) {
         <span className="arvore-toggle arvore-toggle--vazio" aria-hidden="true" />
       )}
 
-      {/* O chevron fica FORA do rótulo: dentro dele, expandir também marcaria. */}
       {item.selecionavel === false ? (
         <span className="arvore-conta__rotulo arvore-conta__rotulo--estrutura">
           <span className="arvore-conta__vazio" aria-hidden="true" />
@@ -81,11 +84,8 @@ function Linha({ item, estado, marcadosAbaixo, onAlternar, onAlternarNo }) {
         </label>
       )}
 
-      {/* Com o nó recolhido, é o único sinal de que há seleção abaixo. */}
       {!item.aberto && estado === "parcial" && marcadosAbaixo > 0 ? (
-        <span className="arvore-conta__abaixo" title={`${marcadosAbaixo} marcadas abaixo`}>
-          {marcadosAbaixo}
-        </span>
+        <span className="arvore-conta__abaixo">{marcadosAbaixo}</span>
       ) : null}
     </div>
   );
@@ -95,37 +95,66 @@ export default function TelaVisaoModulo({
   visao,
   modulo,
   catalogo: catalogoCompleto,
+  filiais,
+  centros,
   carregando,
   erro,
   onRecarregar,
-  onAlterarContas,
+  onDefinirContasDaFilial,
+  onDefinirContasDoCentro,
+  onAlternarUsaCentro,
   onVoltar,
 }) {
-  // Cada módulo só oferece as contas do seu LX_GRUPO_CONTABIL.
-  const catalogo = useMemo(
-    () => filtrarPorGrupo(catalogoCompleto, modulo.grupo),
-    [catalogoCompleto, modulo.grupo]
-  );
+  const usaCentro = usaCentroDeCusto(visao, modulo.id);
 
-  const selecionadas = contasDoModulo(visao, modulo.id);
+  const [filialId, setFilialId] = useState(() => filiais[0]?.id ?? null);
+  const [centroId, setCentroId] = useState(SEM_CENTRO);
+  const [busca, setBusca] = useState("");
+
+  // Filial que sumiu do ERP não pode continuar selecionada.
+  useEffect(() => {
+    if (!filiais.some((filial) => filial.id === filialId)) setFilialId(filiais[0]?.id ?? null);
+  }, [filiais, filialId]);
+
+  useEffect(() => {
+    if (!usaCentro) setCentroId(SEM_CENTRO);
+  }, [usaCentro]);
+
+  const daFilial = filialId ? contasDaFilial(visao, modulo.id, filialId) : [];
+  const editandoCentro = usaCentro && centroId !== SEM_CENTRO;
+
+  // Sem centro escolhido a árvore é o plano de contas do grupo. Com centro, é só
+  // o que a filial orça — o centro é subconjunto dela.
+  const catalogo = useMemo(() => {
+    const doGrupo = filtrarPorGrupo(catalogoCompleto, modulo.grupo);
+    if (!editandoCentro) return doGrupo;
+
+    const permitidas = new Set(daFilial);
+    const lista = doGrupo.lista.filter(
+      (item) => permitidas.has(item.codigo) || item.selecionavel === false
+    );
+    return filtrarPorGrupo({ ...doGrupo, lista, porCodigo: new Map(lista.map((i) => [i.codigo, i])) }, null);
+  }, [catalogoCompleto, modulo.grupo, editandoCentro, daFilial]);
+
+  const selecionadas = editandoCentro
+    ? contasDoCentro(visao, modulo.id, filialId, centroId)
+    : daFilial;
   const marcadas = useMemo(() => new Set(selecionadas), [selecionadas]);
   const resumo = useMemo(() => resumirSelecao(catalogo, marcadas), [catalogo, marcadas]);
 
-  // Abre as raízes e o caminho até tudo que já está marcado — sem isso uma conta
-  // selecionada no fundo da árvore ficaria escondida.
-  const [expandidos, setExpandidos] = useState(() => {
-    const abertos = new Set(catalogo.raizes);
-    selecionadas.forEach((codigo) =>
-      ancestrais(catalogo, codigo).forEach((pai) => abertos.add(pai))
-    );
-    return abertos;
-  });
+  const [expandidos, setExpandidos] = useState(() => new Set(catalogo.raizes));
+  useEffect(() => {
+    setExpandidos((atuais) => {
+      const abertos = new Set([...atuais, ...catalogo.raizes]);
+      selecionadas.forEach((codigo) =>
+        ancestrais(catalogo, codigo).forEach((pai) => abertos.add(pai))
+      );
+      return abertos;
+    });
+    // Só quando a árvore em si muda (filial/centro/visão contábil).
+  }, [catalogo]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const [busca, setBusca] = useState("");
   const termo = busca.trim().toLowerCase();
-
-  // Com filtro ativo a lista vira plana: exigir que o usuário abra os nós até
-  // achar o resultado anularia o filtro.
   const linhas = useMemo(() => {
     if (!termo) return linhasDaArvore(catalogo, expandidos);
     return catalogo.lista
@@ -137,6 +166,18 @@ export default function TelaVisaoModulo({
       .map((item) => ({ ...item, nivel: 0, temFilhos: false, aberto: true }));
   }, [catalogo, expandidos, termo]);
 
+  const salvar = (proximas) => {
+    if (editandoCentro) onDefinirContasDoCentro(modulo.id, filialId, centroId, [...proximas]);
+    else onDefinirContasDaFilial(modulo.id, filialId, [...proximas]);
+  };
+
+  const alternar = (codigo, estado) =>
+    salvar(
+      estado === "vazio"
+        ? marcarEmCascata(catalogo, marcadas, codigo)
+        : desmarcarEmCascata(catalogo, marcadas, codigo)
+    );
+
   const alternarNo = (codigo) =>
     setExpandidos((atuais) => {
       const proximo = new Set(atuais);
@@ -145,40 +186,14 @@ export default function TelaVisaoModulo({
       return proximo;
     });
 
-  // Cascata: marcar leva a subárvore inteira; desmarcar tira a subárvore e os
-  // ancestrais (um pai marcado significa "tudo abaixo marcado").
-  const alternar = (codigo, estado) => {
-    const proximo =
-      estado === "vazio"
-        ? marcarEmCascata(catalogo, marcadas, codigo)
-        : desmarcarEmCascata(catalogo, marcadas, codigo);
-    onAlterarContas([...proximo]);
-  };
-
-  const expandirTudo = () => setExpandidos(new Set(catalogo.lista.map((item) => item.codigo)));
-  const recolherTudo = () => setExpandidos(new Set(catalogo.raizes));
-
-  const marcarTudo = () =>
-    onAlterarContas([
-      ...catalogo.raizes.reduce(
-        (acumulado, raiz) => marcarEmCascata(catalogo, acumulado, raiz),
-        marcadas
-      ),
-    ]);
-  const limpar = () => onAlterarContas([]);
-
   const grupo = GRUPOS[modulo.grupo];
-  const selecionaveis = catalogo.lista.filter((item) => item.selecionavel !== false).length;
-  const noModulo = useMemo(
-    () => contasEfetivas(catalogo, selecionadas, modulo.grupo).size,
-    [catalogo, selecionadas, modulo.grupo]
-  );
+  const centrosComContas = filialId ? centrosDaFilial(visao, modulo.id, filialId) : [];
 
   return (
     <main className="conteudo">
       <Cabecalho
         titulo={modulo.titulo}
-        subtitulo={`Visão ${visao.nome} · selecione as contas que compõem este módulo`}
+        subtitulo={`Visão ${visao.nome} · contas por filial${usaCentro ? " e centro de custo" : ""}`}
         onVoltar={onVoltar}
       />
 
@@ -186,6 +201,56 @@ export default function TelaVisaoModulo({
         <span className={`chip chip--${grupo?.chip ?? "receita"}`}>
           {grupo?.rotulo ?? modulo.tipo} · {modulo.grupo}
         </span>
+
+        <label className="campo-inline">
+          <span>Filial</span>
+          <select value={filialId ?? ""} onChange={(e) => setFilialId(e.target.value || null)}>
+            {filiais.map((filial) => {
+              const quantas = contasDaFilial(visao, modulo.id, filial.id).length;
+              return (
+                <option value={filial.id} key={filial.id}>
+                  {filial.nome}
+                  {quantas ? ` (${quantas})` : ""}
+                </option>
+              );
+            })}
+          </select>
+        </label>
+
+        {usaCentro ? (
+          <label className="campo-inline">
+            <span>Centro de custo</span>
+            <select value={centroId} onChange={(e) => setCentroId(e.target.value)}>
+              <option value={SEM_CENTRO}>Contas da filial (todas)</option>
+              {centros.map((centro) => {
+                const quantas = filialId
+                  ? contasDoCentro(visao, modulo.id, filialId, centro.id).length
+                  : 0;
+                return (
+                  <option value={centro.id} key={centro.id}>
+                    {centro.id} — {centro.nome}
+                    {quantas ? ` (${quantas})` : ""}
+                  </option>
+                );
+              })}
+            </select>
+          </label>
+        ) : null}
+
+        <label className="check-inline">
+          <input
+            type="checkbox"
+            checked={usaCentro}
+            onChange={(e) => onAlternarUsaCentro(modulo.id, e.target.checked)}
+          />
+          <span className="checkbox-visual">
+            <Icone nome="check" tamanho={13} />
+          </span>
+          Usa centro de custo
+        </label>
+      </div>
+
+      <div className="modulo-barra">
         <label className="campo-busca">
           <input
             value={busca}
@@ -197,7 +262,7 @@ export default function TelaVisaoModulo({
         <button
           type="button"
           className="botao botao--secundario botao--compacto"
-          onClick={expandirTudo}
+          onClick={() => setExpandidos(new Set(catalogo.lista.map((i) => i.codigo)))}
           disabled={!!termo || !catalogo.lista.length}
         >
           Expandir tudo
@@ -205,7 +270,7 @@ export default function TelaVisaoModulo({
         <button
           type="button"
           className="botao botao--secundario botao--compacto"
-          onClick={recolherTudo}
+          onClick={() => setExpandidos(new Set(catalogo.raizes))}
           disabled={!!termo || !catalogo.lista.length}
         >
           Recolher
@@ -215,32 +280,34 @@ export default function TelaVisaoModulo({
       {carregando ? <Carregando texto="Carregando plano de contas…" /> : null}
       {erro ? <AvisoErro mensagem={erro} onTentarDeNovo={onRecarregar} /> : null}
 
-      {!carregando && !erro ? (
+      {!carregando && !erro && !filialId ? (
+        <p className="modulo-aviso">
+          <Icone nome="info" tamanho={16} />
+          Nenhuma filial ativa. Escolha as filiais em Configurações → Filiais.
+        </p>
+      ) : null}
+
+      {!carregando && !erro && filialId ? (
         <div className="contas-seletor">
           <div className="contas-seletor__topo">
             <span>
-              {termo ? "Resultados do filtro" : "Plano de contas"}
+              {editandoCentro ? `Contas do centro ${centroId}` : "Contas da filial"}
               <small className="contas-seletor__origem">
-                {selecionaveis} {selecionaveis === 1 ? "conta" : "contas"} do grupo {modulo.grupo}
+                {editandoCentro
+                  ? `escolhidas entre as ${daFilial.length} da filial`
+                  : `plano de contas do grupo ${modulo.grupo}`}
               </small>
             </span>
             <span className="contas-seletor__acoes">
               <small>
-                {noModulo} {noModulo === 1 ? "selecionada" : "selecionadas"}
+                {selecionadas.length} {selecionadas.length === 1 ? "selecionada" : "selecionadas"}
               </small>
-              <button
-                type="button"
-                className="botao-texto"
-                onClick={marcarTudo}
-                disabled={noModulo === selecionaveis}
-              >
-                Marcar todas
-              </button>
-              <button type="button" className="botao-texto" onClick={limpar} disabled={!noModulo}>
+              <button type="button" className="botao-texto" onClick={() => salvar(new Set())} disabled={!selecionadas.length}>
                 Limpar
               </button>
             </span>
           </div>
+
           <div className="contas-seletor__lista contas-seletor__lista--alta">
             {linhas.length ? (
               linhas.map((item) => (
@@ -250,8 +317,7 @@ export default function TelaVisaoModulo({
                   estado={estadoDaSelecao(resumo, item.codigo)}
                   marcadosAbaixo={
                     item.temFilhos
-                      ? (resumo.get(item.codigo)?.marcados ?? 0) -
-                        (marcadas.has(item.codigo) ? 1 : 0)
+                      ? (resumo.get(item.codigo)?.marcados ?? 0) - (marcadas.has(item.codigo) ? 1 : 0)
                       : 0
                   }
                   onAlternar={alternar}
@@ -260,22 +326,21 @@ export default function TelaVisaoModulo({
               ))
             ) : (
               <p className="sem-contas">
-                {catalogoCompleto.lista.length
-                  ? `Nenhuma conta do grupo ${modulo.grupo} corresponde ao filtro.`
-                  : "O ERP não devolveu classificações para esta visão contábil."}
+                {editandoCentro && !daFilial.length
+                  ? "Escolha primeiro as contas da filial: o centro seleciona entre elas."
+                  : "Nenhuma conta corresponde ao filtro."}
               </p>
             )}
           </div>
         </div>
       ) : null}
 
-      <p className="modulo-aviso">
-        <Icone nome="info" tamanho={16} />
-        Salvo na hora. Marcar um grupo marca todas as contas abaixo dele; dá para desmarcar uma
-        conta isolada depois, e o grupo passa a aparecer meio-marcado. Conta criada no ERP depois
-        disso não entra sozinha — é preciso voltar aqui e marcá-la. Linhas em cinza são só
-        estrutura, de outro grupo contábil.
-      </p>
+      {usaCentro && centrosComContas.length ? (
+        <p className="modulo-aviso">
+          <Icone nome="info" tamanho={16} />
+          Centros com contas nesta filial: {centrosComContas.join(", ")}.
+        </p>
+      ) : null}
     </main>
   );
 }

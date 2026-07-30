@@ -4,7 +4,7 @@ import EstadoVazio from "../componentes/EstadoVazio.jsx";
 import Icone from "../componentes/Icone.jsx";
 import { resumoDaVisao } from "../dados/visao.js";
 
-export default function TelaVisoes({ visoes, planos, onAbrir, onNova, onExcluir }) {
+export default function TelaVisoes({ visoes, planos, nomeContabil, onAbrir, onNova, onExcluir }) {
   const planosQueUsam = (visaoId) => planos.filter((plano) => plano.visaoId === visaoId).length;
 
   return (
@@ -40,9 +40,14 @@ export default function TelaVisoes({ visoes, planos, onAbrir, onNova, onExcluir 
                   <span className="card-plano__texto">
                     <strong>{visao.nome}</strong>
                     <small>
-                      {resumo.modulos} de {resumo.totalDeModulos} módulos · {resumo.contas}{" "}
+                      {resumo.modulos} de {resumo.totalDeModulos} módulos · {resumo.filiais}{" "}
+                      {resumo.filiais === 1 ? "filial" : "filiais"} · {resumo.contas}{" "}
                       {resumo.contas === 1 ? "conta" : "contas"}
                     </small>
+                    <span className="card-plano__visao">
+                      <Icone nome="layers" tamanho={13} />
+                      {visao.visaoContabil}{nomeContabil?.(visao.visaoContabil) ? ` — ${nomeContabil(visao.visaoContabil)}` : ""}
+                    </span>
                     <span className="card-plano__visao">
                       <Icone nome="folder" tamanho={13} />
                       {emUso ? `usada por ${emUso} ${emUso === 1 ? "plano" : "planos"}` : "não usada"}

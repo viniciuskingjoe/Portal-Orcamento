@@ -7,32 +7,34 @@ import Icone from "../componentes/Icone.jsx";
 const DESCRICAO = {
   filiais: {
     titulo: "Filiais",
-    texto: "Unidades cadastradas no ERP. Usadas para distribuir os valores do orçamento.",
+    texto: "Marque as filiais que o portal usa. As demais somem dos planos e das visões.",
     origem: "dbo.FILIAIS",
-    colunas: ["Código", "Nome", "Tipo"],
   },
   centros: {
     titulo: "Centro de Custos",
     texto: "Centros de custo ativos no ERP.",
     origem: "dbo.CTB_CENTRO_CUSTO",
-    colunas: ["Código", "Nome"],
   },
 };
 
-// Somente leitura: estas listas são do ERP. Editar aqui daria a impressão de que
-// o portal manda no cadastro, e a próxima carga sobrescreveria a alteração.
-export default function TelaListaErp({ tela, lista, onVoltar }) {
+// A lista vem do ERP e é somente leitura. O que o portal decide é quais filiais
+// participam — daí o checkbox só existir aqui.
+export default function TelaListaErp({ tela, lista, ativas, onAlternarAtiva, onDefinirAtivas, onVoltar }) {
   const [busca, setBusca] = useState("");
   const dados = DESCRICAO[tela];
+  const selecionavel = tela === "filiais";
 
   const visiveis = useMemo(() => {
     const termo = busca.trim().toLowerCase();
     if (!termo) return lista;
     return lista.filter(
-      (item) =>
-        item.id.toLowerCase().includes(termo) || item.nome.toLowerCase().includes(termo)
+      (item) => item.id.toLowerCase().includes(termo) || item.nome.toLowerCase().includes(termo)
     );
   }, [lista, busca]);
+
+  const marcadas = ativas ? new Set(ativas) : null;
+  const estaAtiva = (id) => !marcadas || marcadas.has(id);
+  const quantasAtivas = marcadas ? lista.filter((i) => marcadas.has(i.id)).length : lista.length;
 
   return (
     <main className="conteudo">
@@ -51,24 +53,64 @@ export default function TelaListaErp({ tela, lista, onVoltar }) {
             aria-label={`Filtrar ${dados.titulo}`}
           />
         </label>
-        <span className="arvore-contagem">
-          {visiveis.length} de {lista.length}
-        </span>
+        {selecionavel ? (
+          <>
+            <span className="arvore-contagem">
+              {quantasAtivas} de {lista.length} ativas
+            </span>
+            <button
+              type="button"
+              className="botao botao--secundario botao--compacto"
+              onClick={() => onDefinirAtivas(lista.map((item) => item.id))}
+            >
+              Marcar todas
+            </button>
+            <button
+              type="button"
+              className="botao botao--secundario botao--compacto"
+              onClick={() => onDefinirAtivas([])}
+            >
+              Limpar
+            </button>
+          </>
+        ) : (
+          <span className="arvore-contagem">
+            {visiveis.length} de {lista.length}
+          </span>
+        )}
       </div>
 
       <div className="lista-crud">
         <div className={`lista-crud__topo lista-crud__topo--${tela}`}>
-          {dados.colunas.map((coluna) => (
-            <span key={coluna}>{coluna}</span>
-          ))}
+          {selecionavel ? <span>Usar</span> : null}
+          <span>Código</span>
+          <span>Nome</span>
+          {tela === "filiais" ? <span>Tipo</span> : null}
         </div>
-        {visiveis.map((item) => (
-          <div className={`linha-crud linha-crud--${tela}`} key={item.id}>
-            <code>{item.id}</code>
-            <strong>{item.nome}</strong>
-            {tela === "filiais" ? <span className="linha-crud__meta">{item.tipo ?? "—"}</span> : null}
-          </div>
-        ))}
+
+        {visiveis.map((item) =>
+          selecionavel ? (
+            <label className={`linha-crud linha-crud--filiais ${estaAtiva(item.id) ? "" : "is-inativa"}`} key={item.id}>
+              <input
+                type="checkbox"
+                checked={estaAtiva(item.id)}
+                onChange={() => onAlternarAtiva(item.id)}
+              />
+              <span className="checkbox-visual">
+                <Icone nome="check" tamanho={13} />
+              </span>
+              <code>{item.id}</code>
+              <strong>{item.nome}</strong>
+              <span className="linha-crud__meta">{item.tipo ?? "—"}</span>
+            </label>
+          ) : (
+            <div className="linha-crud linha-crud--centros" key={item.id}>
+              <code>{item.id}</code>
+              <strong>{item.nome}</strong>
+            </div>
+          )
+        )}
+
         {!visiveis.length ? (
           <EstadoVazio
             texto={lista.length ? "Nenhum item corresponde ao filtro." : "O ERP não devolveu registros."}

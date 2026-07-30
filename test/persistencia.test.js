@@ -3,7 +3,7 @@ import { test } from "node:test";
 
 import { carregarEstado, estadoInicial, salvarEstado } from "../src/lib/persistencia.js";
 
-const CHAVE = "portal-orcamento:estado:v4";
+const CHAVE = "portal-orcamento:estado:v5";
 
 // localStorage falso, trocado por teste. Sem isto os testes rodariam contra o
 // armazenamento real do runtime (que no Node não existe).
@@ -23,29 +23,52 @@ function comArmazenamento(conteudo, executar, chave = CHAVE) {
   }
 }
 
-test("estado inicial é vazio: visões e planos são criados pelo usuário", () => {
-  // Não há mais seed. Filiais, centros e contas vêm do ERP; visão e plano são
-  // decisão de quem usa.
-  assert.deepEqual(estadoInicial(), { visoes: [], planos: [] });
+test("estado inicial é vazio; filiais ativas ainda não escolhidas", () => {
+  // `filiaisAtivas: null` vale por "todas". Lista vazia é diferente: quer dizer
+  // que o usuário desmarcou todas de propósito.
+  assert.deepEqual(estadoInicial(), {
+    configuracao: { filiaisAtivas: null },
+    visoes: [],
+    planos: [],
+  });
 });
 
 test("sem nada gravado, carrega o estado inicial", () => {
   comArmazenamento(null, () => {
-    assert.deepEqual(carregarEstado(), { visoes: [], planos: [] });
+    assert.deepEqual(carregarEstado(), estadoInicial());
   });
 });
 
-test("ida e volta preserva visões e planejado", () => {
+test("lista vazia de filiais ativas é preservada, não vira null", () => {
+  const estado = { configuracao: { filiaisAtivas: [] }, visoes: [], planos: [] };
+  comArmazenamento(JSON.stringify(estado), () => {
+    assert.deepEqual(carregarEstado().configuracao.filiaisAtivas, []);
+  });
+});
+
+test("ida e volta preserva visão, filiais ativas e planejado", () => {
   const estado = {
-    visoes: [{ id: "v1", nome: "DRE 2025", modulos: { "receita-vendas": ["3.1.1.1.02"] } }],
+    configuracao: { filiaisAtivas: ["000001", "000025"] },
+    visoes: [
+      {
+        id: "v1",
+        nome: "DRE 2026",
+        visaoContabil: "25",
+        modulos: {
+          "receita-vendas": {
+            usaCentro: false,
+            filiais: { "000025": { contas: ["3.1.1.01.001"], centros: {} } },
+          },
+        },
+      },
+    ],
     planos: [
       {
         id: "p1",
         nome: "Oficial",
-        inicio: 2024,
-        fim: 2026,
+        ano: 2026,
         visaoId: "v1",
-        planejado: { "receita-vendas|000001|2025|1": 1500.5 },
+        planejado: { "receita-vendas|000025||3.1.1.01.001|1": 1500.5 },
       },
     ],
   };
@@ -56,66 +79,102 @@ test("ida e volta preserva visões e planejado", () => {
   });
 });
 
-test("JSON corrompido cai no estado inicial em vez de estourar", () => {
-  comArmazenamento("{isso nao e json", () => {
-    assert.deepEqual(carregarEstado(), { visoes: [], planos: [] });
+test("contas do centro fora das da filial são descartadas na leitura", () => {
+  // O centro é subconjunto da filial; sobra de gravação antiga não pode voltar.
+  const estado = {
+    configuracao: { filiaisAtivas: null },
+    visoes: [
+      {
+        id: "v1",
+        nome: "X",
+        visaoContabil: "25",
+        modulos: {
+          "despesas-operacionais": {
+            usaCentro: true,
+            filiais: {
+              "000001": { contas: ["4.4.1.01"], centros: { "002": ["4.4.1.01", "9.9.9"] } },
+            },
+          },
+        },
+      },
+    ],
+    planos: [],
+  };
+
+  comArmazenamento(JSON.stringify(estado), () => {
+    const modulo = carregarEstado().visoes[0].modulos["despesas-operacionais"];
+    assert.deepEqual(modulo.filiais["000001"].centros["002"], ["4.4.1.01"]);
   });
 });
 
-test("formato de versão anterior é ignorado", () => {
-  // A v3 guardava `configuracao` com filiais fictícias ("akr") e o planejado
-  // usava esses ids. Nada disso casa com o COD_FILIAL do ERP ("000001"), então
-  // migrar deixaria chaves órfãs.
-  const v3 = JSON.stringify({
-    configuracao: { filiais: [{ id: "akr", nome: "AKR" }], centros: [] },
-    visoes: [{ id: "v1", nome: "DRE", modulos: {} }],
-    planos: [{ id: "velho", nome: "Velho", inicio: 2024, fim: 2026, planejado: { "x|akr|2025|1": 9 } }],
+test("centro que fica sem conta some", () => {
+  const estado = {
+    visoes: [
+      {
+        id: "v1",
+        nome: "X",
+        visaoContabil: "25",
+        modulos: {
+          m: { usaCentro: true, filiais: { f: { contas: ["A"], centros: { "002": ["Z"] } } } },
+        },
+      },
+    ],
+    planos: [],
+  };
+  comArmazenamento(JSON.stringify(estado), () => {
+    assert.deepEqual(carregarEstado().visoes[0].modulos.m.filiais.f.centros, {});
   });
+});
 
-  comArmazenamento(v3, () => {
-    assert.deepEqual(carregarEstado(), { visoes: [], planos: [] });
-  }, "portal-orcamento:estado:v3");
+test("JSON corrompido cai no estado inicial em vez de estourar", () => {
+  comArmazenamento("{isso nao e json", () => {
+    assert.deepEqual(carregarEstado(), estadoInicial());
+  });
+});
+
+test("versão anterior é ignorada: os ids não casam", () => {
+  // A v4 gravava o planejado sem centro e sem conta na chave, e o plano tinha
+  // início/fim em vez de ano. Migrar deixaria chaves órfãs.
+  const v4 = JSON.stringify({
+    visoes: [{ id: "v1", nome: "DRE", modulos: { "receita-vendas": ["3.1.1.01.001"] } }],
+    planos: [{ id: "velho", nome: "Velho", inicio: 2024, fim: 2026, planejado: { "x|y|2025|1": 9 } }],
+  });
+  comArmazenamento(v4, () => assert.deepEqual(carregarEstado(), estadoInicial()), "portal-orcamento:estado:v4");
 });
 
 test("array solto (formato v1) é ignorado", () => {
   comArmazenamento(JSON.stringify([{ id: "velho", nome: "Velho" }]), () => {
-    assert.deepEqual(carregarEstado(), { visoes: [], planos: [] });
+    assert.deepEqual(carregarEstado(), estadoInicial());
   });
 });
 
-test("listas vazias são estado legítimo, não erro", () => {
-  comArmazenamento(JSON.stringify({ planos: [], visoes: [] }), () => {
-    const estado = carregarEstado();
-    assert.deepEqual(estado.planos, []);
-    assert.deepEqual(estado.visoes, []);
-  });
-});
-
-test("plano sem visaoId é aceito com visão nula", () => {
-  const plano = { id: "p1", nome: "Sem visão", inicio: 2024, fim: 2026 };
-  comArmazenamento(JSON.stringify({ planos: [plano], visoes: [] }), () => {
-    const [carregado] = carregarEstado().planos;
-    assert.equal(carregado.visaoId, null);
-    assert.deepEqual(carregado.planejado, {});
+test("plano sem ano é descartado", () => {
+  // Sem ano não há período para orçar: o registro está quebrado.
+  const bom = { id: "p1", nome: "Bom", ano: 2026 };
+  const ruim = { id: "p2", nome: "Ruim" };
+  comArmazenamento(JSON.stringify({ planos: [bom, ruim], visoes: [] }), () => {
+    assert.deepEqual(
+      carregarEstado().planos.map((p) => p.id),
+      ["p1"]
+    );
   });
 });
 
 test("campos estranhos no plano são descartados na leitura", () => {
-  // Restos das versões antigas (filiais, centros dentro do plano) não voltam.
   const plano = {
     id: "p1",
     nome: "Um",
-    inicio: 2024,
-    fim: 2026,
+    ano: 2026,
     visaoId: "v1",
     planejado: {},
+    inicio: 2024,
+    fim: 2026,
     filiais: [{ id: "akr" }],
-    centros: [{ id: "adm" }],
   };
   comArmazenamento(JSON.stringify({ planos: [plano], visoes: [] }), () => {
     const [carregado] = carregarEstado().planos;
+    assert.equal(carregado.inicio, undefined);
     assert.equal(carregado.filiais, undefined);
-    assert.equal(carregado.centros, undefined);
   });
 });
 
@@ -124,18 +183,19 @@ test("valor planejado não numérico é descartado", () => {
   const plano = {
     id: "p1",
     nome: "Um",
-    inicio: 2024,
-    fim: 2026,
-    planejado: { "m|000001|2025|1": 10, "m|000001|2025|2": "abc", "m|000001|2025|3": null },
+    ano: 2026,
+    planejado: { "m|f||c|1": 10, "m|f||c|2": "abc", "m|f||c|3": null },
   };
   comArmazenamento(JSON.stringify({ planos: [plano], visoes: [] }), () => {
-    assert.deepEqual(carregarEstado().planos[0].planejado, { "m|000001|2025|1": 10 });
+    assert.deepEqual(carregarEstado().planos[0].planejado, { "m|f||c|1": 10 });
   });
 });
 
 test("visão sem módulos vira objeto vazio, não undefined", () => {
   comArmazenamento(JSON.stringify({ planos: [], visoes: [{ id: "v1", nome: "X" }] }), () => {
-    assert.deepEqual(carregarEstado().visoes[0].modulos, {});
+    const [visao] = carregarEstado().visoes;
+    assert.deepEqual(visao.modulos, {});
+    assert.equal(visao.visaoContabil, null);
   });
 });
 

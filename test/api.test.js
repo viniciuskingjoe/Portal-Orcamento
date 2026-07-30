@@ -72,17 +72,24 @@ test("200 com corpo que não é JSON é erro explícito", async () => {
   });
 });
 
-test("realizado passa ano e filial na query", async () => {
+test("realizado passa ano, visão contábil e filial na query", async () => {
   await comFetch(resposta(200, "[]"), async (chamadas) => {
-    await api.realizado(2025, "000001");
-    assert.match(chamadas[0], /\/api\/realizado\?ano=2025&filial=000001$/);
+    await api.realizado(2025, "25", "000001");
+    assert.match(chamadas[0], /\/api\/realizado\?ano=2025&visao=25&filial=000001$/);
   });
 });
 
-test("realizado sem filial não manda o parâmetro vazio", async () => {
-  // `filial=` viraria string vazia no backend e não casaria com nenhum COD_FILIAL.
+test("parâmetro nulo não vira string vazia na query", async () => {
+  // `filial=` viraria string vazia no backend e não casaria com COD_FILIAL nenhum.
   await comFetch(resposta(200, "[]"), async (chamadas) => {
-    await api.realizado(2025, null);
-    assert.match(chamadas[0], /\/api\/realizado\?ano=2025$/);
+    await api.realizado(2025, "25", null);
+    assert.match(chamadas[0], /\/api\/realizado\?ano=2025&visao=25$/);
+  });
+});
+
+test("contas leva a visão contábil escolhida", async () => {
+  await comFetch(resposta(200, "[]"), async (chamadas) => {
+    await api.contas("21");
+    assert.match(chamadas[0], /\/api\/contas\?visao=21$/);
   });
 });

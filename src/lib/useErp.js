@@ -7,35 +7,29 @@ import { REALIZADO_VAZIO, indexarRealizado } from "../dados/realizado.js";
 // ============================================================================
 // Dados do ERP
 //
-// Plano de contas, filiais e centros de custo são carregados uma vez. O
-// realizado é por ano e fica em cache: a tabela precisa do ano selecionado e do
-// anterior ao mesmo tempo, e trocar de módulo não deve refazer a consulta.
+// Filiais, centros de custo e a lista de visões contábeis são carregados uma
+// vez. Plano de contas e realizado dependem da visão contábil escolhida, então
+// ficam em cache por chave — trocar de módulo não deve refazer a consulta.
 // ============================================================================
 
 export function useCadastrosDoErp() {
   const [estado, setEstado] = useState({
     carregando: true,
     erro: null,
-    catalogo: CATALOGO_VAZIO,
     filiais: [],
     centros: [],
+    visoesContabeis: [],
   });
 
   const carregar = useCallback(async () => {
     setEstado((atual) => ({ ...atual, carregando: true, erro: null }));
     try {
-      const [contas, filiais, centros] = await Promise.all([
-        api.contas(),
+      const [filiais, centros, visoesContabeis] = await Promise.all([
         api.filiais(),
         api.centrosDeCusto(),
+        api.visoesContabeis(),
       ]);
-      setEstado({
-        carregando: false,
-        erro: null,
-        catalogo: indexarContas(contas),
-        filiais,
-        centros,
-      });
+      setEstado({ carregando: false, erro: null, filiais, centros, visoesContabeis });
     } catch (erro) {
       setEstado((atual) => ({ ...atual, carregando: false, erro: erro.message }));
     }
@@ -48,59 +42,95 @@ export function useCadastrosDoErp() {
   return { ...estado, recarregar: carregar };
 }
 
-// Índices de realizado para o ano e para o anterior (coluna comparativa).
-export function useRealizado(ano) {
+// Cache genérico por chave, com marcação antes de resolver para o StrictMode não
+// disparar a mesma consulta duas vezes.
+function useCachePorChave(buscar, vazio) {
   const cache = useRef(new Map());
   const [versao, setVersao] = useState(0);
-  const [erro, setErro] = useState(null);
   const [carregando, setCarregando] = useState(false);
+  const [erro, setErro] = useState(null);
 
-  const anos = useMemo(() => (Number.isInteger(ano) ? [ano, ano - 1] : []), [ano]);
+  const garantir = useCallback(
+    (chaves) => {
+      const pendentes = chaves.filter((chave) => chave != null && !cache.current.has(chave));
+      if (!pendentes.length) return;
+
+      setCarregando(true);
+      setErro(null);
+      pendentes.forEach((chave) => cache.current.set(chave, vazio));
+
+      Promise.all(
+        pendentes.map(async (chave) => {
+          cache.current.set(chave, await buscar(chave));
+        })
+      )
+        .then(() => setVersao((atual) => atual + 1))
+        .catch((falha) => {
+          // Sem o descarte, a chave ficaria em cache como vazia e nunca
+          // recarregaria.
+          pendentes.forEach((chave) => cache.current.delete(chave));
+          setErro(falha.message);
+        })
+        .finally(() => setCarregando(false));
+    },
+    [buscar, vazio]
+  );
+
+  const ler = useCallback((chave) => cache.current.get(chave) ?? vazio, [vazio]);
+
+  const limpar = useCallback(() => {
+    cache.current.clear();
+    setVersao((atual) => atual + 1);
+  }, []);
+
+  return { garantir, ler, limpar, carregando, erro, versao };
+}
+
+// Plano de contas da visão contábil escolhida.
+export function useContas(visaoContabil) {
+  const buscar = useCallback(async (visao) => indexarContas(await api.contas(visao)), []);
+  const cache = useCachePorChave(buscar, CATALOGO_VAZIO);
 
   useEffect(() => {
-    const pendentes = anos.filter((valor) => !cache.current.has(valor));
-    if (!pendentes.length) return;
-
-    let ativo = true;
-    setCarregando(true);
-    setErro(null);
-
-    Promise.all(
-      pendentes.map(async (valor) => {
-        // Marca antes de resolver para não disparar a mesma consulta duas vezes
-        // (StrictMode roda o efeito em dobro no desenvolvimento).
-        cache.current.set(valor, REALIZADO_VAZIO);
-        const linhas = await api.realizado(valor);
-        cache.current.set(valor, indexarRealizado(linhas));
-      })
-    )
-      .then(() => {
-        if (!ativo) return;
-        setVersao((atual) => atual + 1);
-      })
-      .catch((falha) => {
-        if (!ativo) return;
-        // Sem o descarte, o ano ficaria em cache como vazio e nunca recarregaria.
-        pendentes.forEach((valor) => cache.current.delete(valor));
-        setErro(falha.message);
-      })
-      .finally(() => {
-        if (ativo) setCarregando(false);
-      });
-
-    return () => {
-      ativo = false;
-    };
-  }, [anos]);
+    if (visaoContabil) cache.garantir([visaoContabil]);
+  }, [visaoContabil, cache]);
 
   return useMemo(
     () => ({
-      carregando,
-      erro,
-      doAno: cache.current.get(ano) ?? REALIZADO_VAZIO,
-      doAnoAnterior: cache.current.get(ano - 1) ?? REALIZADO_VAZIO,
+      catalogo: visaoContabil ? cache.ler(visaoContabil) : CATALOGO_VAZIO,
+      carregando: cache.carregando,
+      erro: cache.erro,
+      recarregar: cache.limpar,
     }),
     // `versao` entra de propósito: o cache é um ref e não dispara recálculo.
-    [ano, carregando, erro, versao]
+    [visaoContabil, cache, cache.versao]
+  );
+}
+
+// Realizado do ano e do anterior, para a coluna comparativa.
+export function useRealizado(ano, visaoContabil) {
+  const buscar = useCallback(async (chave) => {
+    const [visao, valor] = chave.split("|");
+    return indexarRealizado(await api.realizado(Number(valor), visao));
+  }, []);
+  const cache = useCachePorChave(buscar, REALIZADO_VAZIO);
+
+  const chaves = useMemo(() => {
+    if (!Number.isInteger(ano) || !visaoContabil) return [];
+    return [`${visaoContabil}|${ano}`, `${visaoContabil}|${ano - 1}`];
+  }, [ano, visaoContabil]);
+
+  useEffect(() => {
+    if (chaves.length) cache.garantir(chaves);
+  }, [chaves, cache]);
+
+  return useMemo(
+    () => ({
+      carregando: cache.carregando,
+      erro: cache.erro,
+      doAno: chaves[0] ? cache.ler(chaves[0]) : REALIZADO_VAZIO,
+      doAnoAnterior: chaves[1] ? cache.ler(chaves[1]) : REALIZADO_VAZIO,
+    }),
+    [chaves, cache, cache.versao]
   );
 }

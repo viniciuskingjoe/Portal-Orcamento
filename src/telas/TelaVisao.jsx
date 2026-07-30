@@ -1,15 +1,16 @@
 import Cabecalho from "../componentes/Cabecalho.jsx";
 import Icone from "../componentes/Icone.jsx";
 import { MODULOS_DESPESA, MODULOS_RECEITA } from "../dados/modulos.js";
-import { contasDoModulo, resumoDaVisao } from "../dados/visao.js";
+import { resumoDaVisao, resumoDoModulo } from "../dados/visao.js";
 
 function CardModulo({ modulo, visao, onAbrir }) {
-  const contas = contasDoModulo(visao, modulo.id);
+  const resumo = resumoDoModulo(visao, modulo.id);
+  const configurado = resumo.filiais > 0;
 
   return (
     <button
       type="button"
-      className={`card-visao card-visao--${modulo.tipo} ${contas.length ? "is-configurado" : ""}`}
+      className={`card-visao card-visao--${modulo.tipo} ${configurado ? "is-configurado" : ""}`}
       onClick={() => onAbrir(modulo.id)}
     >
       <span className="card-visao__icone">
@@ -18,17 +19,21 @@ function CardModulo({ modulo, visao, onAbrir }) {
       <span className="card-visao__texto">
         <strong>{modulo.titulo}</strong>
         <small>
-          {contas.length
-            ? `${contas.length} ${contas.length === 1 ? "conta" : "contas"}`
+          {configurado
+            ? `${resumo.filiais} ${resumo.filiais === 1 ? "filial" : "filiais"} · ${resumo.contas} ${
+                resumo.contas === 1 ? "conta" : "contas"
+              }`
             : "sem contas"}
+          {resumo.usaCentro ? " · centro de custo" : ""}
         </small>
       </span>
+      <span className="card-visao__grupo">{modulo.grupo}</span>
       <Icone nome="chevron" tamanho={16} />
     </button>
   );
 }
 
-export default function TelaVisao({ visao, onAbrirModulo, onRenomear, onVoltar }) {
+export default function TelaVisao({ visao, nomeContabil, onAbrirModulo, onRenomear, onVoltar }) {
   const resumo = resumoDaVisao(visao);
 
   const grupos = [
@@ -40,14 +45,16 @@ export default function TelaVisao({ visao, onAbrirModulo, onRenomear, onVoltar }
     <main className="conteudo">
       <Cabecalho
         titulo={visao.nome}
-        subtitulo={`${resumo.modulos} de ${resumo.totalDeModulos} módulos configurados · ${resumo.contas} ${
-          resumo.contas === 1 ? "conta" : "contas"
-        } vinculadas`}
+        subtitulo={`Visão contábil ${visao.visaoContabil}${nomeContabil ? ` — ${nomeContabil}` : ""} · ${
+          resumo.modulos
+        } de ${resumo.totalDeModulos} módulos · ${resumo.filiais} ${
+          resumo.filiais === 1 ? "filial" : "filiais"
+        }`}
         onVoltar={onVoltar}
         acao={
           <button type="button" className="botao botao--secundario" onClick={onRenomear}>
             <Icone nome="edit" tamanho={16} />
-            Renomear
+            Editar
           </button>
         }
       />

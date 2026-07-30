@@ -51,8 +51,22 @@ export default function DrawerNovoPlano({ valores, visoes, erro, onAlterar, onSa
             <input
               value={valores.nome}
               onChange={(evento) => onAlterar({ nome: evento.target.value })}
-              placeholder="Ex.: Orçamento Base 2027"
+              placeholder="Ex.: Orçamento 2027"
               autoFocus
+            />
+          </label>
+
+          {/* Um plano cobre um ano só — é o ano em que se lança o planejamento. */}
+          <label className="campo">
+            <span>
+              Ano <b>*</b>
+            </span>
+            <input
+              type="number"
+              min="2000"
+              max="2100"
+              value={valores.ano}
+              onChange={(evento) => onAlterar({ ano: evento.target.value })}
             />
           </label>
 
@@ -75,8 +89,8 @@ export default function DrawerNovoPlano({ valores, visoes, erro, onAlterar, onSa
 
           {resumo ? (
             <p className="campo__ajuda">
-              {resumo.modulos} de {resumo.totalDeModulos} módulos configurados ·{" "}
-              {resumo.contas} {resumo.contas === 1 ? "conta" : "contas"} vinculadas
+              {resumo.modulos} de {resumo.totalDeModulos} módulos · {resumo.filiais}{" "}
+              {resumo.filiais === 1 ? "filial" : "filiais"} · {resumo.contas} contas
             </p>
           ) : null}
 
@@ -85,25 +99,6 @@ export default function DrawerNovoPlano({ valores, visoes, erro, onAlterar, onSa
               Nenhuma visão cadastrada. Crie uma visão antes de criar o plano.
             </p>
           ) : null}
-
-          <div className="campos-duplos">
-            <label className="campo">
-              <span>Período de</span>
-              <input
-                type="number"
-                value={valores.inicio}
-                onChange={(evento) => onAlterar({ inicio: evento.target.value })}
-              />
-            </label>
-            <label className="campo">
-              <span>Até</span>
-              <input
-                type="number"
-                value={valores.fim}
-                onChange={(evento) => onAlterar({ fim: evento.target.value })}
-              />
-            </label>
-          </div>
 
           {erro ? (
             <p className="erro-campo" role="alert">
@@ -114,8 +109,8 @@ export default function DrawerNovoPlano({ valores, visoes, erro, onAlterar, onSa
           <div className="drawer__nota">
             <Icone nome="info" tamanho={18} />
             <p>
-              A visão define quais módulos e contas este plano orça. Filiais e centros de custo
-              são configurados dentro do plano.
+              A visão define quais módulos e contas este plano orça, e por quais filiais. O
+              comparativo usa o realizado deste ano e do anterior.
             </p>
           </div>
         </div>

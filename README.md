@@ -30,35 +30,37 @@ motivo, mas o certo é não deixar acontecer.
 
 ## Conceitos
 
-**Visão** — global, não pertence a nenhum plano. Define, para cada um dos 8
-módulos do orçamento, quais contas o compõem. Ex.: `DRE 2025`.
+**Visão** — global. Aponta para UMA visão contábil do Linx (ex.: `25 DRE
+GERENCIAL`) e define, para cada módulo, quais contas o compõem **por filial** e,
+quando o módulo usa, **por centro de custo**.
 
-**Plano** — escolhe **uma visão** na criação. Os módulos que o plano orça são os
-módulos configurados naquela visão; um módulo sem conta selecionada não aparece.
+**Plano** — tem UM ano e escolhe uma visão. Os módulos que orça são os
+configurados nela.
 
-**Configurações** — filiais e centros de custo. São **globais** do portal, não de
-um plano: os dois vêm do ERP e valem para todos os planos.
+**Configurações** — filiais e centros de custo vêm do ERP. O portal só decide
+quais filiais usar.
 
 ```
-Visões (global)
-└── DRE 2025
-    ├── Receita de vendas             4 contas
-    ├── Receitas não operacionais     1 conta
-    ├── Deduções de vendas            4 contas
-    ├── Custos variáveis              —
-    └── … (8 módulos fixos)
+Visão "DRE 2026"  →  visão contábil 25 (DRE GERENCIAL)
+├── Receita de vendas
+│   ├── MEN HUB    → 3.1.1.01.001, 3.1.1.01.002
+│   └── KING&JOE   → 3.1.1.01.001
+└── Despesas operacionais            (usa centro de custo)
+    └── KING&JOE   → 4.4.1.01, 4.4.1.02       contas da filial
+        ├── 002 ADMINISTRAÇÃO → 4.4.1.01      subconjunto por centro
+        └── 008 T.I           → 4.4.1.02
 
-Configurações (global)
-├── Filiais
-└── Centro de Custos
-
-Plano "Oficial"  → visão DRE 2025
-└── Orçamentos    → só os módulos com conta na DRE 2025
-                    → tabela mensal (planejado / realizado / ano anterior)
+Plano "Orçamento 2026"  →  ano 2026 · visão DRE 2026
+└── módulo → escolhe filial, centro e CONTA → lança o planejado mês a mês
 ```
 
-Os 8 módulos são fixos em [src/dados/modulos.js](src/dados/modulos.js):
-2 de receita (verde) e 6 de despesa (vermelho).
+O planejado é gravado por `modulo | filial | centro | conta | mes`. Só contas
+analíticas (`CLASSIFICACAO_ANALITICA = 0`) recebem lançamento, então são as
+únicas que a tela do plano oferece.
+
+Os 8 módulos são fixos em [src/dados/modulos.js](src/dados/modulos.js) e cada um
+só aceita contas do seu `LX_GRUPO_CONTABIL`: `R` nas receitas, `DV` em deduções,
+custos e despesas variáveis, `DF` nas despesas fixas.
 
 ## Estrutura
 
@@ -156,10 +158,11 @@ curl "http://localhost:3000/api/realizado?ano=2025"
 
 | Rota | Objeto | Observação |
 |---|---|---|
-| `/api/contas` | `dbo.CTB_VISAO` | visão 25, só classificações com ponto; devolve `LX_GRUPO_CONTABIL` |
+| `/api/visoes-contabeis` | `dbo.CTB_VISAO_CONTABIL` | id + nome das visões que têm estrutura |
+| `/api/contas?visao=X` | `dbo.CTB_VISAO` | só classificações com ponto; devolve `LX_GRUPO_CONTABIL` |
 | `/api/filiais` | `dbo.FILIAIS` | id = `COD_FILIAL`, nome = `FILIAL`; 25 registros |
 | `/api/centros-de-custo` | `dbo.CTB_CENTRO_CUSTO` | nome = `DESC_CENTRO_CUSTO`; só `INATIVA = 0` (37 de 42) |
-| `/api/realizado` | `dbo.CTB_LANCAMENTO` + `_ITEM` | agregado por conta, filial e mês |
+| `/api/realizado` | `dbo.CTB_LANCAMENTO` + `_ITEM` + `CTB_PLANO_VISAO` | por classificação, filial, centro e mês; exclui `LX_TIPO_LANCAMENTO = ELD` |
 
 A árvore se monta pelo PREFIXO do código: 3.1 -> 3.1.1 -> 3.1.1.01 -> 3.1.1.01.001.
 `CLASSIFICACAO_TOTALIZA_EM` NAO serve para isso: indica para onde o valor
@@ -176,6 +179,12 @@ agrupado e é ele que entra na chave do planejado. Nome muda, código não.
 O realizado sai de `CTB_LANCAMENTO_ITEM`, que grava `CONTA_CONTABIL` (6 dígitos,
 ex. `111101`). O de/para conta → classificação está em `dbo.CTB_PLANO_VISAO`, com
 `OPERADOR` (+/−) e `PORCENTAGEM` de rateio — o join é feito na consulta.
+
+**Encerramento do exercício fica de fora.** Em dezembro o Linx zera as contas de
+resultado com lançamentos `LX_TIPO_LANCAMENTO = ELD` ("ENC. DO EXERCÍCIO"), do
+tamanho do ano inteiro — R$ 115 mi em 2025. Sem excluir, dezembro inverte de
+sinal e o total do ano some. Confirmado contra o Scoreplan: dez/2025 da MEN HUB
+dá −978.568,61 com ELD e 177.347,66 sem, que é o valor certo.
 
 Regras que não podem ser afrouxadas (PADRAO §5): parâmetro sempre por bind,
 `Date` tipado como `DateTime2(3)`, ERP só por `SELECT`, nunca alterar tabela do
