@@ -116,6 +116,7 @@ export function criarLinhasOrcamento({
           filiais: selecionadas,
           mes,
           tipo: modulo.tipo,
+          grupo: modulo.grupo,
         })
       : 0;
 

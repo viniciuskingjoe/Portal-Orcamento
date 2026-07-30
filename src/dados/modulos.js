@@ -6,17 +6,30 @@
 //
 // `tipo` decide a leitura do realizado: receita cresce a crédito, despesa a
 // débito (ver dados/realizado.js).
+//
+// `grupo` é o LX_GRUPO_CONTABIL que o módulo aceita — cada módulo só oferece as
+// contas do seu grupo:
+//   R   receita
+//   DV  despesa variável
+//   DF  despesa fixa
 // ============================================================================
 
+export const GRUPOS = {
+  R: { rotulo: "Receita", chip: "receita" },
+  DV: { rotulo: "Despesa variável", chip: "despesa" },
+  DF: { rotulo: "Despesa fixa", chip: "despesa" },
+};
+
 export const MODULOS = [
-  { id: "receita-vendas", titulo: "Receita de vendas", tipo: "receita", icone: "chart" },
-  { id: "receitas-nao-operacionais", titulo: "Receitas não operacionais", tipo: "receita", icone: "coins" },
-  { id: "deducoes-vendas", titulo: "Deduções de vendas", tipo: "despesa", icone: "trendingDown" },
-  { id: "custos-variaveis", titulo: "Custos variáveis", tipo: "despesa", icone: "layers" },
-  { id: "despesas-variaveis", titulo: "Despesas variáveis", tipo: "despesa", icone: "percent" },
-  { id: "despesas-operacionais", titulo: "Despesas operacionais", tipo: "despesa", icone: "building" },
-  { id: "outras-despesas", titulo: "Outras despesas", tipo: "despesa", icone: "wallet" },
-  { id: "despesas-pessoal", titulo: "Despesas com pessoal", tipo: "despesa", icone: "users" },
+  { id: "receita-vendas", titulo: "Receita de vendas", tipo: "receita", grupo: "R", icone: "chart" },
+  { id: "receitas-nao-operacionais", titulo: "Receitas não operacionais", tipo: "receita", grupo: "R", icone: "coins" },
+  // As contas de dedução (devolução, ICMS/PIS/COFINS sobre vendas) são DV no ERP.
+  { id: "deducoes-vendas", titulo: "Deduções de vendas", tipo: "despesa", grupo: "DV", icone: "trendingDown" },
+  { id: "custos-variaveis", titulo: "Custos variáveis", tipo: "despesa", grupo: "DV", icone: "layers" },
+  { id: "despesas-variaveis", titulo: "Despesas variáveis", tipo: "despesa", grupo: "DV", icone: "percent" },
+  { id: "despesas-operacionais", titulo: "Despesas operacionais", tipo: "despesa", grupo: "DF", icone: "building" },
+  { id: "outras-despesas", titulo: "Outras despesas", tipo: "despesa", grupo: "DF", icone: "wallet" },
+  { id: "despesas-pessoal", titulo: "Despesas com pessoal", tipo: "despesa", grupo: "DF", icone: "users" },
 ];
 
 const POR_ID = new Map(MODULOS.map((modulo) => [modulo.id, modulo]));

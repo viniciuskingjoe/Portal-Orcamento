@@ -106,8 +106,22 @@ src/
 `plano.planejado` tem chave `modulo|filial|ano|mes`. **Célula sem valor digitado é
 zero**, não um número gerado — não existe planejamento que ninguém fez.
 
-Marcar um grupo em um módulo vale pelos descendentes: o lançamento fica nas
-folhas. A hierarquia é pelo prefixo do código, não por `totalizaEm`.
+Cada módulo só aceita contas do seu `LX_GRUPO_CONTABIL`:
+
+| Grupo | Módulos | Contas na visão 25 |
+|---|---|---|
+| `R` | Receita de vendas, Receitas não operacionais | 51 |
+| `DV` | Deduções de vendas, Custos variáveis, Despesas variáveis | 127 |
+| `DF` | Despesas operacionais, Outras despesas, Despesas com pessoal | 504 |
+
+Pai e filho podem ter grupos diferentes — `3.1.2 (-) DEDUÇÕES` é `DF` e os filhos
+são `DV`. Por isso o ancestral fora do grupo aparece na árvore como estrutura
+(cinza, sem checkbox): sem ele a lista perde a hierarquia, e com ele selecionável
+marcar o pai puxaria contas de outro módulo. A soma do realizado também respeita
+o grupo, então marcar um pai nunca arrasta conta de fora.
+
+Marcar um grupo vale pelos descendentes: o lançamento fica nas folhas. A
+hierarquia é pelo prefixo do código, não por `totalizaEm`.
 
 Receita é lida como crédito − débito; despesa inverte. As duas voltam positivas,
 para a variação contra o planejado significar a mesma coisa nos dois casos.
@@ -133,7 +147,7 @@ curl "http://localhost:3000/api/realizado?ano=2025"
 
 | Rota | Objeto | Observação |
 |---|---|---|
-| `/api/contas` | `dbo.CTB_VISAO` | visão contábil 25, só classificações com ponto |
+| `/api/contas` | `dbo.CTB_VISAO` | visão 25, só classificações com ponto; devolve `LX_GRUPO_CONTABIL` |
 | `/api/filiais` | `dbo.FILIAIS` | id = `COD_FILIAL`, nome = `FILIAL`; 25 registros |
 | `/api/centros-de-custo` | `dbo.CTB_CENTRO_CUSTO` | nome = `DESC_CENTRO_CUSTO`; só `INATIVA = 0` (37 de 42) |
 | `/api/realizado` | `dbo.CTB_LANCAMENTO` + `_ITEM` | agregado por conta, filial e mês |

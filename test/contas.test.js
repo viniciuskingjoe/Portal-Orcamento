@@ -3,6 +3,8 @@ import { test } from "node:test";
 
 import {
   ancestrais,
+  contarMarcadosAbaixo,
+  filtrarPorGrupo,
   conta,
   expandirComDescendentes,
   indexarContas,
@@ -12,17 +14,17 @@ import {
 
 // Recorte real de /api/contas (dbo.CTB_VISAO, visão 25).
 const BRUTO = [
-  { codigo: "3.1", descricao: "RECEITAS OPERACIONAIS", totalizaEm: null, sintetica: true },
-  { codigo: "3.1.1", descricao: "RECEITA OPERACIONAL BRUTA - ROB", totalizaEm: "3.1", sintetica: true },
-  { codigo: "3.1.1.01", descricao: "RECEITA BRUTA DE VENDAS", totalizaEm: "3.1.1", sintetica: true },
-  { codigo: "3.1.1.01.001", descricao: "VENDAS DE PRODUTOS - COLEÇÃO", totalizaEm: "3.1.1.01", sintetica: false },
-  { codigo: "3.1.1.01.002", descricao: "VENDAS DE PRODUTOS - SALDO", totalizaEm: "3.1.1.01", sintetica: false },
-  { codigo: "3.1.1.02", descricao: "RECEITA DE PRESTAÇÃO DE SERVIÇOS", totalizaEm: "3.1.1", sintetica: true },
-  { codigo: "3.1.1.02.001", descricao: "SERVIÇOS PRESTADOS MERCADO INTERNO", totalizaEm: "3.1.1.02", sintetica: false },
-  { codigo: "4.1", descricao: "CUSTOS PRODUTOS/MERC./SERV VENDIDOS", totalizaEm: null, sintetica: true },
+  { codigo: "3.1", descricao: "RECEITAS OPERACIONAIS", totalizaEm: null, sintetica: true, grupo: "R" },
+  { codigo: "3.1.1", descricao: "RECEITA OPERACIONAL BRUTA - ROB", totalizaEm: "3.1", sintetica: true, grupo: "R" },
+  { codigo: "3.1.1.01", descricao: "RECEITA BRUTA DE VENDAS", totalizaEm: "3.1.1", sintetica: true, grupo: "R" },
+  { codigo: "3.1.1.01.001", descricao: "VENDAS DE PRODUTOS - COLEÇÃO", totalizaEm: "3.1.1.01", sintetica: false, grupo: "R" },
+  { codigo: "3.1.1.01.002", descricao: "VENDAS DE PRODUTOS - SALDO", totalizaEm: "3.1.1.01", sintetica: false, grupo: "R" },
+  { codigo: "3.1.1.02", descricao: "RECEITA DE PRESTAÇÃO DE SERVIÇOS", totalizaEm: "3.1.1", sintetica: true, grupo: "R" },
+  { codigo: "3.1.1.02.001", descricao: "SERVIÇOS PRESTADOS MERCADO INTERNO", totalizaEm: "3.1.1.02", sintetica: false, grupo: "R" },
+  { codigo: "4.1", descricao: "CUSTOS PRODUTOS/MERC./SERV VENDIDOS", totalizaEm: null, sintetica: true, grupo: "DF" },
   // Buraco real da visão 25: "4.1.2" não existe na tabela.
-  { codigo: "4.1.2.01", descricao: "CUSTOS DAS MERCADORIAS VENDIDAS", totalizaEm: "4.1", sintetica: true },
-  { codigo: "4.1.2.01.001", descricao: "CMV COLEÇÃO", totalizaEm: "4.1.2.01", sintetica: false },
+  { codigo: "4.1.2.01", descricao: "CUSTOS DAS MERCADORIAS VENDIDAS", totalizaEm: "4.1", sintetica: true, grupo: "DV" },
+  { codigo: "4.1.2.01.001", descricao: "CMV COLEÇÃO", totalizaEm: "4.1.2.01", sintetica: false, grupo: "DV" },
 ];
 
 const catalogo = indexarContas(BRUTO);
@@ -140,4 +142,90 @@ test("código fora do catálogo é mantido, não descartado", () => {
   // A visão pode referenciar uma classificação que saiu do ERP; sumir com ela em
   // silêncio esconderia o problema.
   assert.ok(expandirComDescendentes(catalogo, ["9.9"]).has("9.9"));
+});
+
+// ---------------------------------------------------------------------------
+// Filtro por LX_GRUPO_CONTABIL
+// ---------------------------------------------------------------------------
+
+test("filtro por grupo mantém só as contas do grupo como selecionáveis", () => {
+  const receita = filtrarPorGrupo(catalogo, "R");
+  const selecionaveis = receita.lista.filter((i) => i.selecionavel).map((i) => i.codigo);
+
+  assert.ok(selecionaveis.includes("3.1.1.01.001"));
+  assert.ok(!selecionaveis.includes("4.1"), "4.1 é DF");
+  assert.ok(!selecionaveis.includes("4.1.2.01.001"), "é DV");
+  assert.ok(receita.lista.every((i) => !i.selecionavel || i.grupo === "R"));
+});
+
+test("ancestral de outro grupo entra como estrutura, não selecionável", () => {
+  // 4.1 é DF e 4.1.2.01 é DV: no filtro DV o pai aparece para dar hierarquia,
+  // mas marcá-lo puxaria contas DF para um módulo DV.
+  const variavel = filtrarPorGrupo(catalogo, "DV");
+  const pai = variavel.porCodigo.get("4.1");
+
+  assert.ok(pai, "o pai tem que aparecer");
+  assert.equal(pai.selecionavel, false);
+  assert.equal(variavel.porCodigo.get("4.1.2.01").selecionavel, true);
+});
+
+test("filtro preserva a hierarquia dos que ficaram", () => {
+  const variavel = filtrarPorGrupo(catalogo, "DV");
+  assert.deepEqual(variavel.raizes, ["4.1"]);
+  assert.deepEqual(variavel.filhos.get("4.1"), ["4.1.2.01"]);
+  assert.deepEqual(variavel.filhos.get("4.1.2.01"), ["4.1.2.01.001"]);
+});
+
+test("filtro mantém a ordem do plano de contas", () => {
+  const receita = filtrarPorGrupo(catalogo, "R");
+  const ordem = receita.lista.map((i) => i.codigo);
+  assert.deepEqual(ordem, [...ordem].sort());
+});
+
+test("grupo sem nenhuma conta devolve catálogo vazio", () => {
+  const vazio = filtrarPorGrupo(catalogo, "XX");
+  assert.deepEqual(vazio.lista, []);
+  assert.deepEqual(vazio.raizes, []);
+});
+
+test("sem grupo informado devolve o catálogo inteiro", () => {
+  assert.equal(filtrarPorGrupo(catalogo, null), catalogo);
+});
+
+test("expansão com grupo ignora descendente de outro grupo", () => {
+  // Marcar 4.1 (DF) num módulo DF não pode trazer 4.1.2.01, que é DV.
+  const comoDf = expandirComDescendentes(catalogo, ["4.1"], "DF");
+  assert.ok(comoDf.has("4.1"));
+  assert.ok(!comoDf.has("4.1.2.01"));
+  assert.ok(!comoDf.has("4.1.2.01.001"));
+});
+
+test("expansão com grupo continua descendo por nós que não casam", () => {
+  // A descida não pode parar no primeiro nó fora do grupo: um DF pode ter filho
+  // DV com neto DF.
+  const misto = indexarContas([
+    { codigo: "9.1", descricao: "topo DF", totalizaEm: null, sintetica: true, grupo: "DF" },
+    { codigo: "9.1.01", descricao: "meio DV", totalizaEm: "9.1", sintetica: true, grupo: "DV" },
+    { codigo: "9.1.01.001", descricao: "folha DF", totalizaEm: "9.1.01", sintetica: false, grupo: "DF" },
+  ]);
+  const comoDf = expandirComDescendentes(misto, ["9.1"], "DF");
+  assert.deepEqual([...comoDf].sort(), ["9.1", "9.1.01.001"]);
+});
+
+// ---------------------------------------------------------------------------
+// Contador de marcados abaixo
+// ---------------------------------------------------------------------------
+
+test("conta os marcados abaixo de um nó, em qualquer profundidade", () => {
+  // Com a árvore recolhida é o único sinal de que há seleção escondida.
+  const marcadas = new Set(["3.1.1.01.001", "3.1.1.02.001"]);
+  assert.equal(contarMarcadosAbaixo(catalogo, "3.1", marcadas), 2);
+  assert.equal(contarMarcadosAbaixo(catalogo, "3.1.1.01", marcadas), 1);
+  assert.equal(contarMarcadosAbaixo(catalogo, "4.1", marcadas), 0);
+});
+
+test("o próprio nó marcado não conta como abaixo dele", () => {
+  const marcadas = new Set(["3.1.1.01"]);
+  assert.equal(contarMarcadosAbaixo(catalogo, "3.1.1.01", marcadas), 0);
+  assert.equal(contarMarcadosAbaixo(catalogo, "3.1.1", marcadas), 1);
 });

@@ -64,6 +64,10 @@ function visaoContabil() {
 // `totalizaEm` volta só como informação — é para onde o valor totaliza no DRE,
 // NÃO o pai da árvore. Ex.: "3.1.1.3" totaliza em "3.1.2", mas na árvore é filho
 // de "3.1.1". A hierarquia se monta pelo prefixo do código, no front.
+//
+// `grupo` é o LX_GRUPO_CONTABIL: R (receita), DV (despesa variável) ou DF
+// (despesa fixa). Cada módulo do orçamento só oferece as contas do seu grupo.
+// Na visão 25: 51 R, 127 DV, 504 DF, sem nulos.
 export async function listarContas() {
   const tabela = objeto("DB_VIEW_CONTAS", "dbo.CTB_VISAO");
   return query(
@@ -72,7 +76,8 @@ export async function listarContas() {
       RTRIM(CLASSIFICACAO)                         AS codigo,
       RTRIM(DESCR_CONTA)                           AS descricao,
       NULLIF(RTRIM(CLASSIFICACAO_TOTALIZA_EM), '') AS totalizaEm,
-      CLASSIFICACAO_ANALITICA                      AS sintetica
+      CLASSIFICACAO_ANALITICA                      AS sintetica,
+      NULLIF(RTRIM(LX_GRUPO_CONTABIL), '')         AS grupo
     FROM ${tabela}
     WHERE RTRIM(VISAO_CONTABIL) = @visao
       AND CHARINDEX('.', RTRIM(CLASSIFICACAO)) > 0

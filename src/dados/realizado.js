@@ -29,8 +29,10 @@ function valor({ debito, credito }, tipo) {
   return tipo === "receita" ? credito - debito : debito - credito;
 }
 
-export function somarRealizado({ indice, catalogo, classificacoes, filiais, mes, tipo }) {
-  const codigos = expandirComDescendentes(catalogo, classificacoes);
+export function somarRealizado({ indice, catalogo, classificacoes, filiais, mes, tipo, grupo }) {
+  // `grupo` recorta a expansão ao LX_GRUPO_CONTABIL do módulo: marcar um pai não
+  // pode arrastar contas de outro grupo para dentro dele.
+  const codigos = expandirComDescendentes(catalogo, classificacoes, grupo);
   let total = 0;
   codigos.forEach((codigo) => {
     filiais.forEach((filial) => {

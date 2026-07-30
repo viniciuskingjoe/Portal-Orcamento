@@ -16,10 +16,13 @@ import { mesesComRealizado } from "../src/dados/calendario.js";
 const ANO = 2025;
 const MODULO = "receita-vendas";
 
+// Grupo contábil importa: cada módulo só soma as contas do LX_GRUPO_CONTABIL dele.
 const catalogo = indexarContas([
-  { codigo: "3.1.1.1", descricao: "VENDA DE MERCADORIA", totalizaEm: "3.1.1", sintetica: true },
-  { codigo: "3.1.1.1.01", descricao: "BAZAR", totalizaEm: "3.1.1.1", sintetica: false },
-  { codigo: "3.1.1.1.02", descricao: "COLEÇÃO", totalizaEm: "3.1.1.1", sintetica: false },
+  { codigo: "3.1.1.1", descricao: "VENDA DE MERCADORIA", totalizaEm: "3.1.1", sintetica: true, grupo: "R" },
+  { codigo: "3.1.1.1.01", descricao: "BAZAR", totalizaEm: "3.1.1.1", sintetica: false, grupo: "R" },
+  { codigo: "3.1.1.1.02", descricao: "COLEÇÃO", totalizaEm: "3.1.1.1", sintetica: false, grupo: "R" },
+  { codigo: "4.1.2.01", descricao: "CMV", totalizaEm: "4.1", sintetica: true, grupo: "DV" },
+  { codigo: "4.1.2.01.001", descricao: "CMV COLEÇÃO", totalizaEm: "4.1.2.01", sintetica: false, grupo: "DV" },
 ]);
 
 const FILIAIS = [{ id: "000001", nome: "KING&JOE" }, { id: "000008", nome: "E-COMMERCE" }];
@@ -30,6 +33,7 @@ const realizado = indexarRealizado([
   { classificacao: "3.1.1.1.02", filial: "000001", mes: 1, debito: 0, credito: 1000 },
   { classificacao: "3.1.1.1.02", filial: "000008", mes: 1, debito: 0, credito: 500 },
   { classificacao: "3.1.1.1.02", filial: "000001", mes: 2, debito: 0, credito: 2000 },
+  { classificacao: "4.1.2.01.001", filial: "000001", mes: 1, debito: 1500, credito: 0 },
 ]);
 
 const anterior = indexarRealizado([
@@ -174,12 +178,32 @@ test("filial fora do cadastro do ERP devolve zeros", () => {
 });
 
 test("módulo de despesa lê o realizado invertido", () => {
+  // custos-variaveis é DV; a conta 4.1.2.01.001 tem débito 1500.
   const visaoDespesa = definirContasDoModulo(criarVisao("v1", "X"), "custos-variaveis", [
-    "3.1.1.1.02",
+    "4.1.2.01.001",
   ]);
   const lista = linhas({ visao: visaoDespesa, moduloId: "custos-variaveis" });
-  // Mesmos lançamentos, sinal contrário: crédito 1500 vira −1500 em despesa.
-  assert.equal(mes(lista, 1).realizado, -1500);
+  // Despesa é débito − crédito, e volta positiva.
+  assert.equal(mes(lista, 1).realizado, 1500);
+});
+
+test("módulo só soma contas do seu grupo contábil", () => {
+  // Uma conta R marcada num módulo DV não entra: o filtro do módulo é o
+  // LX_GRUPO_CONTABIL, não a vontade de quem marcou.
+  const visaoErrada = definirContasDoModulo(criarVisao("v1", "X"), "custos-variaveis", [
+    "3.1.1.1.02",
+  ]);
+  const lista = linhas({ visao: visaoErrada, moduloId: "custos-variaveis" });
+  assert.equal(mes(lista, 1).realizado, 0);
+});
+
+test("marcar o pai não arrasta conta de outro grupo", () => {
+  // 4.1.2.01 é DV e 4.1.2.01.001 também; num módulo DF nada disso entra.
+  const visaoDf = definirContasDoModulo(criarVisao("v1", "X"), "despesas-operacionais", [
+    "4.1.2.01",
+  ]);
+  const lista = linhas({ visao: visaoDf, moduloId: "despesas-operacionais" });
+  assert.equal(mes(lista, 1).realizado, 0);
 });
 
 test("média divide pelos meses com dado, não por 12 fixo", () => {

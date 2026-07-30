@@ -1641,11 +1641,57 @@ dialog::backdrop {
 
 /* --- árvore de classificações ------------------------------------------- */
 
+/* Estas duas regras existiam no bloco da árvore de filiais e foram perdidas
+   quando ele saiu — sem elas o botão volta ao visual padrão (um quadrado
+   cinza) e o chevron não gira ao abrir. */
+.arvore-toggle {
+  flex: 0 0 auto;
+  width: 22px;
+  height: 22px;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-faint);
+  cursor: pointer;
+  transition: 0.14s ease;
+}
+
+.arvore-toggle:hover {
+  background: var(--surface-accent);
+  color: var(--accent);
+}
+
+.arvore-chevron {
+  display: grid;
+  place-items: center;
+  transition: transform 0.16s ease;
+}
+
+.arvore-chevron.is-aberto {
+  transform: rotate(90deg);
+}
+
+.arvore-toggle--vazio {
+  cursor: default;
+  background: transparent;
+}
+
+.arvore-contagem {
+  color: var(--muted);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
 .arvore-conta {
+  position: relative;
   display: flex;
   align-items: center;
-  gap: 8px;
-  min-height: 38px;
+  gap: 6px;
+  min-height: 34px;
+  /* O recuo entra por variável para a guia vertical poder acompanhar. */
+  padding-left: calc(12px + var(--recuo, 0px));
   padding-right: 14px;
   border-bottom: 1px solid var(--border);
 }
@@ -1654,12 +1700,31 @@ dialog::backdrop {
   border-bottom: 0;
 }
 
+/* Guia vertical: sem ela, com 5 níveis de recuo, é difícil saber de quem o item
+   é filho ao rolar a lista. */
+.arvore-conta::before {
+  content: "";
+  position: absolute;
+  left: calc(22px + var(--recuo, 0px));
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background: var(--border);
+  opacity: 0.7;
+}
+
+/* Raiz não tem guia: não há pai acima para ligar. Classe em vez de casar com o
+   atributo style, que o React serializa sem espaço e o seletor não pegaria. */
+.arvore-conta.is-raiz::before {
+  display: none;
+}
+
 .arvore-conta:hover {
   background: var(--surface-hover);
 }
 
 /* Grupo (CLASSIFICACAO_ANALITICA = 1) não recebe lançamento — marcar vale pelos
-   descendentes, e o negrito sinaliza isso. */
+   descendentes, e o peso da fonte sinaliza isso. */
 .arvore-conta.is-grupo {
   background: var(--surface-tint);
 }
@@ -1669,13 +1734,25 @@ dialog::backdrop {
   font-weight: 700;
 }
 
-.arvore-conta.is-marcada {
-  background: var(--accent-soft);
+.arvore-conta.is-folha .arvore-conta__rotulo > span:last-child {
+  color: var(--text-soft);
 }
 
-.arvore-toggle--vazio {
-  cursor: default;
+.arvore-conta.is-marcada {
+  background: var(--accent-soft);
+  box-shadow: inset 3px 0 0 var(--accent);
+}
+
+/* Ancestral de outro grupo contábil: aparece para dar hierarquia, mas não pode
+   ser marcado aqui. */
+.arvore-conta.is-estrutura {
   background: transparent;
+}
+
+.arvore-conta.is-estrutura code,
+.arvore-conta.is-estrutura .arvore-conta__rotulo > span:last-child {
+  color: var(--text-faint);
+  font-weight: 400;
 }
 
 .arvore-conta__rotulo {
@@ -1683,11 +1760,19 @@ dialog::backdrop {
   flex: 1;
   min-width: 0;
   display: grid;
-  grid-template-columns: 18px 132px 1fr;
+  grid-template-columns: 18px 128px 1fr;
   align-items: center;
-  gap: 11px;
-  padding: 6px 0;
+  gap: 10px;
+  padding: 5px 0;
   cursor: pointer;
+}
+
+.arvore-conta__rotulo--estrutura {
+  cursor: default;
+}
+
+.arvore-conta__vazio {
+  width: 18px;
 }
 
 .arvore-conta__rotulo input {
@@ -1704,7 +1789,6 @@ dialog::backdrop {
 }
 
 .arvore-conta__rotulo > span:last-child {
-  color: var(--text-soft);
   font-size: 12.5px;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1721,6 +1805,29 @@ dialog::backdrop {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
+
+.arvore-conta__abaixo {
+  flex: 0 0 auto;
+  min-width: 20px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: var(--accent);
+  color: #fff;
+  font-size: 10.5px;
+  font-weight: 700;
+  text-align: center;
+}
+
+.contas-seletor__origem {
+  display: block;
+  margin-top: 2px;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 500;
+  text-transform: none;
+  letter-spacing: 0;
+}
+
 
 /* Indentação pelo nível do código ("3" -> 0, "3.1.1.1.02" -> 4): a hierarquia do
    plano de contas fica legível sem virar uma árvore com toggles. */

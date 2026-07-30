@@ -3,15 +3,28 @@ import { useMemo, useState } from "react";
 import Cabecalho from "../componentes/Cabecalho.jsx";
 import Icone from "../componentes/Icone.jsx";
 import { AvisoErro, Carregando } from "../componentes/Estados.jsx";
-import { ancestrais, linhasDaArvore } from "../dados/contas.js";
+import {
+  ancestrais,
+  contarMarcadosAbaixo,
+  filtrarPorGrupo,
+  linhasDaArvore,
+} from "../dados/contas.js";
+import { GRUPOS } from "../dados/modulos.js";
 import { contasDoModulo } from "../dados/visao.js";
 
-function Linha({ item, marcado, onAlternarSelecao, onAlternarNo }) {
+function Linha({ item, marcado, marcadosAbaixo, onAlternarSelecao, onAlternarNo }) {
+  const classes = [
+    "arvore-conta",
+    item.sintetica ? "is-grupo" : "is-folha",
+    item.nivel === 0 ? "is-raiz" : "",
+    marcado ? "is-marcada" : "",
+    item.selecionavel === false ? "is-estrutura" : "",
+  ]
+    .filter(Boolean)
+    .join(" ");
+
   return (
-    <div
-      className={`arvore-conta ${item.sintetica ? "is-grupo" : ""} ${marcado ? "is-marcada" : ""}`}
-      style={{ paddingLeft: `${14 + item.nivel * 22}px` }}
-    >
+    <div className={classes} style={{ "--recuo": `${item.nivel * 20}px` }}>
       {item.temFilhos ? (
         <button
           type="button"
@@ -21,22 +34,37 @@ function Linha({ item, marcado, onAlternarSelecao, onAlternarNo }) {
           aria-label={`${item.aberto ? "Recolher" : "Expandir"} ${item.codigo}`}
         >
           <span className={`arvore-chevron ${item.aberto ? "is-aberto" : ""}`}>
-            <Icone nome="chevron" tamanho={14} />
+            <Icone nome="chevron" tamanho={13} />
           </span>
         </button>
       ) : (
         <span className="arvore-toggle arvore-toggle--vazio" aria-hidden="true" />
       )}
 
-      {/* O chevron fica FORA do label: dentro dele, expandir também marcaria a conta. */}
-      <label className="arvore-conta__rotulo">
-        <input type="checkbox" checked={marcado} onChange={() => onAlternarSelecao(item.codigo)} />
-        <span className="checkbox-visual">
-          <Icone nome="check" tamanho={13} />
+      {/* O chevron fica FORA do rótulo: dentro dele, expandir também marcaria. */}
+      {item.selecionavel === false ? (
+        <span className="arvore-conta__rotulo arvore-conta__rotulo--estrutura">
+          <span className="arvore-conta__vazio" aria-hidden="true" />
+          <code>{item.codigo}</code>
+          <span>{item.descricao}</span>
         </span>
-        <code>{item.codigo}</code>
-        <span>{item.descricao}</span>
-      </label>
+      ) : (
+        <label className="arvore-conta__rotulo">
+          <input type="checkbox" checked={marcado} onChange={() => onAlternarSelecao(item.codigo)} />
+          <span className="checkbox-visual">
+            <Icone nome="check" tamanho={13} />
+          </span>
+          <code>{item.codigo}</code>
+          <span>{item.descricao}</span>
+        </label>
+      )}
+
+      {/* Com o nó recolhido, é o único sinal de que há seleção escondida abaixo. */}
+      {!item.aberto && marcadosAbaixo > 0 ? (
+        <span className="arvore-conta__abaixo" title={`${marcadosAbaixo} selecionadas abaixo`}>
+          {marcadosAbaixo}
+        </span>
+      ) : null}
     </div>
   );
 }
@@ -44,13 +72,19 @@ function Linha({ item, marcado, onAlternarSelecao, onAlternarNo }) {
 export default function TelaVisaoModulo({
   visao,
   modulo,
-  catalogo,
+  catalogo: catalogoCompleto,
   carregando,
   erro,
   onRecarregar,
   onAlterarContas,
   onVoltar,
 }) {
+  // Cada módulo só oferece as contas do seu LX_GRUPO_CONTABIL.
+  const catalogo = useMemo(
+    () => filtrarPorGrupo(catalogoCompleto, modulo.grupo),
+    [catalogoCompleto, modulo.grupo]
+  );
+
   const selecionadas = contasDoModulo(visao, modulo.id);
   const marcadas = useMemo(() => new Set(selecionadas), [selecionadas]);
 
@@ -77,7 +111,7 @@ export default function TelaVisaoModulo({
           item.codigo.toLowerCase().includes(termo) ||
           item.descricao.toLowerCase().includes(termo)
       )
-      .map((item) => ({ ...item, nivel: 0, temFilhos: false, aberto: false }));
+      .map((item) => ({ ...item, nivel: 0, temFilhos: false, aberto: true }));
   }, [catalogo, expandidos, termo]);
 
   const alternarNo = (codigo) =>
@@ -95,9 +129,11 @@ export default function TelaVisaoModulo({
         : [...selecionadas, codigo]
     );
 
-  const expandirTudo = () =>
-    setExpandidos(new Set(catalogo.lista.map((item) => item.codigo)));
+  const expandirTudo = () => setExpandidos(new Set(catalogo.lista.map((item) => item.codigo)));
   const recolherTudo = () => setExpandidos(new Set(catalogo.raizes));
+
+  const grupo = GRUPOS[modulo.grupo];
+  const selecionaveis = catalogo.lista.filter((item) => item.selecionavel !== false).length;
 
   return (
     <main className="conteudo">
@@ -108,8 +144,8 @@ export default function TelaVisaoModulo({
       />
 
       <div className="modulo-barra">
-        <span className={`chip chip--${modulo.tipo}`}>
-          {modulo.tipo === "receita" ? "Receita" : "Despesa"}
+        <span className={`chip chip--${grupo?.chip ?? "receita"}`}>
+          {grupo?.rotulo ?? modulo.tipo} · {modulo.grupo}
         </span>
         <label className="campo-busca">
           <input
@@ -143,7 +179,12 @@ export default function TelaVisaoModulo({
       {!carregando && !erro ? (
         <div className="contas-seletor">
           <div className="contas-seletor__topo">
-            <span>{termo ? "Resultados do filtro" : "Plano de contas"}</span>
+            <span>
+              {termo ? "Resultados do filtro" : "Plano de contas"}
+              <small className="contas-seletor__origem">
+                {selecionaveis} {selecionaveis === 1 ? "conta" : "contas"} do grupo {modulo.grupo}
+              </small>
+            </span>
             <small>
               {selecionadas.length} {selecionadas.length === 1 ? "selecionada" : "selecionadas"}
             </small>
@@ -155,14 +196,17 @@ export default function TelaVisaoModulo({
                   key={item.codigo}
                   item={item}
                   marcado={marcadas.has(item.codigo)}
+                  marcadosAbaixo={
+                    item.temFilhos ? contarMarcadosAbaixo(catalogo, item.codigo, marcadas) : 0
+                  }
                   onAlternarSelecao={alternarSelecao}
                   onAlternarNo={alternarNo}
                 />
               ))
             ) : (
               <p className="sem-contas">
-                {catalogo.lista.length
-                  ? "Nenhuma conta corresponde ao filtro."
+                {catalogoCompleto.lista.length
+                  ? `Nenhuma conta do grupo ${modulo.grupo} corresponde ao filtro.`
                   : "O ERP não devolveu classificações para esta visão contábil."}
               </p>
             )}
@@ -172,8 +216,9 @@ export default function TelaVisaoModulo({
 
       <p className="modulo-aviso">
         <Icone nome="info" tamanho={16} />
-        Salvo na hora. Marcar um grupo (em negrito) vale também pelas contas abaixo dele — não é
-        preciso marcar as folhas uma a uma.
+        Salvo na hora. Marcar um grupo vale pelas contas abaixo dele, dentro deste mesmo grupo
+        contábil. Linhas em cinza são só estrutura — pertencem a outro grupo e não podem ser
+        marcadas aqui.
       </p>
     </main>
   );

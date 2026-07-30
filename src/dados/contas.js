@@ -94,15 +94,69 @@ export function ancestrais(catalogo, codigo) {
 // Um grupo não recebe lançamento; o movimento fica nas folhas. Marcar o grupo em
 // um módulo tem que valer pelos descendentes, senão o total daria zero.
 //
+// Com `grupo` informado (LX_GRUPO_CONTABIL do módulo), só os descendentes desse
+// grupo entram na soma — mas a descida continua pelos que não entram, porque um
+// nó DF pode ter filho DV com neto DF. Sem esse recorte, marcar "3.1.2" num
+// módulo de despesa fixa somaria as deduções, que são variáveis.
+//
 // Devolve Set para o caso de grupo e folha marcados ao mesmo tempo: sem isso o
 // valor da folha entraria duas vezes.
-export function expandirComDescendentes(catalogo, codigos) {
+export function expandirComDescendentes(catalogo, codigos, grupo = null) {
   const resultado = new Set();
+  const visitados = new Set();
+
   const visitar = (codigo) => {
-    if (resultado.has(codigo)) return;
-    resultado.add(codigo);
+    if (visitados.has(codigo)) return;
+    visitados.add(codigo);
+
+    const item = catalogo.porCodigo.get(codigo);
+    // Código que não está no catálogo é mantido: pode ser classificação que saiu
+    // do ERP, e sumir com ela em silêncio esconderia o problema.
+    if (!grupo || !item || item.grupo === grupo) resultado.add(codigo);
+
     (catalogo.filhos.get(codigo) ?? []).forEach(visitar);
   };
+
   (codigos ?? []).forEach(visitar);
   return resultado;
+}
+
+// Recorta o catálogo para um LX_GRUPO_CONTABIL, mantendo os ancestrais dos nós
+// que casam. Os ancestrais entram como estrutura (`selecionavel: false`): sem
+// eles a lista perde a hierarquia e vira uma parede de códigos; com eles
+// selecionáveis, marcar um pai de outro grupo puxaria contas que não são do
+// módulo.
+export function filtrarPorGrupo(catalogo, grupo) {
+  if (!grupo) return catalogo;
+
+  const manter = new Map();
+  catalogo.lista.forEach((item) => {
+    if (item.grupo !== grupo) return;
+    manter.set(item.codigo, { ...item, selecionavel: true });
+    ancestrais(catalogo, item.codigo).forEach((codigo) => {
+      if (manter.has(codigo)) return;
+      const pai = catalogo.porCodigo.get(codigo);
+      if (pai) manter.set(codigo, { ...pai, selecionavel: false });
+    });
+  });
+
+  // Reconstrói na ordem original do catálogo, para a árvore sair na ordem do
+  // plano de contas.
+  const lista = catalogo.lista.filter((item) => manter.has(item.codigo)).map((item) => manter.get(item.codigo));
+  const indexado = indexarContas(lista);
+  return { ...indexado, grupo };
+}
+
+// Quantos descendentes marcados um nó tem. Com a árvore recolhida é o único
+// sinal de que há seleção escondida abaixo.
+export function contarMarcadosAbaixo(catalogo, codigo, marcadas) {
+  let total = 0;
+  const visitar = (atual) => {
+    (catalogo.filhos.get(atual) ?? []).forEach((filho) => {
+      if (marcadas.has(filho)) total += 1;
+      visitar(filho);
+    });
+  };
+  visitar(codigo);
+  return total;
 }
