@@ -1,59 +1,40 @@
-import {
-  CANAIS_SEED,
-  CENTROS_SEED,
-  DEDUCOES_SEED,
-  FILIAIS_SEED,
-  MESES,
-} from "./seeds.js";
-import {
-  gerarPercentualPlanejado,
-  gerarPercentualRealizado,
-  gerarPlanejado,
-  gerarRealizado,
-} from "./mock.js";
+import { CENTROS_SEED, FILIAIS_SEED, MESES } from "./seeds.js";
+import { modulo as definicaoDoModulo } from "./modulos.js";
+import { contasDoModulo, moduloConfigurado } from "./visao.js";
+import { gerarPlanejado, gerarRealizado } from "./mock.js";
 import { mesTemRealizado } from "./calendario.js";
 
 // ============================================================================
 // MODELO DO PLANO
 //
-// `plano.planejado` e `plano.pctPlanejado` guardam SOMENTE as edições manuais.
-// Quando não há edição para uma célula, o valor vem do gerador. Isso mantém
-// dimensões novas coerentes (parâmetro 0 -> planejado 0 e realizado 0) e deixa
-// o plano pequeno o bastante para caber no localStorage.
+// O plano guarda as dimensões de configuração (filiais, centros de custo), a
+// visão escolhida na criação e as edições manuais do orçamento.
+//
+// `plano.planejado` guarda SOMENTE as edições manuais, com chave
+// `modulo|filial|ano|mes`. Sem edição, o valor vem do gerador — o que mantém
+// filiais novas coerentes (fator 0 -> zero nos dois lados) e o registro pequeno
+// o bastante para caber no localStorage.
 // ============================================================================
 
 export function gerarId(prefixo) {
   return `${prefixo}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
 }
 
-export function chavePlanejado(modulo, filialId, canalId, ano, mes) {
-  return `${modulo}|${filialId}|${canalId}|${ano}|${mes}`;
+export function chavePlanejado(moduloId, filialId, ano, mes) {
+  return `${moduloId}|${filialId}|${ano}|${mes}`;
 }
 
-export function chavePercentual(filialId, canalId, deducaoId, ano, mes) {
-  return `${filialId}|${canalId}|${deducaoId}|${ano}|${mes}`;
-}
-
-export function criarPlano(id, nome, inicio, fim) {
+export function criarPlano(id, nome, inicio, fim, visaoId) {
   return {
     id,
     nome,
     inicio,
     fim,
+    visaoId,
     filiais: FILIAIS_SEED.map((item) => ({ ...item })),
     centros: CENTROS_SEED.map((item) => ({ ...item })),
-    canais: CANAIS_SEED.map((item) => ({ ...item, contas: [...item.contas], bases: { ...item.bases } })),
-    deducoes: DEDUCOES_SEED.map((item) => ({ ...item, contas: [...item.contas] })),
     planejado: {},
-    pctPlanejado: {},
   };
-}
-
-export function criarPlanosIniciais() {
-  return [
-    criarPlano("orcamento-reajustado", "Orçamento 2024-2026 - Reajustado", 2024, 2026),
-    criarPlano("oficial", "Oficial", 2024, 2026),
-  ];
 }
 
 export function anosDoPlano(plano) {
@@ -67,72 +48,25 @@ function itensSelecionados(lista, idSelecionado) {
   return item ? [item] : [];
 }
 
-function planejadoDaCelula(plano, modulo, filial, canal, ano, mes) {
-  const editado = plano.planejado[chavePlanejado(modulo, filial.id, canal.id, ano, mes)];
-  return editado ?? gerarPlanejado(modulo, filial, canal, ano, mes);
+// --------------------------------------------------------------------------
+// Leitura de valores
+// --------------------------------------------------------------------------
+
+function planejadoDaCelula(plano, modulo, filial, ano, mes) {
+  const editado = plano.planejado[chavePlanejado(modulo.id, filial.id, ano, mes)];
+  return editado ?? gerarPlanejado(modulo, filial, ano, mes);
 }
 
-function percentualDaCelula(plano, filial, canal, deducao, ano, mes) {
-  const editado = plano.pctPlanejado[chavePercentual(filial.id, canal.id, deducao.id, ano, mes)];
-  return editado ?? gerarPercentualPlanejado(filial, canal, deducao, ano, mes);
-}
-
-function somarMes(plano, modulo, filiais, canais, ano, mes) {
+function somarMes(plano, modulo, filiais, ano, mes) {
   let planejado = 0;
   let realizado = 0;
   let anterior = 0;
   filiais.forEach((filial) => {
-    canais.forEach((canal) => {
-      planejado += planejadoDaCelula(plano, modulo, filial, canal, ano, mes);
-      realizado += gerarRealizado(modulo, filial, canal, ano, mes, false);
-      anterior += gerarRealizado(modulo, filial, canal, ano, mes, true);
-    });
+    planejado += planejadoDaCelula(plano, modulo, filial, ano, mes);
+    realizado += gerarRealizado(modulo, filial, ano, mes, false);
+    anterior += gerarRealizado(modulo, filial, ano, mes, true);
   });
   return { planejado, realizado, anterior };
-}
-
-function obterDeducaoMes(plano, filiais, canais, deducoes, ano, mes) {
-  const acumulado = {
-    receitaPlan: 0,
-    receitaReal: 0,
-    receitaAnterior: 0,
-    valorPlan: 0,
-    valorReal: 0,
-    valorAnterior: 0,
-  };
-
-  filiais.forEach((filial) => {
-    canais.forEach((canal) => {
-      const planReceita = planejadoDaCelula(plano, "vendas", filial, canal, ano, mes);
-      const realReceita = gerarRealizado("vendas", filial, canal, ano, mes, false);
-      const anteriorReceita = gerarRealizado("vendas", filial, canal, ano, mes, true);
-
-      let pctPlan = 0;
-      let pctReal = 0;
-      let pctAnterior = 0;
-      deducoes.forEach((deducao) => {
-        pctPlan += percentualDaCelula(plano, filial, canal, deducao, ano, mes);
-        pctReal += gerarPercentualRealizado(filial, canal, deducao, ano, mes, false);
-        pctAnterior += gerarPercentualRealizado(filial, canal, deducao, ano, mes, true);
-      });
-
-      acumulado.receitaPlan += planReceita;
-      acumulado.receitaReal += realReceita;
-      acumulado.receitaAnterior += anteriorReceita;
-      acumulado.valorPlan += planReceita * (pctPlan / 100);
-      acumulado.valorReal += realReceita * (pctReal / 100);
-      acumulado.valorAnterior += anteriorReceita * (pctAnterior / 100);
-    });
-  });
-
-  return {
-    ...acumulado,
-    pctPlan: acumulado.receitaPlan ? (acumulado.valorPlan / acumulado.receitaPlan) * 100 : 0,
-    pctReal: acumulado.receitaReal ? (acumulado.valorReal / acumulado.receitaReal) * 100 : 0,
-    pctAnterior: acumulado.receitaAnterior
-      ? (acumulado.valorAnterior / acumulado.receitaAnterior) * 100
-      : 0,
-  };
 }
 
 function calcularVariacao(realizado, anterior) {
@@ -145,14 +79,14 @@ function calcularVariacao(realizado, anterior) {
 
 // A média divide pelos meses que realmente têm dado, não por 12 fixo. Com 12
 // fixo a média de realizado ficava diluída pelos meses que ainda nem chegaram.
-function linhaMedia(meses, ano, rotulo = "Média") {
+function linhaMedia(meses, ano) {
   const comRealizado = MESES.filter((mes) => mesTemRealizado(ano, mes)).length;
   const comAnterior = MESES.filter((mes) => mesTemRealizado(ano - 1, mes)).length;
   const somar = (campo) => meses.reduce((total, linha) => total + linha[campo], 0);
 
   const media = {
     id: "media",
-    label: rotulo,
+    label: "Média",
     planejado: somar("planejado") / 12,
     realizado: comRealizado ? somar("realizado") / comRealizado : 0,
     anterior: comAnterior ? somar("anterior") / comAnterior : 0,
@@ -162,12 +96,34 @@ function linhaMedia(meses, ano, rotulo = "Média") {
   return media;
 }
 
-export function criarLinhasOrcamento(plano, modulo, filialId, canalId, ano) {
+function linhasVazias(ano) {
+  const meses = MESES.map((mes) => ({
+    id: mes,
+    label: `${String(mes).padStart(2, "0")}/${ano}`,
+    planejado: 0,
+    realizado: 0,
+    anterior: 0,
+    variacao: 0,
+    variacaoPercentual: 0,
+  }));
+  const zero = { planejado: 0, realizado: 0, anterior: 0, variacao: 0, variacaoPercentual: 0 };
+  return [
+    ...meses,
+    { id: "total", label: "Total", ...zero },
+    { id: "media", label: "Média", ...zero },
+  ];
+}
+
+// Um módulo sem conta selecionada na visão não tem o que somar: devolve zeros
+// em vez de números inventados.
+export function criarLinhasOrcamento(plano, visao, moduloId, filialId, ano) {
+  const modulo = definicaoDoModulo(moduloId);
+  if (!modulo || !moduloConfigurado(visao, moduloId)) return linhasVazias(ano);
+
   const filiais = itensSelecionados(plano.filiais, filialId);
-  const canais = itensSelecionados(plano.canais, canalId);
 
   const meses = MESES.map((mes) => {
-    const valores = somarMes(plano, modulo, filiais, canais, ano, mes);
+    const valores = somarMes(plano, modulo, filiais, ano, mes);
     return {
       id: mes,
       label: `${String(mes).padStart(2, "0")}/${ano}`,
@@ -189,101 +145,36 @@ export function criarLinhasOrcamento(plano, modulo, filialId, canalId, ano) {
   return [...meses, total, linhaMedia(meses, ano)];
 }
 
-export function criarLinhasDeducao(plano, filialId, canalId, deducaoId, ano, aba) {
+export function totalDoModuloNoAno(plano, visao, moduloId, filialId, ano) {
+  const modulo = definicaoDoModulo(moduloId);
+  if (!modulo || !moduloConfigurado(visao, moduloId)) return 0;
   const filiais = itensSelecionados(plano.filiais, filialId);
-  const canais = itensSelecionados(plano.canais, canalId);
-  const deducoes = itensSelecionados(plano.deducoes, deducaoId);
-  const ehPercentual = aba === "percentual";
-
-  const dadosMensais = MESES.map((mes) =>
-    obterDeducaoMes(plano, filiais, canais, deducoes, ano, mes)
-  );
-
-  const meses = dadosMensais.map((dados, index) => {
-    const linha = {
-      id: index + 1,
-      label: `${String(index + 1).padStart(2, "0")}/${ano}`,
-      planejado: ehPercentual ? dados.pctPlan : dados.valorPlan,
-      realizado: ehPercentual ? dados.pctReal : dados.valorReal,
-      anterior: ehPercentual ? dados.pctAnterior : dados.valorAnterior,
-    };
-    return { ...linha, ...calcularVariacao(linha.realizado, linha.anterior) };
-  });
-
-  let total;
-  if (ehPercentual) {
-    // Percentual não se soma: o total do ano é ponderado pela receita.
-    const somar = (campo) => dadosMensais.reduce((valor, item) => valor + item[campo], 0);
-    const receitaPlan = somar("receitaPlan");
-    const receitaReal = somar("receitaReal");
-    const receitaAnterior = somar("receitaAnterior");
-    total = {
-      id: "total",
-      label: "Total ponderado",
-      planejado: receitaPlan ? (somar("valorPlan") / receitaPlan) * 100 : 0,
-      realizado: receitaReal ? (somar("valorReal") / receitaReal) * 100 : 0,
-      anterior: receitaAnterior ? (somar("valorAnterior") / receitaAnterior) * 100 : 0,
-      nota: "Percentual do ano ponderado pela receita de cada mês.",
-    };
-  } else {
-    const somar = (campo) => meses.reduce((valor, item) => valor + item[campo], 0);
-    total = {
-      id: "total",
-      label: "Total",
-      planejado: somar("planejado"),
-      realizado: somar("realizado"),
-      anterior: somar("anterior"),
-    };
-  }
-  Object.assign(total, calcularVariacao(total.realizado, total.anterior));
-
-  // Na aba percentual a média simples convive com o total ponderado — os dois
-  // respondem perguntas diferentes, então o rótulo diz qual é qual.
-  const media = linhaMedia(meses, ano, ehPercentual ? "Média simples" : "Média");
-  return [...meses, total, media];
-}
-
-export function totalCanalNoAno(plano, modulo, filialId, canalId, ano) {
-  const filiais = itensSelecionados(plano.filiais, filialId);
-  const canais = itensSelecionados(plano.canais, canalId);
   return MESES.reduce(
-    (total, mes) => total + somarMes(plano, modulo, filiais, canais, ano, mes).planejado,
+    (total, mes) => total + somarMes(plano, modulo, filiais, ano, mes).planejado,
     0
   );
 }
 
-// Um canal criado na tela nasce zerado; sem esta exceção o filtro "ocultar
-// canais sem valores" o esconderia logo após o cadastro.
-export function canaisVisiveis(plano, modulo, filialId, ano, ocultarSemValores) {
-  if (!ocultarSemValores) return plano.canais;
-  return plano.canais.filter(
-    (canal) => canal.manual || totalCanalNoAno(plano, modulo, filialId, canal.id, ano) !== 0
-  );
+// Quantidade de contas que o módulo tem na visão do plano — usada nos cartões.
+export function contasDoModuloNoPlano(visao, moduloId) {
+  return contasDoModulo(visao, moduloId);
 }
+
+// --------------------------------------------------------------------------
+// Dimensões de configuração
+// --------------------------------------------------------------------------
 
 const CAMPO_POR_TIPO = {
   filiais: "filiais",
   centros: "centros",
-  canais: "canais",
-  deducao: "deducoes",
 };
 
 export function campoDaDimensao(tipo) {
   return CAMPO_POR_TIPO[tipo] ?? null;
 }
 
-function limparChaves(registro, posicao, id, tamanho) {
-  const resultado = {};
-  Object.entries(registro).forEach(([chave, valor]) => {
-    const partes = chave.split("|");
-    if (partes.length === tamanho && partes[posicao] === id) return;
-    resultado[chave] = valor;
-  });
-  return resultado;
-}
-
-// Sem esta limpeza as edições de uma dimensão excluída ficavam órfãs no plano e
-// ressuscitavam se alguém recriasse a dimensão com o mesmo id.
+// Sem esta limpeza as edições de uma filial excluída ficavam órfãs no plano e
+// ressuscitavam se alguém recriasse a filial com o mesmo id.
 export function removerDimensao(plano, tipo, id) {
   const campo = campoDaDimensao(tipo);
   if (!campo) return plano;
@@ -294,13 +185,9 @@ export function removerDimensao(plano, tipo, id) {
   };
 
   if (tipo === "filiais") {
-    proximo.planejado = limparChaves(plano.planejado, 1, id, 5);
-    proximo.pctPlanejado = limparChaves(plano.pctPlanejado, 0, id, 5);
-  } else if (tipo === "canais") {
-    proximo.planejado = limparChaves(plano.planejado, 2, id, 5);
-    proximo.pctPlanejado = limparChaves(plano.pctPlanejado, 1, id, 5);
-  } else if (tipo === "deducao") {
-    proximo.pctPlanejado = limparChaves(plano.pctPlanejado, 2, id, 5);
+    proximo.planejado = Object.fromEntries(
+      Object.entries(plano.planejado).filter(([chave]) => chave.split("|")[1] !== id)
+    );
   }
 
   return proximo;

@@ -1,5 +1,15 @@
-// Plano de contas usado para vincular canais e deduções.
-// No sistema real, virá de uma view do ERP (VW_..._) em vez destas constantes.
+import { modulo } from "./modulos.js";
+
+// ============================================================================
+// PLANO DE CONTAS
+//
+// PROVISÓRIO. Só as faixas de receita (3.1.1.x) e de dedução (3.1.9.x) existem
+// aqui. Custos variáveis, despesas operacionais, despesas com pessoal e outras
+// despesas ainda não têm suas contas — elas vêm do banco (view do ERP).
+//
+// Ao plugar o banco, `contasDoModulo()` é o único ponto que muda: passa a
+// consultar a view em vez de escolher entre estas duas listas.
+// ============================================================================
 
 export const CONTAS_RECEITA = [
   { id: "3.1.1.01.001", codigo: "3.1.1.01.001", descricao: "VENDAS DE PRODUTOS - COLEÇÃO" },
@@ -27,3 +37,19 @@ export const CONTAS_DEDUCAO = [
   { id: "3.1.9.02.004", codigo: "3.1.9.02.004", descricao: "IPI SOBRE VENDAS" },
   { id: "3.1.9.02.005", codigo: "3.1.9.02.005", descricao: "SIMPLES NACIONAL" },
 ];
+
+const TODAS = [...CONTAS_RECEITA, ...CONTAS_DEDUCAO];
+const POR_ID = new Map(TODAS.map((conta) => [conta.id, conta]));
+
+export function conta(id) {
+  return POR_ID.get(id) ?? null;
+}
+
+// Contas que podem ser vinculadas a um módulo.
+// ← PONTO DE TROCA PELO BANCO: substituir por consulta à view do plano de
+//   contas, filtrando pela faixa correspondente ao módulo.
+export function contasDoModulo(moduloId) {
+  const alvo = modulo(moduloId);
+  if (!alvo) return [];
+  return alvo.tipo === "receita" ? CONTAS_RECEITA : CONTAS_DEDUCAO;
+}

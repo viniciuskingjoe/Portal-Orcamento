@@ -1,11 +1,7 @@
 // Dimensões iniciais de um plano novo.
 //
-// Cada item carrega os parâmetros que alimentam o mock determinístico
-// (`fator`, `bases`, `percentualBase`). Isso é intencional: os geradores leem
-// esses números do próprio item, então uma filial/canal criado pela tela nasce
-// com parâmetro 0 e fica coerente — planejado 0 E realizado 0.
-//
-// Ao plugar o banco, estes campos saem e os geradores viram consultas.
+// `fator` é parâmetro do mock determinístico: uma filial criada pela tela nasce
+// com 0 e fica coerente (planejado 0 e realizado 0). Sai quando o banco entrar.
 
 export const EMPRESA = "KING & JOE CONFECCOES LTDA";
 
@@ -22,61 +18,20 @@ export const CENTROS_SEED = [
   { id: "controladoria", nome: "CONTROLADORIA" },
 ];
 
-export const CANAIS_SEED = [
+// Visão de exemplo, para o portal não abrir vazio. Receita de vendas e
+// Deduções de vendas já vêm com contas; os demais módulos ficam a configurar.
+export const VISOES_SEED = [
   {
-    id: "atacado",
-    nome: "ATACADO",
-    contas: ["3.1.1.01.001", "3.1.1.01.002", "3.1.1.01.003"],
-    bases: { vendas: 1850000, operacionais: 172000 },
-  },
-  {
-    id: "varejo",
-    nome: "VAREJO / LOJAS",
-    contas: ["3.1.1.05.001", "3.1.1.01.052"],
-    bases: { vendas: 1040000, operacionais: 108000 },
-  },
-  {
-    id: "ecommerce",
-    nome: "E-COMMERCE",
-    contas: ["3.1.1.01.004"],
-    bases: { vendas: 670000, operacionais: 76000 },
-  },
-  {
-    id: "mercado-externo",
-    nome: "MERCADO EXTERNO",
-    contas: ["3.1.1.01.050", "3.1.1.01.051", "3.1.1.02.002"],
-    bases: { vendas: 0, operacionais: 0 },
+    id: "dre-2025",
+    nome: "DRE 2025",
+    modulos: {
+      "receita-vendas": ["3.1.1.01.001", "3.1.1.01.002", "3.1.1.01.003", "3.1.1.05.001"],
+      "receitas-nao-operacionais": ["3.1.1.01.006"],
+      "deducoes-vendas": ["3.1.9.01.001", "3.1.9.02.001", "3.1.9.02.002", "3.1.9.02.003"],
+    },
   },
 ];
 
-export const DEDUCOES_SEED = [
-  {
-    id: "devolucoes",
-    nome: "DEVOLUÇÕES",
-    contas: ["3.1.9.01.001", "3.1.9.01.002"],
-    percentualBase: 2.35,
-  },
-  {
-    id: "impostos",
-    nome: "IMPOSTOS SOBRE VENDAS",
-    contas: ["3.1.9.02.001", "3.1.9.02.002", "3.1.9.02.003"],
-    percentualBase: 10.82,
-  },
-];
-
-export const MODULOS = {
-  filiais: { titulo: "Filiais", tipo: "config", icone: "building" },
-  centros: { titulo: "Centro de Custos", tipo: "config", icone: "layers" },
-  canais: { titulo: "Canais", tipo: "config", icone: "route" },
-  // Rótulo é "Despesas"; o id continua `deducao` porque é o que está gravado
-  // nos planos salvos e nas chaves de percentual.
-  deducao: { titulo: "Despesas", tipo: "config", icone: "percent" },
-  vendas: { titulo: "Receita de Vendas", tipo: "receita", icone: "chart" },
-  operacionais: { titulo: "Receitas Operacionais", tipo: "receita", icone: "coins" },
-  deducaoVendas: { titulo: "Dedução de Vendas", tipo: "despesa", icone: "trendingDown" },
-};
-
-export const MODULOS_CONFIG = ["filiais", "centros", "canais", "deducao"];
-export const MODULOS_ORCAMENTO = ["vendas", "operacionais", "deducaoVendas"];
+export const CONFIGURACOES = ["filiais", "centros"];
 
 export const MESES = Array.from({ length: 12 }, (_, index) => index + 1);

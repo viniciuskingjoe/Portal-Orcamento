@@ -1,12 +1,5 @@
 import Icone from "./Icone.jsx";
-import { MODULOS, MODULOS_CONFIG, MODULOS_ORCAMENTO } from "../dados/seeds.js";
-
-const CONTAGEM_POR_MODULO = {
-  filiais: "filiais",
-  centros: "centros",
-  canais: "canais",
-  deducao: "deducoes",
-};
+import { modulosDaVisao } from "../dados/visao.js";
 
 function ItemNav({ id, titulo, icone, badge, ativo, onNavegar }) {
   return (
@@ -23,13 +16,16 @@ function ItemNav({ id, titulo, icone, badge, ativo, onNavegar }) {
   );
 }
 
-export default function Sidebar({ empresa, planoAtivo, tela, onNavegar, tema, onAlternarTema }) {
-  const grupos = planoAtivo
-    ? [
-        { titulo: "Configuração", modulos: MODULOS_CONFIG },
-        { titulo: "Orçamentos", modulos: MODULOS_ORCAMENTO },
-      ]
-    : [];
+export default function Sidebar({
+  empresa,
+  planoAtivo,
+  visaoDoPlano,
+  tela,
+  onNavegar,
+  tema,
+  onAlternarTema,
+}) {
+  const modulos = visaoDoPlano ? modulosDaVisao(visaoDoPlano) : [];
 
   return (
     <aside className="sidebar">
@@ -57,35 +53,59 @@ export default function Sidebar({ empresa, planoAtivo, tela, onNavegar, tema, on
           ativo={tela === "planos"}
           onNavegar={onNavegar}
         />
-        {planoAtivo ? (
-          <ItemNav
-            id="home"
-            titulo="Visão geral"
-            icone="calendar"
-            ativo={tela === "home"}
-            onNavegar={onNavegar}
-          />
-        ) : null}
+        <ItemNav
+          id="visoes"
+          titulo="Visões"
+          icone="eye"
+          ativo={tela === "visoes" || tela === "visao" || tela === "visao-modulo"}
+          onNavegar={onNavegar}
+        />
 
-        {grupos.map((grupo) => (
-          <div className="nav-grupo" key={grupo.titulo}>
-            <span className="nav-grupo__titulo">{grupo.titulo}</span>
-            {grupo.modulos.map((id) => {
-              const campo = CONTAGEM_POR_MODULO[id];
-              return (
-                <ItemNav
-                  key={id}
-                  id={id}
-                  titulo={MODULOS[id].titulo}
-                  icone={MODULOS[id].icone}
-                  badge={campo ? planoAtivo[campo].length : undefined}
-                  ativo={tela === id}
-                  onNavegar={onNavegar}
-                />
-              );
-            })}
-          </div>
-        ))}
+        {planoAtivo ? (
+          <>
+            <div className="nav-grupo">
+              <span className="nav-grupo__titulo">{planoAtivo.nome}</span>
+              <ItemNav
+                id="home"
+                titulo="Visão geral"
+                icone="calendar"
+                ativo={tela === "home"}
+                onNavegar={onNavegar}
+              />
+              <ItemNav
+                id="configuracoes"
+                titulo="Configurações"
+                icone="settings"
+                ativo={tela === "configuracoes" || tela === "filiais" || tela === "centros"}
+                onNavegar={onNavegar}
+              />
+            </div>
+
+            <div className="nav-grupo">
+              <span className="nav-grupo__titulo">
+                Orçamentos{visaoDoPlano ? ` · ${visaoDoPlano.nome}` : ""}
+              </span>
+              {modulos.length ? (
+                modulos.map((modulo) => (
+                  <ItemNav
+                    key={modulo.id}
+                    id={modulo.id}
+                    titulo={modulo.titulo}
+                    icone={modulo.icone}
+                    ativo={tela === modulo.id}
+                    onNavegar={onNavegar}
+                  />
+                ))
+              ) : (
+                <p className="nav-aviso">
+                  {visaoDoPlano
+                    ? "Nenhum módulo configurado nesta visão."
+                    : "Este plano não tem visão associada."}
+                </p>
+              )}
+            </div>
+          </>
+        ) : null}
       </nav>
 
       <div className="sidebar__rodape">

@@ -35,22 +35,6 @@ export function FiltrosOrcamento({ plano, filtros, onAlterarFiltro }) {
   );
 }
 
-export function CheckOcultarCanais({ marcado, onAlterar }) {
-  return (
-    <label className="check-filtro">
-      <input
-        type="checkbox"
-        checked={marcado}
-        onChange={(evento) => onAlterar(evento.target.checked)}
-      />
-      <span className="checkbox-visual">
-        <Icone nome="check" tamanho={13} />
-      </span>
-      Ocultar canais sem valores
-    </label>
-  );
-}
-
 export function DicaEdicao({ pronta, children }) {
   return (
     <div className={`dica-edicao ${pronta ? "is-ready" : ""}`}>

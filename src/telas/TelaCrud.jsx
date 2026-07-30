@@ -2,14 +2,15 @@ import Botao from "../componentes/Botao.jsx";
 import Cabecalho from "../componentes/Cabecalho.jsx";
 import EstadoVazio from "../componentes/EstadoVazio.jsx";
 import Icone from "../componentes/Icone.jsx";
-import { MODULOS } from "../dados/seeds.js";
 
 const DESCRICAO = {
   filiais: {
+    titulo: "Filiais",
     singular: "filial",
     texto: "Unidades usadas para distribuir os valores do orçamento.",
   },
   centros: {
+    titulo: "Centro de Custos",
     singular: "centro de custo",
     texto: "Estrutura gerencial para classificação das despesas.",
   },
@@ -21,7 +22,7 @@ export default function TelaCrud({ tela, lista, onAdicionar, onEditar, onExcluir
   return (
     <main className="conteudo">
       <Cabecalho
-        titulo={MODULOS[tela].titulo}
+        titulo={dados.titulo}
         subtitulo={dados.texto}
         onVoltar={onVoltar}
         acao={

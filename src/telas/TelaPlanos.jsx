@@ -3,7 +3,10 @@ import Cabecalho from "../componentes/Cabecalho.jsx";
 import EstadoVazio from "../componentes/EstadoVazio.jsx";
 import Icone from "../componentes/Icone.jsx";
 
-export default function TelaPlanos({ planos, onAbrir, onNovo, onExcluir }) {
+export default function TelaPlanos({ planos, visoes, onAbrir, onNovo, onExcluir }) {
+  const nomeDaVisao = (visaoId) =>
+    visoes.find((visao) => visao.id === visaoId)?.nome ?? "sem visão";
+
   return (
     <main className="conteudo conteudo--planos">
       <Cabecalho
@@ -40,6 +43,10 @@ export default function TelaPlanos({ planos, onAbrir, onNovo, onExcluir }) {
                   <small>
                     01/01/{plano.inicio} até 31/12/{plano.fim}
                   </small>
+                  <span className="card-plano__visao">
+                    <Icone nome="eye" tamanho={13} />
+                    {nomeDaVisao(plano.visaoId)}
+                  </span>
                 </span>
                 <span className="card-plano__seta">
                   <Icone nome="chevron" tamanho={18} />

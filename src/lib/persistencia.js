@@ -1,10 +1,37 @@
-import { criarPlanosIniciais } from "../dados/plano.js";
+import { criarPlano } from "../dados/plano.js";
+import { criarVisao } from "../dados/visao.js";
+import { VISOES_SEED } from "../dados/seeds.js";
 
-const CHAVE = "portal-orcamento:planos:v1";
-
-// Persistência local, suficiente enquanto o protótipo não tem backend.
+// Persistência local, suficiente enquanto o backend não está no ar.
 // Ao plugar a API, este módulo vira a camada de fetch/save e o resto do app
 // continua igual — nada fora daqui conhece o localStorage.
+//
+// v2: o modelo mudou (canais e deduções saíram, entraram visões). Dados
+// gravados na v1 não têm equivalente e são ignorados.
+const CHAVE = "portal-orcamento:estado:v2";
+
+export function estadoInicial() {
+  const visoes = VISOES_SEED.map((item) => criarVisao(item.id, item.nome, item.modulos));
+  return {
+    visoes,
+    planos: [
+      criarPlano("oficial", "Oficial", 2024, 2026, visoes[0]?.id ?? null),
+      criarPlano("reajustado", "Orçamento 2024-2026 - Reajustado", 2024, 2026, visoes[0]?.id ?? null),
+    ],
+  };
+}
+
+function visaoValida(visao) {
+  return visao && typeof visao.id === "string" && typeof visao.nome === "string";
+}
+
+function normalizarVisao(visao) {
+  const modulos = {};
+  Object.entries(visao.modulos ?? {}).forEach(([moduloId, contas]) => {
+    if (Array.isArray(contas)) modulos[moduloId] = contas;
+  });
+  return { ...visao, modulos };
+}
 
 function planoValido(plano) {
   return (
@@ -14,52 +41,45 @@ function planoValido(plano) {
     Number.isInteger(plano.inicio) &&
     Number.isInteger(plano.fim) &&
     Array.isArray(plano.filiais) &&
-    Array.isArray(plano.centros) &&
-    Array.isArray(plano.canais) &&
-    Array.isArray(plano.deducoes)
+    Array.isArray(plano.centros)
   );
 }
 
-function normalizar(plano) {
+function normalizarPlano(plano) {
   return {
     ...plano,
+    visaoId: plano.visaoId ?? null,
     planejado: plano.planejado ?? {},
-    pctPlanejado: plano.pctPlanejado ?? {},
-    canais: plano.canais.map((canal) => ({
-      ...canal,
-      contas: canal.contas ?? [],
-      bases: canal.bases ?? { vendas: 0, operacionais: 0 },
-    })),
-    deducoes: plano.deducoes.map((deducao) => ({
-      ...deducao,
-      contas: deducao.contas ?? [],
-      percentualBase: deducao.percentualBase ?? 0,
-    })),
   };
 }
 
-export function carregarPlanos() {
+export function carregarEstado() {
   let bruto = null;
   try {
     bruto = localStorage.getItem(CHAVE);
   } catch {
-    return criarPlanosIniciais();
+    return estadoInicial();
   }
-  if (!bruto) return criarPlanosIniciais();
+  if (!bruto) return estadoInicial();
 
   try {
     const dados = JSON.parse(bruto);
-    if (!Array.isArray(dados)) return criarPlanosIniciais();
-    // Uma lista vazia é um estado legítimo: o usuário excluiu todos os planos.
-    return dados.filter(planoValido).map(normalizar);
+    if (!dados || !Array.isArray(dados.planos) || !Array.isArray(dados.visoes)) {
+      return estadoInicial();
+    }
+    // Listas vazias são estado legítimo: o usuário excluiu tudo.
+    return {
+      visoes: dados.visoes.filter(visaoValida).map(normalizarVisao),
+      planos: dados.planos.filter(planoValido).map(normalizarPlano),
+    };
   } catch {
-    return criarPlanosIniciais();
+    return estadoInicial();
   }
 }
 
-export function salvarPlanos(planos) {
+export function salvarEstado(estado) {
   try {
-    localStorage.setItem(CHAVE, JSON.stringify(planos));
+    localStorage.setItem(CHAVE, JSON.stringify(estado));
     return { ok: true };
   } catch (erro) {
     return { ok: false, erro: String(erro?.name ?? erro) };

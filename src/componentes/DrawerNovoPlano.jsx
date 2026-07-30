@@ -1,16 +1,20 @@
 import { useEffect, useRef } from "react";
 import Botao from "./Botao.jsx";
 import Icone from "./Icone.jsx";
+import { resumoDaVisao } from "../dados/visao.js";
 
 // Também é um `<dialog>`: só a apresentação é de painel lateral. Assim ganha
 // Escape para fechar e retenção de foco sem código extra.
-export default function DrawerNovoPlano({ valores, erro, onAlterar, onSalvar, onFechar }) {
+export default function DrawerNovoPlano({ valores, visoes, erro, onAlterar, onSalvar, onFechar }) {
   const referencia = useRef(null);
 
   useEffect(() => {
     const dialogo = referencia.current;
     if (dialogo && !dialogo.open) dialogo.showModal();
   }, []);
+
+  const visaoEscolhida = visoes.find((visao) => visao.id === valores.visaoId) ?? null;
+  const resumo = visaoEscolhida ? resumoDaVisao(visaoEscolhida) : null;
 
   return (
     <dialog
@@ -23,7 +27,6 @@ export default function DrawerNovoPlano({ valores, erro, onAlterar, onSalvar, on
       }}
     >
       <form
-        method="dialog"
         className="drawer__form"
         onSubmit={(evento) => {
           evento.preventDefault();
@@ -52,6 +55,37 @@ export default function DrawerNovoPlano({ valores, erro, onAlterar, onSalvar, on
               autoFocus
             />
           </label>
+
+          <label className="campo">
+            <span>
+              Visão <b>*</b>
+            </span>
+            <select
+              value={valores.visaoId ?? ""}
+              onChange={(evento) => onAlterar({ visaoId: evento.target.value || null })}
+            >
+              <option value="">Selecione uma visão…</option>
+              {visoes.map((visao) => (
+                <option value={visao.id} key={visao.id}>
+                  {visao.nome}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          {resumo ? (
+            <p className="campo__ajuda">
+              {resumo.modulos} de {resumo.totalDeModulos} módulos configurados ·{" "}
+              {resumo.contas} {resumo.contas === 1 ? "conta" : "contas"} vinculadas
+            </p>
+          ) : null}
+
+          {!visoes.length ? (
+            <p className="erro-campo" role="alert">
+              Nenhuma visão cadastrada. Crie uma visão antes de criar o plano.
+            </p>
+          ) : null}
+
           <div className="campos-duplos">
             <label className="campo">
               <span>Período de</span>
@@ -70,14 +104,19 @@ export default function DrawerNovoPlano({ valores, erro, onAlterar, onSalvar, on
               />
             </label>
           </div>
+
           {erro ? (
             <p className="erro-campo" role="alert">
               {erro}
             </p>
           ) : null}
+
           <div className="drawer__nota">
             <Icone nome="info" tamanho={18} />
-            <p>Cada plano mantém seus cadastros e valores de forma independente.</p>
+            <p>
+              A visão define quais módulos e contas este plano orça. Filiais e centros de custo
+              são configurados dentro do plano.
+            </p>
           </div>
         </div>
 
@@ -85,7 +124,7 @@ export default function DrawerNovoPlano({ valores, erro, onAlterar, onSalvar, on
           <Botao variante="secundario" onClick={onFechar}>
             Cancelar
           </Botao>
-          <button type="submit" className="botao botao--primario">
+          <button type="submit" className="botao botao--primario" disabled={!visoes.length}>
             Salvar plano
           </button>
         </div>
