@@ -2,3 +2,8 @@ node_modules
 dist
 .DS_Store
 *.log
+
+# Segredos: nunca versionar. Só o .env.example fica no git.
+.env
+.env.*
+!.env.example

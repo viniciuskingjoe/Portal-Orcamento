@@ -10,5 +10,13 @@ export default defineConfig({
   server: {
     port: 5173,
     open: true,
+    // O front chama /api/* e o proxy encaminha para o backend (npm run api).
+    // Evita CORS e mantém a mesma origem em dev e em produção.
+    proxy: {
+      "/api": {
+        target: `http://localhost:${process.env.API_PORT ?? 3000}`,
+        changeOrigin: true,
+      },
+    },
   },
 });
