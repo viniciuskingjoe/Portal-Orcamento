@@ -3,6 +3,7 @@ import { modulo as definicaoDoModulo } from "./modulos.js";
 import { SEM_CENTRO, contasEfetivasDoModulo, moduloConfigurado } from "./visao.js";
 import { somarRealizado } from "./realizado.js";
 import { mesTemRealizado } from "./calendario.js";
+import { CATALOGO_VAZIO } from "./contas.js";
 
 // ============================================================================
 // MODELO DO PLANO
@@ -90,6 +91,8 @@ export function criarLinhasOrcamento({
   filiais,
   centroId = SEM_CENTRO,
   contas,
+  catalogo = CATALOGO_VAZIO,
+  inverter,
   realizado,
   realizadoAnterior,
 }) {
@@ -97,27 +100,17 @@ export function criarLinhasOrcamento({
   const ano = plano?.ano;
   if (!modulo || !contas?.length || !filiais?.length) return linhasVazias(ano);
 
+  // O sinal é decidido conta a conta pelo grupo contábil dela, não pelo tipo do
+  // módulo: "Outras despesas" contém contas de receita.
+  const comum = { contas, filiais, centroId, catalogo, tipoPadrao: modulo.tipo, inverter };
+
   const meses = MESES.map((mes) => {
     const linha = {
       id: mes,
       label: `${String(mes).padStart(2, "0")}/${ano}`,
       planejado: planejadoDoMes(plano, moduloId, filiais, centroId, contas, mes),
-      realizado: somarRealizado({
-        indice: realizado,
-        contas,
-        filiais,
-        centroId,
-        mes,
-        tipo: modulo.tipo,
-      }),
-      anterior: somarRealizado({
-        indice: realizadoAnterior,
-        contas,
-        filiais,
-        centroId,
-        mes,
-        tipo: modulo.tipo,
-      }),
+      realizado: somarRealizado({ ...comum, indice: realizado, mes }),
+      anterior: somarRealizado({ ...comum, indice: realizadoAnterior, mes }),
     };
     return { ...linha, ...calcularVariacao(linha.realizado, linha.anterior) };
   });

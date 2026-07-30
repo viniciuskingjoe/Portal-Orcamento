@@ -1,10 +1,20 @@
 import { strict as assert } from "node:assert";
 import { test } from "node:test";
 
-import { indexarRealizado, somarRealizado } from "../src/dados/realizado.js";
+import { indexarContas } from "../src/dados/contas.js";
+import { indexarRealizado, somarRealizado, tipoDaConta } from "../src/dados/realizado.js";
 import { SEM_CENTRO } from "../src/dados/visao.js";
 
 const FILIAIS = [{ id: "000001" }, { id: "000008" }];
+
+// O sinal vem do LX_GRUPO_CONTABIL da conta, não do tipo do módulo.
+const catalogo = indexarContas([
+  { codigo: "3.1.1.01.001", descricao: "COLEÇÃO", totalizaEm: null, sintetica: false, grupo: "R" },
+  { codigo: "3.1.1.01.002", descricao: "SALDO", totalizaEm: null, sintetica: false, grupo: "R" },
+  { codigo: "4.4.1.01", descricao: "SALÁRIOS", totalizaEm: null, sintetica: false, grupo: "DF" },
+  { codigo: "4.5.2.01.001", descricao: "JUROS OBTIDOS", totalizaEm: null, sintetica: false, grupo: "R" },
+  { codigo: "4.6.5.01.001", descricao: "INDENIZAÇÃO DE SEGUROS", totalizaEm: null, sintetica: false, grupo: "DF" },
+]);
 
 // Recorte no formato de /api/realizado: classificação × filial × centro × mês.
 const indice = indexarRealizado([
@@ -22,7 +32,8 @@ const somar = (extra) =>
     filiais: FILIAIS,
     centroId: SEM_CENTRO,
     mes: 1,
-    tipo: "receita",
+    catalogo,
+    tipoPadrao: "receita",
     ...extra,
   });
 
@@ -40,11 +51,36 @@ test("centro sem movimento devolve zero", () => {
   assert.equal(somar({ centroId: "999" }), 0);
 });
 
-test("receita é crédito menos débito; despesa inverte", () => {
-  // Planejado é sempre positivo; devolver a despesa positiva deixa a variação
-  // significar a mesma coisa nos dois tipos de módulo.
-  assert.equal(somar({ contas: ["4.4.1.01"], tipo: "despesa" }), 2800);
-  assert.equal(somar({ contas: ["4.4.1.01"], tipo: "receita" }), -2800);
+test("o sinal vem do grupo da conta, não do módulo", () => {
+  // Módulo de despesa pode conter conta de receita: "Outras despesas" tem juros
+  // obtidos. Ler pelo tipo do módulo inverteria o sinal dessas contas.
+  assert.equal(somar({ contas: ["4.4.1.01"], tipoPadrao: "receita" }), 2800, "DF é despesa");
+  assert.equal(somar({ contas: ["3.1.1.01.001"], tipoPadrao: "despesa" }), 6150, "R é receita");
+});
+
+test("conta fora do catálogo cai no tipo do módulo", () => {
+  const solto = indexarRealizado([
+    { classificacao: "9.9", filial: "000001", centro: "002", mes: 1, debito: 300, credito: 0 },
+  ]);
+  assert.equal(somar({ indice: solto, contas: ["9.9"], tipoPadrao: "despesa" }), 300);
+  assert.equal(somar({ indice: solto, contas: ["9.9"], tipoPadrao: "receita" }), -300);
+});
+
+test("inverter conserta conta classificada errada no ERP", () => {
+  // 4.6.5.01 INDENIZAÇÃO DE SEGUROS é receita marcada como DF no cadastro.
+  const seguros = indexarRealizado([
+    { classificacao: "4.6.5.01.001", filial: "000001", centro: "002", mes: 1, debito: 0, credito: 500 },
+  ]);
+  const args = { indice: seguros, contas: ["4.6.5.01.001"], tipoPadrao: "despesa" };
+  assert.equal(somar(args), -500, "sem a exceção sai negativo");
+  assert.equal(somar({ ...args, inverter: new Set(["4.6.5.01.001"]) }), 500);
+});
+
+test("tipoDaConta resolve grupo, padrão e inversão", () => {
+  assert.equal(tipoDaConta(catalogo, "3.1.1.01.001", "despesa"), "receita");
+  assert.equal(tipoDaConta(catalogo, "4.4.1.01", "receita"), "despesa");
+  assert.equal(tipoDaConta(catalogo, "nao-existe", "despesa"), "despesa");
+  assert.equal(tipoDaConta(catalogo, "4.4.1.01", "receita", new Set(["4.4.1.01"])), "receita");
 });
 
 test("filial específica soma só ela", () => {

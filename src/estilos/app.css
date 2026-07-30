@@ -1994,6 +1994,40 @@ dialog::backdrop {
   font-weight: 700;
 }
 
+/* Como o valor da conta é lido. O grupo contábil decide por padrão; o botão
+   inverte quando o ERP classificou errado. */
+.arvore-conta__sinal {
+  flex: 0 0 auto;
+  padding: 2px 8px;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 700;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.arvore-conta__sinal.is-receita {
+  background: var(--success-soft);
+  color: var(--success);
+}
+
+.arvore-conta__sinal.is-despesa {
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+
+/* Invertido à mão: a borda tracejada avisa que não é o que o ERP diz. */
+.arvore-conta__sinal.is-invertido {
+  border-style: dashed;
+  border-color: currentColor;
+}
+
+.cabecalho-acoes {
+  display: flex;
+  gap: 8px;
+}
+
 .arvore-conta__abaixo {
   flex: 0 0 auto;
   min-width: 20px;

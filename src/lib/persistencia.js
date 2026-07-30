@@ -58,7 +58,12 @@ function normalizarVisao(visao) {
       filiais[filialId] = { contas, centros };
     });
 
-    modulos[moduloId] = { usaCentro: bruto?.usaCentro === true, filiais };
+    modulos[moduloId] = {
+      usaCentro: bruto?.usaCentro === true,
+      // Exceções de sinal: contas que o ERP classificou no grupo errado.
+      inverter: listaDeTexto(bruto?.inverter),
+      filiais,
+    };
   });
 
   return {

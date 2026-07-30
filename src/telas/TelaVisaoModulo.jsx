@@ -13,9 +13,11 @@ import {
   resumirSelecao,
 } from "../dados/contas.js";
 import { GRUPOS } from "../dados/modulos.js";
+import { tipoDaConta } from "../dados/realizado.js";
 import {
   SEM_CENTRO,
   centrosDaFilial,
+  contasInvertidas,
   contasDaFilial,
   contasDoCentro,
   usaCentroDeCusto,
@@ -30,7 +32,7 @@ function useIndeterminado(parcial) {
   return referencia;
 }
 
-function Linha({ item, estado, marcadosAbaixo, onAlternar, onAlternarNo }) {
+function Linha({ item, estado, marcadosAbaixo, sinal, onInverter, onAlternar, onAlternarNo }) {
   const referencia = useIndeterminado(estado === "parcial");
 
   const classes = [
@@ -84,6 +86,23 @@ function Linha({ item, estado, marcadosAbaixo, onAlternar, onAlternarNo }) {
         </label>
       )}
 
+      {/* Folha marcada mostra como o valor dela é lido. O grupo contábil decide,
+          mas o ERP às vezes classifica receita como despesa — daí poder inverter. */}
+      {sinal ? (
+        <button
+          type="button"
+          className={`arvore-conta__sinal is-${sinal.tipo} ${sinal.invertido ? "is-invertido" : ""}`}
+          onClick={() => onInverter(item.codigo)}
+          title={
+            sinal.invertido
+              ? `Lida como ${sinal.tipo}, invertido do grupo ${sinal.grupo}. Clique para voltar.`
+              : `Lida como ${sinal.tipo} (grupo ${sinal.grupo}). Clique para inverter.`
+          }
+        >
+          {sinal.tipo === "receita" ? "+ receita" : "− despesa"}
+        </button>
+      ) : null}
+
       {!item.aberto && estado === "parcial" && marcadosAbaixo > 0 ? (
         <span className="arvore-conta__abaixo">{marcadosAbaixo}</span>
       ) : null}
@@ -103,6 +122,7 @@ export default function TelaVisaoModulo({
   onDefinirContasDaFilial,
   onDefinirContasDoCentro,
   onAlternarUsaCentro,
+  onAlternarInversao,
   onVoltar,
 }) {
   const usaCentro = usaCentroDeCusto(visao, modulo.id);
@@ -185,6 +205,20 @@ export default function TelaVisaoModulo({
       else proximo.add(codigo);
       return proximo;
     });
+
+  const invertidas = useMemo(
+    () => new Set(contasInvertidas(visao, modulo.id)),
+    [visao, modulo.id]
+  );
+
+  const sinalDaConta = (item) => {
+    if (item.sintetica !== false || !marcadas.has(item.codigo)) return null;
+    return {
+      tipo: tipoDaConta(catalogo, item.codigo, modulo.tipo, invertidas),
+      grupo: item.grupo ?? modulo.grupo,
+      invertido: invertidas.has(item.codigo),
+    };
+  };
 
   const grupo = GRUPOS[modulo.grupo];
   const centrosComContas = filialId ? centrosDaFilial(visao, modulo.id, filialId) : [];
@@ -352,6 +386,8 @@ export default function TelaVisaoModulo({
                               (marcadas.has(item.codigo) ? 1 : 0)
                             : 0
                         }
+                        sinal={sinalDaConta(item)}
+                        onInverter={(codigo) => onAlternarInversao(modulo.id, codigo)}
                         onAlternar={alternar}
                         onAlternarNo={alternarNo}
                       />

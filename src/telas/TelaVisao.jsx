@@ -33,7 +33,14 @@ function CardModulo({ modulo, visao, onAbrir }) {
   );
 }
 
-export default function TelaVisao({ visao, nomeContabil, onAbrirModulo, onRenomear, onVoltar }) {
+export default function TelaVisao({
+  visao,
+  nomeContabil,
+  onAbrirModulo,
+  onRenomear,
+  onAplicarMapeamento,
+  onVoltar,
+}) {
   const resumo = resumoDaVisao(visao);
 
   const grupos = [
@@ -52,10 +59,18 @@ export default function TelaVisao({ visao, nomeContabil, onAbrirModulo, onRenome
         }`}
         onVoltar={onVoltar}
         acao={
-          <button type="button" className="botao botao--secundario" onClick={onRenomear}>
-            <Icone nome="edit" tamanho={16} />
-            Editar
-          </button>
+          <span className="cabecalho-acoes">
+            {onAplicarMapeamento ? (
+              <button type="button" className="botao botao--secundario" onClick={onAplicarMapeamento}>
+                <Icone nome="layers" tamanho={16} />
+                Preencher com o padrão
+              </button>
+            ) : null}
+            <button type="button" className="botao botao--secundario" onClick={onRenomear}>
+              <Icone nome="edit" tamanho={16} />
+              Editar
+            </button>
+          </span>
         }
       />
 

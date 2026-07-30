@@ -20,14 +20,23 @@ import { ehModulo, modulo as definicaoDoModulo } from "./dados/modulos.js";
 import { chavePlanejado, criarLinhasOrcamento, criarPlano, gerarId } from "./dados/plano.js";
 import {
   SEM_CENTRO,
+  alternarInversao,
   contasEfetivasDoModulo,
+  contasInvertidas,
   criarVisao,
+  definirContasInvertidas,
   definirContasDaFilial,
   definirContasDoCentro,
   definirUsaCentroDeCusto,
   usaCentroDeCusto,
 } from "./dados/visao.js";
 import { conta as buscarConta } from "./dados/contas.js";
+import {
+  contasDoMapeamento,
+  inversoesDoMapeamento,
+  temMapeamentoPadrao,
+} from "./dados/mapeamentoPadrao.js";
+import { MODULOS } from "./dados/modulos.js";
 import { carregarEstado, salvarEstado } from "./lib/persistencia.js";
 import { formatarParaEdicao, parseNumeroPtBr } from "./lib/formato.js";
 import { aplicarTema, temaInicial } from "./lib/tema.js";
@@ -145,10 +154,12 @@ export default function PlanejamentoOrcamentario() {
       filiais: filiaisDoFiltro,
       centroId: filtros.centro,
       contas: contasDaTabela,
+      catalogo: contas.catalogo,
+      inverter: new Set(contasInvertidas(visaoDoPlano, moduloDaTela.id)),
       realizado: realizado.doAno,
       realizadoAnterior: realizado.doAnoAnterior,
     });
-  }, [planoAtivo, moduloDaTela, filiaisDoFiltro, filtros.centro, contasDaTabela, realizado]);
+  }, [planoAtivo, visaoDoPlano, moduloDaTela, filiaisDoFiltro, filtros.centro, contasDaTabela, contas.catalogo, realizado]);
 
   // --------------------------------------------------------------------------
   // Navegação
@@ -279,6 +290,30 @@ export default function PlanejamentoOrcamentario() {
       irParaTopo();
     }
     setModalVisao(null);
+  }
+
+  // Ponto de partida: preenche os módulos com as faixas que o Scoreplan usa na
+  // visão contábil 25. Aplica nas filiais ativas e o usuário ajusta depois — a
+  // visão continua sendo escolha de quem monta.
+  function aplicarMapeamentoPadrao() {
+    if (!visaoAberta || !temMapeamentoPadrao(visaoAberta.visaoContabil)) return;
+    const inversoes = inversoesDoMapeamento(contas.catalogo);
+
+    atualizarVisaoAberta((visao) => {
+      let proxima = visao;
+      MODULOS.forEach((modulo) => {
+        const codigos = contasDoMapeamento(contas.catalogo, modulo.id);
+        if (!codigos.length) return;
+        filiaisAtivas.forEach((filial) => {
+          proxima = definirContasDaFilial(proxima, modulo.id, filial.id, codigos);
+        });
+        const doModulo = inversoes.filter((codigo) => codigos.includes(codigo));
+        if (doModulo.length) {
+          proxima = definirContasInvertidas(proxima, modulo.id, doModulo);
+        }
+      });
+      return proxima;
+    });
   }
 
   const atualizarVisaoAberta = (transformar) =>
@@ -413,6 +448,11 @@ export default function PlanejamentoOrcamentario() {
             irParaTopo();
           }}
           onRenomear={() => abrirModalVisao(visaoAberta)}
+          onAplicarMapeamento={
+            temMapeamentoPadrao(visaoAberta.visaoContabil) && !contas.carregando
+              ? aplicarMapeamentoPadrao
+              : null
+          }
           onVoltar={voltar}
         />
       );
@@ -439,6 +479,9 @@ export default function PlanejamentoOrcamentario() {
           }
           onAlternarUsaCentro={(moduloId, usa) =>
             atualizarVisaoAberta((visao) => definirUsaCentroDeCusto(visao, moduloId, usa))
+          }
+          onAlternarInversao={(moduloId, codigo) =>
+            atualizarVisaoAberta((visao) => alternarInversao(visao, moduloId, codigo))
           }
           onVoltar={voltar}
         />

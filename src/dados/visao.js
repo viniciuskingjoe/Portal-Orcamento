@@ -142,6 +142,35 @@ export function contasEfetivasDoModulo(visao, moduloId, filialId, centroId = SEM
 }
 
 // --------------------------------------------------------------------------
+// Exceções de sinal
+//
+// O sinal de cada conta vem do LX_GRUPO_CONTABIL dela (R é receita). Algumas
+// contas estão classificadas errado no ERP — 4.6.5.01 INDENIZAÇÃO DE SEGUROS e
+// 4.6.5.02 OUTRAS RECEITAS são receita marcada como DF. Aqui ficam as exceções,
+// por módulo.
+// --------------------------------------------------------------------------
+
+export function contasInvertidas(visao, moduloId) {
+  const lista = moduloDaVisao(visao, moduloId).inverter;
+  return Array.isArray(lista) ? lista : [];
+}
+
+export function definirContasInvertidas(visao, moduloId, codigos) {
+  const modulo = moduloDaVisao(visao, moduloId);
+  return {
+    ...visao,
+    modulos: { ...visao.modulos, [moduloId]: { ...modulo, inverter: [...new Set(codigos)] } },
+  };
+}
+
+export function alternarInversao(visao, moduloId, codigo) {
+  const atuais = new Set(contasInvertidas(visao, moduloId));
+  if (atuais.has(codigo)) atuais.delete(codigo);
+  else atuais.add(codigo);
+  return definirContasInvertidas(visao, moduloId, [...atuais]);
+}
+
+// --------------------------------------------------------------------------
 // Resumos
 // --------------------------------------------------------------------------
 

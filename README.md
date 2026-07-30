@@ -134,8 +134,16 @@ pelo grupo contábil. Expandir ali faria desmarcar uma conta não surtir efeito.
 
 A hierarquia é pelo prefixo do código, não por `totalizaEm`.
 
-Receita é lida como crédito − débito; despesa inverte. As duas voltam positivas,
-para a variação contra o planejado significar a mesma coisa nos dois casos.
+O sinal é da CONTA, não do módulo: `LX_GRUPO_CONTABIL = R` é receita (crédito −
+débito), `DV`/`DF` é despesa (débito − crédito). As duas voltam positivas, para a
+variação significar a mesma coisa nos dois casos.
+
+Isso importa porque um módulo de despesa contém contas de receita — "Outras
+despesas" tem JUROS OBTIDOS e OUTRAS RECEITAS OPERACIONAIS. Ler pelo tipo do
+módulo inverteria o sinal delas. O critério do grupo acerta 17 das 19 contas que
+o Scoreplan trata assim; as 2 restantes (`4.6.5.01` INDENIZAÇÃO DE SEGUROS e
+`4.6.5.02` OUTRAS RECEITAS) são receita cadastrada como `DF` no ERP e ficam na
+lista de exceções da visão, ajustável conta a conta na árvore.
 
 ## Banco
 
