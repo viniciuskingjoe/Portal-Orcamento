@@ -1,27 +1,40 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import Cabecalho from "../componentes/Cabecalho.jsx";
 import Icone from "../componentes/Icone.jsx";
 import { AvisoErro, Carregando } from "../componentes/Estados.jsx";
 import {
   ancestrais,
-  ancestralMarcado,
-  contarMarcadosAbaixo,
-  expandirComDescendentes,
+  contasEfetivas,
+  desmarcarEmCascata,
+  estadoDaSelecao,
   filtrarPorGrupo,
   linhasDaArvore,
+  marcarEmCascata,
+  resumirSelecao,
 } from "../dados/contas.js";
 import { GRUPOS } from "../dados/modulos.js";
 import { contasDoModulo } from "../dados/visao.js";
 
-function Linha({ item, marcado, herdadoDe, marcadosAbaixo, onAlternarSelecao, onAlternarNo }) {
-  const incluida = marcado || !!herdadoDe;
+// `indeterminate` não existe como atributo HTML, só como propriedade do
+// elemento — sem escrever nela o estado parcial não aparece.
+function useIndeterminado(parcial) {
+  const referencia = useRef(null);
+  useEffect(() => {
+    if (referencia.current) referencia.current.indeterminate = parcial;
+  }, [parcial]);
+  return referencia;
+}
+
+function Linha({ item, estado, marcadosAbaixo, onAlternar, onAlternarNo }) {
+  const referencia = useIndeterminado(estado === "parcial");
+
   const classes = [
     "arvore-conta",
     item.sintetica ? "is-grupo" : "is-folha",
     item.nivel === 0 ? "is-raiz" : "",
-    marcado ? "is-marcada" : "",
-    herdadoDe ? "is-herdada" : "",
+    estado === "total" ? "is-marcada" : "",
+    estado === "parcial" ? "is-parcial" : "",
     item.selecionavel === false ? "is-estrutura" : "",
   ]
     .filter(Boolean)
@@ -53,34 +66,23 @@ function Linha({ item, marcado, herdadoDe, marcadosAbaixo, onAlternarSelecao, on
           <span>{item.descricao}</span>
         </span>
       ) : (
-        <label
-          className="arvore-conta__rotulo"
-          title={
-            herdadoDe
-              ? `Já incluída por ${herdadoDe}. Desmarque ${herdadoDe} para escolher conta por conta.`
-              : undefined
-          }
-        >
-          {/* Herdada aparece marcada porque ENTRA na soma. Desabilitada porque quem
-              manda é o pai: desmarcar aqui não teria efeito nenhum. */}
+        <label className="arvore-conta__rotulo">
           <input
+            ref={referencia}
             type="checkbox"
-            checked={incluida}
-            disabled={!!herdadoDe}
-            onChange={() => onAlternarSelecao(item.codigo)}
+            checked={estado === "total"}
+            onChange={() => onAlternar(item.codigo, estado)}
           />
           <span className="checkbox-visual">
-            <Icone nome="check" tamanho={13} />
+            <Icone nome={estado === "parcial" ? "minus" : "check"} tamanho={13} />
           </span>
           <code>{item.codigo}</code>
           <span>{item.descricao}</span>
         </label>
       )}
 
-      {herdadoDe ? <span className="arvore-conta__herdada">via {herdadoDe}</span> : null}
-
-      {/* Com o nó recolhido, é o único sinal de que há seleção escondida abaixo. */}
-      {!incluida && !item.aberto && marcadosAbaixo > 0 ? (
+      {/* Com o nó recolhido, é o único sinal de que há seleção abaixo. */}
+      {!item.aberto && estado === "parcial" && marcadosAbaixo > 0 ? (
         <span className="arvore-conta__abaixo" title={`${marcadosAbaixo} marcadas abaixo`}>
           {marcadosAbaixo}
         </span>
@@ -107,6 +109,7 @@ export default function TelaVisaoModulo({
 
   const selecionadas = contasDoModulo(visao, modulo.id);
   const marcadas = useMemo(() => new Set(selecionadas), [selecionadas]);
+  const resumo = useMemo(() => resumirSelecao(catalogo, marcadas), [catalogo, marcadas]);
 
   // Abre as raízes e o caminho até tudo que já está marcado — sem isso uma conta
   // selecionada no fundo da árvore ficaria escondida.
@@ -142,23 +145,32 @@ export default function TelaVisaoModulo({
       return proximo;
     });
 
-  const alternarSelecao = (codigo) =>
-    onAlterarContas(
-      marcadas.has(codigo)
-        ? selecionadas.filter((item) => item !== codigo)
-        : [...selecionadas, codigo]
-    );
+  // Cascata: marcar leva a subárvore inteira; desmarcar tira a subárvore e os
+  // ancestrais (um pai marcado significa "tudo abaixo marcado").
+  const alternar = (codigo, estado) => {
+    const proximo =
+      estado === "vazio"
+        ? marcarEmCascata(catalogo, marcadas, codigo)
+        : desmarcarEmCascata(catalogo, marcadas, codigo);
+    onAlterarContas([...proximo]);
+  };
 
   const expandirTudo = () => setExpandidos(new Set(catalogo.lista.map((item) => item.codigo)));
   const recolherTudo = () => setExpandidos(new Set(catalogo.raizes));
 
+  const marcarTudo = () =>
+    onAlterarContas([
+      ...catalogo.raizes.reduce(
+        (acumulado, raiz) => marcarEmCascata(catalogo, acumulado, raiz),
+        marcadas
+      ),
+    ]);
+  const limpar = () => onAlterarContas([]);
+
   const grupo = GRUPOS[modulo.grupo];
   const selecionaveis = catalogo.lista.filter((item) => item.selecionavel !== false).length;
-
-  // Quantas contas o módulo soma de fato: as marcadas mais as herdadas. Só o
-  // número de marcadas engana — marcar um grupo inclui tudo abaixo dele.
   const noModulo = useMemo(
-    () => expandirComDescendentes(catalogo, selecionadas, modulo.grupo).size,
+    () => contasEfetivas(catalogo, selecionadas, modulo.grupo).size,
     [catalogo, selecionadas, modulo.grupo]
   );
 
@@ -212,15 +224,22 @@ export default function TelaVisaoModulo({
                 {selecionaveis} {selecionaveis === 1 ? "conta" : "contas"} do grupo {modulo.grupo}
               </small>
             </span>
-            <small>
-              {noModulo} {noModulo === 1 ? "conta no módulo" : "contas no módulo"}
-              {selecionadas.length !== noModulo ? (
-                <span className="contas-seletor__marcadas">
-                  {selecionadas.length} {selecionadas.length === 1 ? "marcada" : "marcadas"} +{" "}
-                  {noModulo - selecionadas.length} herdadas
-                </span>
-              ) : null}
-            </small>
+            <span className="contas-seletor__acoes">
+              <small>
+                {noModulo} {noModulo === 1 ? "selecionada" : "selecionadas"}
+              </small>
+              <button
+                type="button"
+                className="botao-texto"
+                onClick={marcarTudo}
+                disabled={noModulo === selecionaveis}
+              >
+                Marcar todas
+              </button>
+              <button type="button" className="botao-texto" onClick={limpar} disabled={!noModulo}>
+                Limpar
+              </button>
+            </span>
           </div>
           <div className="contas-seletor__lista contas-seletor__lista--alta">
             {linhas.length ? (
@@ -228,16 +247,14 @@ export default function TelaVisaoModulo({
                 <Linha
                   key={item.codigo}
                   item={item}
-                  marcado={marcadas.has(item.codigo)}
-                  herdadoDe={
-                    marcadas.has(item.codigo)
-                      ? null
-                      : ancestralMarcado(catalogo, item.codigo, marcadas)
-                  }
+                  estado={estadoDaSelecao(resumo, item.codigo)}
                   marcadosAbaixo={
-                    item.temFilhos ? contarMarcadosAbaixo(catalogo, item.codigo, marcadas) : 0
+                    item.temFilhos
+                      ? (resumo.get(item.codigo)?.marcados ?? 0) -
+                        (marcadas.has(item.codigo) ? 1 : 0)
+                      : 0
                   }
-                  onAlternarSelecao={alternarSelecao}
+                  onAlternar={alternar}
                   onAlternarNo={alternarNo}
                 />
               ))
@@ -254,10 +271,10 @@ export default function TelaVisaoModulo({
 
       <p className="modulo-aviso">
         <Icone nome="info" tamanho={16} />
-        Salvo na hora. Marcar um grupo inclui tudo abaixo dele — as contas aparecem marcadas com
-        <strong> via {"<código>"}</strong> e acompanham o ERP: conta nova criada nesse grupo entra
-        sozinha. Para escolher conta por conta, desmarque o grupo. Linhas em cinza são só estrutura,
-        de outro grupo contábil.
+        Salvo na hora. Marcar um grupo marca todas as contas abaixo dele; dá para desmarcar uma
+        conta isolada depois, e o grupo passa a aparecer meio-marcado. Conta criada no ERP depois
+        disso não entra sozinha — é preciso voltar aqui e marcá-la. Linhas em cinza são só
+        estrutura, de outro grupo contábil.
       </p>
     </main>
   );

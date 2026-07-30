@@ -1,4 +1,4 @@
-import { expandirComDescendentes } from "./contas.js";
+import { contasEfetivas } from "./contas.js";
 
 // ============================================================================
 // REALIZADO
@@ -30,9 +30,9 @@ function valor({ debito, credito }, tipo) {
 }
 
 export function somarRealizado({ indice, catalogo, classificacoes, filiais, mes, tipo, grupo }) {
-  // `grupo` recorta a expansão ao LX_GRUPO_CONTABIL do módulo: marcar um pai não
-  // pode arrastar contas de outro grupo para dentro dele.
-  const codigos = expandirComDescendentes(catalogo, classificacoes, grupo);
+  // A seleção é explícita (cascata na tela), então aqui não há expansão: soma-se
+  // exatamente o que está marcado, recortado pelo grupo contábil do módulo.
+  const codigos = contasEfetivas(catalogo, classificacoes, grupo);
   let total = 0;
   codigos.forEach((codigo) => {
     filiais.forEach((filial) => {

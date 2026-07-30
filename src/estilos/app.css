@@ -1806,38 +1806,42 @@ dialog::backdrop {
   outline-offset: 2px;
 }
 
-/* Herdada: entra na soma por causa de um ancestral marcado. Marcada, mas não
-   editável aqui — quem manda é o pai. */
-.arvore-conta.is-herdada {
-  background: color-mix(in srgb, var(--accent-soft) 55%, transparent);
+/* Parcial: parte da subárvore está marcada. O traço (em vez do check) e a faixa
+   mais fraca distinguem de "tudo marcado". */
+.arvore-conta.is-parcial {
+  background: color-mix(in srgb, var(--accent-soft) 45%, transparent);
+  box-shadow: inset 3px 0 0 color-mix(in srgb, var(--accent) 45%, transparent);
 }
 
-.arvore-conta.is-herdada .arvore-conta__rotulo {
-  cursor: default;
-}
-
-.arvore-conta.is-herdada input:checked + .checkbox-visual {
-  background: var(--accent);
+.arvore-conta.is-parcial .checkbox-visual {
+  background: color-mix(in srgb, var(--accent) 30%, var(--surface));
   border-color: var(--accent);
-  color: #fff;
-  opacity: 0.55;
-}
-
-.arvore-conta__herdada {
-  flex: 0 0 auto;
   color: var(--accent);
-  font-size: 10.5px;
-  font-weight: 600;
-  white-space: nowrap;
-  opacity: 0.85;
 }
 
-.contas-seletor__marcadas {
-  display: block;
-  margin-top: 2px;
-  color: var(--muted);
-  font-size: 10.5px;
-  font-weight: 500;
+.contas-seletor__acoes {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.botao-texto {
+  border: 0;
+  background: transparent;
+  padding: 0;
+  color: var(--accent);
+  font-size: 11.5px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.botao-texto:hover:not(:disabled) {
+  text-decoration: underline;
+}
+
+.botao-texto:disabled {
+  color: var(--disabled-fg);
+  cursor: not-allowed;
 }
 
 .arvore-conta__abaixo {

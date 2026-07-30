@@ -90,37 +90,6 @@ export function ancestrais(catalogo, codigo) {
   }
   return caminho;
 }
-
-// Um grupo não recebe lançamento; o movimento fica nas folhas. Marcar o grupo em
-// um módulo tem que valer pelos descendentes, senão o total daria zero.
-//
-// Com `grupo` informado (LX_GRUPO_CONTABIL do módulo), só os descendentes desse
-// grupo entram na soma — mas a descida continua pelos que não entram, porque um
-// nó DF pode ter filho DV com neto DF. Sem esse recorte, marcar "3.1.2" num
-// módulo de despesa fixa somaria as deduções, que são variáveis.
-//
-// Devolve Set para o caso de grupo e folha marcados ao mesmo tempo: sem isso o
-// valor da folha entraria duas vezes.
-export function expandirComDescendentes(catalogo, codigos, grupo = null) {
-  const resultado = new Set();
-  const visitados = new Set();
-
-  const visitar = (codigo) => {
-    if (visitados.has(codigo)) return;
-    visitados.add(codigo);
-
-    const item = catalogo.porCodigo.get(codigo);
-    // Código que não está no catálogo é mantido: pode ser classificação que saiu
-    // do ERP, e sumir com ela em silêncio esconderia o problema.
-    if (!grupo || !item || item.grupo === grupo) resultado.add(codigo);
-
-    (catalogo.filhos.get(codigo) ?? []).forEach(visitar);
-  };
-
-  (codigos ?? []).forEach(visitar);
-  return resultado;
-}
-
 // Recorta o catálogo para um LX_GRUPO_CONTABIL, mantendo os ancestrais dos nós
 // que casam. Os ancestrais entram como estrutura (`selecionavel: false`): sem
 // eles a lista perde a hierarquia e vira uma parede de códigos; com eles
@@ -142,31 +111,109 @@ export function filtrarPorGrupo(catalogo, grupo) {
 
   // Reconstrói na ordem original do catálogo, para a árvore sair na ordem do
   // plano de contas.
-  const lista = catalogo.lista.filter((item) => manter.has(item.codigo)).map((item) => manter.get(item.codigo));
-  const indexado = indexarContas(lista);
-  return { ...indexado, grupo };
+  const lista = catalogo.lista
+    .filter((item) => manter.has(item.codigo))
+    .map((item) => manter.get(item.codigo));
+  return { ...indexarContas(lista), grupo };
 }
 
-// Ancestral marcado mais próximo — é ele que faz a conta entrar no módulo sem
-// que ela própria esteja marcada. Devolve null quando a conta não é herdada.
-export function ancestralMarcado(catalogo, codigo, marcadas) {
-  const caminho = ancestrais(catalogo, codigo);
-  for (let i = caminho.length - 1; i >= 0; i -= 1) {
-    if (marcadas.has(caminho[i])) return caminho[i];
-  }
-  return null;
-}
+// ============================================================================
+// SELEÇÃO EM CASCATA
+//
+// Marcar um nó marca ele e todos os descendentes selecionáveis, de forma
+// EXPLÍCITA: a visão guarda cada código. Assim o que está marcado na tela é
+// exatamente o que a soma usa, e desmarcar uma conta isolada funciona.
+//
+// O preço é não acompanhar o ERP sozinho: conta nova criada dentro de um grupo já
+// marcado NÃO entra na visão — alguém tem que voltar e marcá-la.
+// ============================================================================
 
-// Quantos descendentes marcados um nó tem. Com a árvore recolhida é o único
-// sinal de que há seleção escondida abaixo.
-export function contarMarcadosAbaixo(catalogo, codigo, marcadas) {
-  let total = 0;
+// Códigos selecionáveis da subárvore, incluindo o próprio nó. A descida continua
+// por nós não selecionáveis (de outro grupo contábil), porque abaixo deles pode
+// haver conta do grupo do módulo.
+export function codigosDaSubarvore(catalogo, codigo) {
+  const codigos = [];
+  const visitados = new Set();
   const visitar = (atual) => {
-    (catalogo.filhos.get(atual) ?? []).forEach((filho) => {
-      if (marcadas.has(filho)) total += 1;
-      visitar(filho);
-    });
+    if (visitados.has(atual)) return;
+    visitados.add(atual);
+    const item = catalogo.porCodigo.get(atual);
+    if (!item || item.selecionavel !== false) codigos.push(atual);
+    (catalogo.filhos.get(atual) ?? []).forEach(visitar);
   };
   visitar(codigo);
-  return total;
+  return codigos;
+}
+
+// Marca o nó e a subárvore dele.
+export function marcarEmCascata(catalogo, marcadas, codigo) {
+  const proximo = new Set(marcadas);
+  codigosDaSubarvore(catalogo, codigo).forEach((item) => proximo.add(item));
+  return proximo;
+}
+
+// Desmarca o nó, a subárvore dele e os ancestrais.
+//
+// Os ancestrais saem porque um pai marcado significa "tudo abaixo está marcado".
+// Mantê-lo depois de desmarcar um filho quebraria essa leitura — e a soma
+// contaria o pai como se a exclusão não existisse.
+export function desmarcarEmCascata(catalogo, marcadas, codigo) {
+  const proximo = new Set(marcadas);
+  codigosDaSubarvore(catalogo, codigo).forEach((item) => proximo.delete(item));
+  ancestrais(catalogo, codigo).forEach((pai) => proximo.delete(pai));
+  return proximo;
+}
+
+// Estado de cada nó em uma passada só: quantos selecionáveis tem na subárvore
+// (incluindo ele) e quantos estão marcados. Calcular por nó custaria O(n²) numa
+// árvore de 680 itens.
+export function resumirSelecao(catalogo, marcadas) {
+  const resumo = new Map();
+
+  const visitar = (codigo) => {
+    if (resumo.has(codigo)) return resumo.get(codigo);
+
+    const item = catalogo.porCodigo.get(codigo);
+    const proprioConta = !item || item.selecionavel !== false;
+    let total = proprioConta ? 1 : 0;
+    let marcados = proprioConta && marcadas.has(codigo) ? 1 : 0;
+
+    const parcial = { total, marcados };
+    // Grava antes de descer para não entrar em laço se o ERP trouxer ciclo.
+    resumo.set(codigo, parcial);
+
+    (catalogo.filhos.get(codigo) ?? []).forEach((filho) => {
+      const doFilho = visitar(filho);
+      total += doFilho.total;
+      marcados += doFilho.marcados;
+    });
+
+    parcial.total = total;
+    parcial.marcados = marcados;
+    return parcial;
+  };
+
+  catalogo.raizes.forEach(visitar);
+  return resumo;
+}
+
+export function estadoDaSelecao(resumo, codigo) {
+  const item = resumo.get(codigo);
+  if (!item || item.marcados === 0) return "vazio";
+  return item.marcados === item.total ? "total" : "parcial";
+}
+
+// Contas que o módulo soma: as marcadas, recortadas pelo grupo contábil.
+//
+// NÃO expande descendentes — a marcação já é explícita. Expandir aqui faria
+// desmarcar uma conta isolada não surtir efeito no total.
+export function contasEfetivas(catalogo, codigos, grupo = null) {
+  const resultado = new Set();
+  (codigos ?? []).forEach((codigo) => {
+    const item = catalogo.porCodigo.get(codigo);
+    // Código fora do catálogo é mantido: pode ser classificação que saiu do ERP,
+    // e sumir com ela em silêncio esconderia o problema.
+    if (!grupo || !item || item.grupo === grupo) resultado.add(codigo);
+  });
+  return resultado;
 }

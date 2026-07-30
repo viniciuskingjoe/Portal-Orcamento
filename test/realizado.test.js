@@ -57,13 +57,23 @@ test("mês sem movimento é zero, não erro", () => {
   assert.equal(somar({ mes: 7 }), 0);
 });
 
-test("classificação sintética soma os descendentes", () => {
-  // 3.1.1.1 não recebe lançamento; o valor está em .01 e .02.
-  assert.equal(somar({ classificacoes: ["3.1.1.1"] }), 1000 + 5150);
+test("soma só o que está marcado, sem expandir descendentes", () => {
+  // A marcação é em cascata na tela: quando o usuário marca "3.1.1.1", as folhas
+  // vão marcadas também. Expandir aqui, além de redundante, faria desmarcar uma
+  // folha isolada não surtir efeito no total.
+  assert.equal(somar({ classificacoes: ["3.1.1.1"] }), 0, "sintética não tem lançamento próprio");
+  assert.equal(somar({ classificacoes: ["3.1.1.1", "3.1.1.1.01", "3.1.1.1.02"] }), 1000 + 5150);
 });
 
-test("pai e filho juntos não contam duas vezes", () => {
-  assert.equal(somar({ classificacoes: ["3.1.1.1", "3.1.1.1.02"] }), 6150);
+test("desmarcar uma folha tira o valor dela do total", () => {
+  // É o ponto do modelo em cascata.
+  const todas = ["3.1.1.1", "3.1.1.1.01", "3.1.1.1.02"];
+  const semBazar = todas.filter((c) => c !== "3.1.1.1.01");
+  assert.equal(somar({ classificacoes: semBazar }), 5150);
+});
+
+test("código repetido na lista não conta duas vezes", () => {
+  assert.equal(somar({ classificacoes: ["3.1.1.1.02", "3.1.1.1.02"] }), 5150);
 });
 
 test("sem classificação selecionada o total é zero", () => {

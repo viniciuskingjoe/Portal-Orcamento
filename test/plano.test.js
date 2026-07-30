@@ -197,10 +197,13 @@ test("módulo só soma contas do seu grupo contábil", () => {
   assert.equal(mes(lista, 1).realizado, 0);
 });
 
-test("marcar o pai não arrasta conta de outro grupo", () => {
-  // 4.1.2.01 é DV e 4.1.2.01.001 também; num módulo DF nada disso entra.
+test("conta de outro grupo salva na visão é descartada na soma", () => {
+  // Defesa contra visão gravada antes de o filtro existir, ou com o grupo da
+  // conta mudado no ERP depois: 4.1.2.01 e 4.1.2.01.001 são DV e não podem entrar
+  // num módulo DF, mesmo estando na lista.
   const visaoDf = definirContasDoModulo(criarVisao("v1", "X"), "despesas-operacionais", [
     "4.1.2.01",
+    "4.1.2.01.001",
   ]);
   const lista = linhas({ visao: visaoDf, moduloId: "despesas-operacionais" });
   assert.equal(mes(lista, 1).realizado, 0);

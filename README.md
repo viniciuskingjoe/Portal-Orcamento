@@ -120,11 +120,15 @@ são `DV`. Por isso o ancestral fora do grupo aparece na árvore como estrutura
 marcar o pai puxaria contas de outro módulo. A soma do realizado também respeita
 o grupo, então marcar um pai nunca arrasta conta de fora.
 
-Marcar um grupo inclui tudo abaixo dele — o lançamento fica nas folhas, e as
-contas herdadas aparecem marcadas com `via <código>`, sem checkbox editável
-(quem manda é o pai). A vantagem é acompanhar o ERP: conta nova criada dentro de
-um grupo marcado entra sozinha na visão. Para escolher conta por conta, desmarque
-o grupo.
+Seleção em cascata: marcar um grupo marca todas as contas abaixo dele, de forma
+explícita — a visão guarda cada código. O grupo aparece meio-marcado quando parte
+da subárvore está fora, e desmarcar uma conta isolada tira o valor dela do total.
+
+O custo é não acompanhar o ERP sozinho: conta nova criada dentro de um grupo já
+marcado NÃO entra na visão, alguém precisa voltar e marcá-la.
+
+A soma NÃO expande descendentes — usa exatamente o que está marcado, recortado
+pelo grupo contábil. Expandir ali faria desmarcar uma conta não surtir efeito.
 
 A hierarquia é pelo prefixo do código, não por `totalizaEm`.
 

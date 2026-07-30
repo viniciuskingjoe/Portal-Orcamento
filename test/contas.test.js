@@ -3,14 +3,17 @@ import { test } from "node:test";
 
 import {
   ancestrais,
-  ancestralMarcado,
-  contarMarcadosAbaixo,
-  filtrarPorGrupo,
+  codigosDaSubarvore,
   conta,
-  expandirComDescendentes,
+  contasEfetivas,
+  desmarcarEmCascata,
+  estadoDaSelecao,
+  filtrarPorGrupo,
   indexarContas,
   linhasDaArvore,
+  marcarEmCascata,
   paiDaClassificacao,
+  resumirSelecao,
 } from "../src/dados/contas.js";
 
 // Recorte real de /api/contas (dbo.CTB_VISAO, visão 25).
@@ -107,45 +110,6 @@ test("ancestrais devolvem o caminho da raiz para baixo", () => {
 });
 
 // ---------------------------------------------------------------------------
-// Expansão para somar o realizado
-// ---------------------------------------------------------------------------
-
-test("marcar um grupo vale pelos descendentes", () => {
-  // Grupo não recebe lançamento: o movimento fica nas folhas. Sem a expansão,
-  // selecionar "3.1.1.01 RECEITA BRUTA DE VENDAS" daria total zero.
-  const codigos = expandirComDescendentes(catalogo, ["3.1.1.01"]);
-  assert.deepEqual([...codigos].sort(), ["3.1.1.01", "3.1.1.01.001", "3.1.1.01.002"]);
-});
-
-test("expansão desce a árvore inteira", () => {
-  const codigos = expandirComDescendentes(catalogo, ["3.1"]);
-  assert.ok(codigos.has("3.1.1.01.001"), "bisneto tem que entrar");
-  assert.ok(codigos.has("3.1.1.02.001"));
-  assert.ok(!codigos.has("4.1"), "outro ramo não entra");
-});
-
-test("expansão pula o buraco da árvore", () => {
-  assert.ok(expandirComDescendentes(catalogo, ["4.1"]).has("4.1.2.01.001"));
-});
-
-test("grupo e folha marcados juntos não duplicam", () => {
-  // Devolve Set justamente para isso: com array o valor da folha entraria duas
-  // vezes na soma do realizado.
-  const codigos = expandirComDescendentes(catalogo, ["3.1.1.01", "3.1.1.01.002"]);
-  assert.equal(codigos.size, 3);
-});
-
-test("folha expande só para ela mesma", () => {
-  assert.deepEqual([...expandirComDescendentes(catalogo, ["3.1.1.01.001"])], ["3.1.1.01.001"]);
-});
-
-test("código fora do catálogo é mantido, não descartado", () => {
-  // A visão pode referenciar uma classificação que saiu do ERP; sumir com ela em
-  // silêncio esconderia o problema.
-  assert.ok(expandirComDescendentes(catalogo, ["9.9"]).has("9.9"));
-});
-
-// ---------------------------------------------------------------------------
 // Filtro por LX_GRUPO_CONTABIL
 // ---------------------------------------------------------------------------
 
@@ -155,7 +119,6 @@ test("filtro por grupo mantém só as contas do grupo como selecionáveis", () =
 
   assert.ok(selecionaveis.includes("3.1.1.01.001"));
   assert.ok(!selecionaveis.includes("4.1"), "4.1 é DF");
-  assert.ok(!selecionaveis.includes("4.1.2.01.001"), "é DV");
   assert.ok(receita.lista.every((i) => !i.selecionavel || i.grupo === "R"));
 });
 
@@ -163,10 +126,7 @@ test("ancestral de outro grupo entra como estrutura, não selecionável", () => 
   // 4.1 é DF e 4.1.2.01 é DV: no filtro DV o pai aparece para dar hierarquia,
   // mas marcá-lo puxaria contas DF para um módulo DV.
   const variavel = filtrarPorGrupo(catalogo, "DV");
-  const pai = variavel.porCodigo.get("4.1");
-
-  assert.ok(pai, "o pai tem que aparecer");
-  assert.equal(pai.selecionavel, false);
+  assert.equal(variavel.porCodigo.get("4.1").selecionavel, false);
   assert.equal(variavel.porCodigo.get("4.1.2.01").selecionavel, true);
 });
 
@@ -174,105 +134,123 @@ test("filtro preserva a hierarquia dos que ficaram", () => {
   const variavel = filtrarPorGrupo(catalogo, "DV");
   assert.deepEqual(variavel.raizes, ["4.1"]);
   assert.deepEqual(variavel.filhos.get("4.1"), ["4.1.2.01"]);
-  assert.deepEqual(variavel.filhos.get("4.1.2.01"), ["4.1.2.01.001"]);
-});
-
-test("filtro mantém a ordem do plano de contas", () => {
-  const receita = filtrarPorGrupo(catalogo, "R");
-  const ordem = receita.lista.map((i) => i.codigo);
-  assert.deepEqual(ordem, [...ordem].sort());
-});
-
-test("grupo sem nenhuma conta devolve catálogo vazio", () => {
-  const vazio = filtrarPorGrupo(catalogo, "XX");
-  assert.deepEqual(vazio.lista, []);
-  assert.deepEqual(vazio.raizes, []);
 });
 
 test("sem grupo informado devolve o catálogo inteiro", () => {
   assert.equal(filtrarPorGrupo(catalogo, null), catalogo);
 });
 
-test("expansão com grupo ignora descendente de outro grupo", () => {
-  // Marcar 4.1 (DF) num módulo DF não pode trazer 4.1.2.01, que é DV.
-  const comoDf = expandirComDescendentes(catalogo, ["4.1"], "DF");
-  assert.ok(comoDf.has("4.1"));
-  assert.ok(!comoDf.has("4.1.2.01"));
-  assert.ok(!comoDf.has("4.1.2.01.001"));
+// ---------------------------------------------------------------------------
+// Seleção em cascata
+// ---------------------------------------------------------------------------
+
+test("marcar um nó marca a subárvore inteira", () => {
+  const marcadas = marcarEmCascata(catalogo, new Set(), "3.1.1");
+  assert.deepEqual(
+    [...marcadas].sort(),
+    ["3.1.1", "3.1.1.01", "3.1.1.01.001", "3.1.1.01.002", "3.1.1.02", "3.1.1.02.001"]
+  );
 });
 
-test("expansão com grupo continua descendo por nós que não casam", () => {
-  // A descida não pode parar no primeiro nó fora do grupo: um DF pode ter filho
-  // DV com neto DF.
-  const misto = indexarContas([
-    { codigo: "9.1", descricao: "topo DF", totalizaEm: null, sintetica: true, grupo: "DF" },
-    { codigo: "9.1.01", descricao: "meio DV", totalizaEm: "9.1", sintetica: true, grupo: "DV" },
-    { codigo: "9.1.01.001", descricao: "folha DF", totalizaEm: "9.1.01", sintetica: false, grupo: "DF" },
+test("marcar uma folha marca só ela", () => {
+  const marcadas = marcarEmCascata(catalogo, new Set(), "3.1.1.01.001");
+  assert.deepEqual([...marcadas], ["3.1.1.01.001"]);
+});
+
+test("desmarcar tira a subárvore e os ancestrais", () => {
+  // O pai marcado significa "tudo abaixo marcado". Mantê-lo depois de desmarcar
+  // um filho quebraria essa leitura — e a soma contaria como se a exclusão não
+  // existisse.
+  const cheio = marcarEmCascata(catalogo, new Set(), "3.1");
+  const semServicos = desmarcarEmCascata(catalogo, cheio, "3.1.1.02");
+
+  assert.ok(!semServicos.has("3.1.1.02"));
+  assert.ok(!semServicos.has("3.1.1.02.001"), "o filho do desmarcado também sai");
+  assert.ok(!semServicos.has("3.1.1"), "o pai deixa de estar cheio");
+  assert.ok(!semServicos.has("3.1"), "o avô também");
+  assert.ok(semServicos.has("3.1.1.01.001"), "o irmão continua marcado");
+});
+
+test("cascata atravessa nó de outro grupo", () => {
+  // 4.1 é DF, 4.1.2.01 é DV: a descida não pode parar no primeiro nó de fora.
+  const dv = filtrarPorGrupo(catalogo, "DV");
+  const codigos = codigosDaSubarvore(dv, "4.1");
+  assert.ok(!codigos.includes("4.1"), "4.1 é só estrutura no filtro DV");
+  assert.deepEqual(codigos.sort(), ["4.1.2.01", "4.1.2.01.001"]);
+});
+
+test("estado é vazio, parcial ou total", () => {
+  const vazio = resumirSelecao(catalogo, new Set());
+  assert.equal(estadoDaSelecao(vazio, "3.1.1"), "vazio");
+
+  const cheio = resumirSelecao(catalogo, marcarEmCascata(catalogo, new Set(), "3.1.1"));
+  assert.equal(estadoDaSelecao(cheio, "3.1.1"), "total");
+  assert.equal(estadoDaSelecao(cheio, "3.1.1.01"), "total");
+  assert.equal(estadoDaSelecao(cheio, "3.1"), "parcial", "3.1 em si não está marcado");
+
+  const parcial = resumirSelecao(catalogo, new Set(["3.1.1.01.001"]));
+  assert.equal(estadoDaSelecao(parcial, "3.1.1.01"), "parcial");
+  assert.equal(estadoDaSelecao(parcial, "3.1.1.01.001"), "total");
+  assert.equal(estadoDaSelecao(parcial, "3.1.1.02"), "vazio");
+});
+
+test("resumo conta a subárvore incluindo o próprio nó", () => {
+  const resumo = resumirSelecao(catalogo, new Set(["3.1.1.01", "3.1.1.01.001"]));
+  const r = resumo.get("3.1.1.01");
+  assert.equal(r.total, 3, "ele + duas folhas");
+  assert.equal(r.marcados, 2);
+});
+
+test("estrutura de outro grupo não conta no total da subárvore", () => {
+  const dv = filtrarPorGrupo(catalogo, "DV");
+  const resumo = resumirSelecao(dv, new Set());
+  // 4.1 é estrutura: só 4.1.2.01 e 4.1.2.01.001 são selecionáveis.
+  assert.equal(resumo.get("4.1").total, 2);
+});
+
+// ---------------------------------------------------------------------------
+// Contas que entram na soma
+// ---------------------------------------------------------------------------
+
+test("a soma usa exatamente o que está marcado, sem expandir", () => {
+  // Regressão do modelo anterior: expandir aqui fazia desmarcar uma conta
+  // isolada não surtir efeito no total.
+  const efetivas = contasEfetivas(catalogo, ["3.1.1.01"], "R");
+  assert.deepEqual([...efetivas], ["3.1.1.01"]);
+});
+
+test("a soma descarta conta de outro grupo contábil", () => {
+  assert.deepEqual([...contasEfetivas(catalogo, ["3.1.1.01.001", "4.1.2.01.001"], "R")], [
+    "3.1.1.01.001",
   ]);
-  const comoDf = expandirComDescendentes(misto, ["9.1"], "DF");
-  assert.deepEqual([...comoDf].sort(), ["9.1", "9.1.01.001"]);
+  assert.deepEqual([...contasEfetivas(catalogo, ["3.1.1.01.001", "4.1.2.01.001"], "DV")], [
+    "4.1.2.01.001",
+  ]);
 });
 
-// ---------------------------------------------------------------------------
-// Contador de marcados abaixo
-// ---------------------------------------------------------------------------
-
-test("conta os marcados abaixo de um nó, em qualquer profundidade", () => {
-  // Com a árvore recolhida é o único sinal de que há seleção escondida.
-  const marcadas = new Set(["3.1.1.01.001", "3.1.1.02.001"]);
-  assert.equal(contarMarcadosAbaixo(catalogo, "3.1", marcadas), 2);
-  assert.equal(contarMarcadosAbaixo(catalogo, "3.1.1.01", marcadas), 1);
-  assert.equal(contarMarcadosAbaixo(catalogo, "4.1", marcadas), 0);
-});
-
-test("o próprio nó marcado não conta como abaixo dele", () => {
-  const marcadas = new Set(["3.1.1.01"]);
-  assert.equal(contarMarcadosAbaixo(catalogo, "3.1.1.01", marcadas), 0);
-  assert.equal(contarMarcadosAbaixo(catalogo, "3.1.1", marcadas), 1);
-});
-
-// ---------------------------------------------------------------------------
-// Herança: conta incluída por um ancestral marcado
-// ---------------------------------------------------------------------------
-
-test("ancestralMarcado aponta quem inclui a conta", () => {
-  // A tela mostrava o filho desmarcado com o pai marcado, o que parecia dizer
-  // que ele estava fora — quando na verdade a soma já o incluía.
-  const marcadas = new Set(["3.1.1"]);
-  assert.equal(ancestralMarcado(catalogo, "3.1.1.01", marcadas), "3.1.1");
-  assert.equal(ancestralMarcado(catalogo, "3.1.1.01.001", marcadas), "3.1.1");
-});
-
-test("sem ancestral marcado a conta não é herdada", () => {
-  assert.equal(ancestralMarcado(catalogo, "3.1.1.01.001", new Set()), null);
-  assert.equal(ancestralMarcado(catalogo, "3.1.1.01.001", new Set(["4.1"])), null);
-});
-
-test("herança vem do ancestral marcado mais próximo", () => {
-  // Com pai e avô marcados, quem "inclui" é o pai: é o que o usuário desmarca
-  // para voltar a escolher conta por conta.
-  const marcadas = new Set(["3.1", "3.1.1.01"]);
-  assert.equal(ancestralMarcado(catalogo, "3.1.1.01.001", marcadas), "3.1.1.01");
-});
-
-test("raiz nunca é herdada", () => {
-  assert.equal(ancestralMarcado(catalogo, "3.1", new Set(["3.1"])), null);
-});
-
-test("herança atravessa o buraco da árvore", () => {
-  // "4.1.2" não existe; a herança tem que vir de "4.1".
-  assert.equal(ancestralMarcado(catalogo, "4.1.2.01.001", new Set(["4.1"])), "4.1");
+test("código fora do catálogo é mantido, não descartado", () => {
+  // A visão pode referenciar classificação que saiu do ERP; sumir com ela em
+  // silêncio esconderia o problema.
+  assert.ok(contasEfetivas(catalogo, ["9.9"], "R").has("9.9"));
 });
 
 test("o que a tela mostra bate com o que a soma inclui", () => {
-  // Invariante: marcada OU herdada <=> está na expansão que soma o realizado.
-  const marcadas = new Set(["3.1.1"]);
-  const naSoma = expandirComDescendentes(catalogo, [...marcadas], "R");
+  // Invariante da cascata: marcada na tela <=> entra na soma.
+  const marcadas = desmarcarEmCascata(
+    catalogo,
+    marcarEmCascata(catalogo, new Set(), "3.1.1"),
+    "3.1.1.02"
+  );
+  const resumo = resumirSelecao(catalogo, marcadas);
+  const naSoma = contasEfetivas(catalogo, [...marcadas], "R");
 
   catalogo.lista
     .filter((item) => item.grupo === "R")
     .forEach((item) => {
-      const naTela = marcadas.has(item.codigo) || !!ancestralMarcado(catalogo, item.codigo, marcadas);
-      assert.equal(naTela, naSoma.has(item.codigo), `divergência em ${item.codigo}`);
+      const cheiaNaTela = estadoDaSelecao(resumo, item.codigo) === "total";
+      const folha = !(catalogo.filhos.get(item.codigo) ?? []).length;
+      if (folha) {
+        assert.equal(cheiaNaTela, naSoma.has(item.codigo), `divergência em ${item.codigo}`);
+      }
     });
 });

@@ -76,6 +76,7 @@ const DESENHOS = {
   ),
   close: <path d="m6 6 12 12M18 6 6 18" />,
   check: <path d="m5 12 4 4L19 6" />,
+  minus: <path d="M6 12h12" />,
   info: (
     <>
       <circle cx="12" cy="12" r="9" />
