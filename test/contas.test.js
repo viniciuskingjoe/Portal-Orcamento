@@ -3,6 +3,7 @@ import { test } from "node:test";
 
 import {
   ancestrais,
+  ancestralMarcado,
   contarMarcadosAbaixo,
   filtrarPorGrupo,
   conta,
@@ -228,4 +229,50 @@ test("o próprio nó marcado não conta como abaixo dele", () => {
   const marcadas = new Set(["3.1.1.01"]);
   assert.equal(contarMarcadosAbaixo(catalogo, "3.1.1.01", marcadas), 0);
   assert.equal(contarMarcadosAbaixo(catalogo, "3.1.1", marcadas), 1);
+});
+
+// ---------------------------------------------------------------------------
+// Herança: conta incluída por um ancestral marcado
+// ---------------------------------------------------------------------------
+
+test("ancestralMarcado aponta quem inclui a conta", () => {
+  // A tela mostrava o filho desmarcado com o pai marcado, o que parecia dizer
+  // que ele estava fora — quando na verdade a soma já o incluía.
+  const marcadas = new Set(["3.1.1"]);
+  assert.equal(ancestralMarcado(catalogo, "3.1.1.01", marcadas), "3.1.1");
+  assert.equal(ancestralMarcado(catalogo, "3.1.1.01.001", marcadas), "3.1.1");
+});
+
+test("sem ancestral marcado a conta não é herdada", () => {
+  assert.equal(ancestralMarcado(catalogo, "3.1.1.01.001", new Set()), null);
+  assert.equal(ancestralMarcado(catalogo, "3.1.1.01.001", new Set(["4.1"])), null);
+});
+
+test("herança vem do ancestral marcado mais próximo", () => {
+  // Com pai e avô marcados, quem "inclui" é o pai: é o que o usuário desmarca
+  // para voltar a escolher conta por conta.
+  const marcadas = new Set(["3.1", "3.1.1.01"]);
+  assert.equal(ancestralMarcado(catalogo, "3.1.1.01.001", marcadas), "3.1.1.01");
+});
+
+test("raiz nunca é herdada", () => {
+  assert.equal(ancestralMarcado(catalogo, "3.1", new Set(["3.1"])), null);
+});
+
+test("herança atravessa o buraco da árvore", () => {
+  // "4.1.2" não existe; a herança tem que vir de "4.1".
+  assert.equal(ancestralMarcado(catalogo, "4.1.2.01.001", new Set(["4.1"])), "4.1");
+});
+
+test("o que a tela mostra bate com o que a soma inclui", () => {
+  // Invariante: marcada OU herdada <=> está na expansão que soma o realizado.
+  const marcadas = new Set(["3.1.1"]);
+  const naSoma = expandirComDescendentes(catalogo, [...marcadas], "R");
+
+  catalogo.lista
+    .filter((item) => item.grupo === "R")
+    .forEach((item) => {
+      const naTela = marcadas.has(item.codigo) || !!ancestralMarcado(catalogo, item.codigo, marcadas);
+      assert.equal(naTela, naSoma.has(item.codigo), `divergência em ${item.codigo}`);
+    });
 });

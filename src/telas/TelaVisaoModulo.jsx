@@ -5,19 +5,23 @@ import Icone from "../componentes/Icone.jsx";
 import { AvisoErro, Carregando } from "../componentes/Estados.jsx";
 import {
   ancestrais,
+  ancestralMarcado,
   contarMarcadosAbaixo,
+  expandirComDescendentes,
   filtrarPorGrupo,
   linhasDaArvore,
 } from "../dados/contas.js";
 import { GRUPOS } from "../dados/modulos.js";
 import { contasDoModulo } from "../dados/visao.js";
 
-function Linha({ item, marcado, marcadosAbaixo, onAlternarSelecao, onAlternarNo }) {
+function Linha({ item, marcado, herdadoDe, marcadosAbaixo, onAlternarSelecao, onAlternarNo }) {
+  const incluida = marcado || !!herdadoDe;
   const classes = [
     "arvore-conta",
     item.sintetica ? "is-grupo" : "is-folha",
     item.nivel === 0 ? "is-raiz" : "",
     marcado ? "is-marcada" : "",
+    herdadoDe ? "is-herdada" : "",
     item.selecionavel === false ? "is-estrutura" : "",
   ]
     .filter(Boolean)
@@ -49,8 +53,22 @@ function Linha({ item, marcado, marcadosAbaixo, onAlternarSelecao, onAlternarNo 
           <span>{item.descricao}</span>
         </span>
       ) : (
-        <label className="arvore-conta__rotulo">
-          <input type="checkbox" checked={marcado} onChange={() => onAlternarSelecao(item.codigo)} />
+        <label
+          className="arvore-conta__rotulo"
+          title={
+            herdadoDe
+              ? `Já incluída por ${herdadoDe}. Desmarque ${herdadoDe} para escolher conta por conta.`
+              : undefined
+          }
+        >
+          {/* Herdada aparece marcada porque ENTRA na soma. Desabilitada porque quem
+              manda é o pai: desmarcar aqui não teria efeito nenhum. */}
+          <input
+            type="checkbox"
+            checked={incluida}
+            disabled={!!herdadoDe}
+            onChange={() => onAlternarSelecao(item.codigo)}
+          />
           <span className="checkbox-visual">
             <Icone nome="check" tamanho={13} />
           </span>
@@ -59,9 +77,11 @@ function Linha({ item, marcado, marcadosAbaixo, onAlternarSelecao, onAlternarNo 
         </label>
       )}
 
+      {herdadoDe ? <span className="arvore-conta__herdada">via {herdadoDe}</span> : null}
+
       {/* Com o nó recolhido, é o único sinal de que há seleção escondida abaixo. */}
-      {!item.aberto && marcadosAbaixo > 0 ? (
-        <span className="arvore-conta__abaixo" title={`${marcadosAbaixo} selecionadas abaixo`}>
+      {!incluida && !item.aberto && marcadosAbaixo > 0 ? (
+        <span className="arvore-conta__abaixo" title={`${marcadosAbaixo} marcadas abaixo`}>
           {marcadosAbaixo}
         </span>
       ) : null}
@@ -135,6 +155,13 @@ export default function TelaVisaoModulo({
   const grupo = GRUPOS[modulo.grupo];
   const selecionaveis = catalogo.lista.filter((item) => item.selecionavel !== false).length;
 
+  // Quantas contas o módulo soma de fato: as marcadas mais as herdadas. Só o
+  // número de marcadas engana — marcar um grupo inclui tudo abaixo dele.
+  const noModulo = useMemo(
+    () => expandirComDescendentes(catalogo, selecionadas, modulo.grupo).size,
+    [catalogo, selecionadas, modulo.grupo]
+  );
+
   return (
     <main className="conteudo">
       <Cabecalho
@@ -186,7 +213,13 @@ export default function TelaVisaoModulo({
               </small>
             </span>
             <small>
-              {selecionadas.length} {selecionadas.length === 1 ? "selecionada" : "selecionadas"}
+              {noModulo} {noModulo === 1 ? "conta no módulo" : "contas no módulo"}
+              {selecionadas.length !== noModulo ? (
+                <span className="contas-seletor__marcadas">
+                  {selecionadas.length} {selecionadas.length === 1 ? "marcada" : "marcadas"} +{" "}
+                  {noModulo - selecionadas.length} herdadas
+                </span>
+              ) : null}
             </small>
           </div>
           <div className="contas-seletor__lista contas-seletor__lista--alta">
@@ -196,6 +229,11 @@ export default function TelaVisaoModulo({
                   key={item.codigo}
                   item={item}
                   marcado={marcadas.has(item.codigo)}
+                  herdadoDe={
+                    marcadas.has(item.codigo)
+                      ? null
+                      : ancestralMarcado(catalogo, item.codigo, marcadas)
+                  }
                   marcadosAbaixo={
                     item.temFilhos ? contarMarcadosAbaixo(catalogo, item.codigo, marcadas) : 0
                   }
@@ -216,9 +254,10 @@ export default function TelaVisaoModulo({
 
       <p className="modulo-aviso">
         <Icone nome="info" tamanho={16} />
-        Salvo na hora. Marcar um grupo vale pelas contas abaixo dele, dentro deste mesmo grupo
-        contábil. Linhas em cinza são só estrutura — pertencem a outro grupo e não podem ser
-        marcadas aqui.
+        Salvo na hora. Marcar um grupo inclui tudo abaixo dele — as contas aparecem marcadas com
+        <strong> via {"<código>"}</strong> e acompanham o ERP: conta nova criada nesse grupo entra
+        sozinha. Para escolher conta por conta, desmarque o grupo. Linhas em cinza são só estrutura,
+        de outro grupo contábil.
       </p>
     </main>
   );

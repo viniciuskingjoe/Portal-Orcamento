@@ -147,6 +147,16 @@ export function filtrarPorGrupo(catalogo, grupo) {
   return { ...indexado, grupo };
 }
 
+// Ancestral marcado mais próximo — é ele que faz a conta entrar no módulo sem
+// que ela própria esteja marcada. Devolve null quando a conta não é herdada.
+export function ancestralMarcado(catalogo, codigo, marcadas) {
+  const caminho = ancestrais(catalogo, codigo);
+  for (let i = caminho.length - 1; i >= 0; i -= 1) {
+    if (marcadas.has(caminho[i])) return caminho[i];
+  }
+  return null;
+}
+
 // Quantos descendentes marcados um nó tem. Com a árvore recolhida é o único
 // sinal de que há seleção escondida abaixo.
 export function contarMarcadosAbaixo(catalogo, codigo, marcadas) {

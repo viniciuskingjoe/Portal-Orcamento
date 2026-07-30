@@ -1806,6 +1806,40 @@ dialog::backdrop {
   outline-offset: 2px;
 }
 
+/* Herdada: entra na soma por causa de um ancestral marcado. Marcada, mas não
+   editável aqui — quem manda é o pai. */
+.arvore-conta.is-herdada {
+  background: color-mix(in srgb, var(--accent-soft) 55%, transparent);
+}
+
+.arvore-conta.is-herdada .arvore-conta__rotulo {
+  cursor: default;
+}
+
+.arvore-conta.is-herdada input:checked + .checkbox-visual {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+  opacity: 0.55;
+}
+
+.arvore-conta__herdada {
+  flex: 0 0 auto;
+  color: var(--accent);
+  font-size: 10.5px;
+  font-weight: 600;
+  white-space: nowrap;
+  opacity: 0.85;
+}
+
+.contas-seletor__marcadas {
+  display: block;
+  margin-top: 2px;
+  color: var(--muted);
+  font-size: 10.5px;
+  font-weight: 500;
+}
+
 .arvore-conta__abaixo {
   flex: 0 0 auto;
   min-width: 20px;

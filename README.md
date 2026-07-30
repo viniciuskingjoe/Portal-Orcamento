@@ -120,8 +120,13 @@ são `DV`. Por isso o ancestral fora do grupo aparece na árvore como estrutura
 marcar o pai puxaria contas de outro módulo. A soma do realizado também respeita
 o grupo, então marcar um pai nunca arrasta conta de fora.
 
-Marcar um grupo vale pelos descendentes: o lançamento fica nas folhas. A
-hierarquia é pelo prefixo do código, não por `totalizaEm`.
+Marcar um grupo inclui tudo abaixo dele — o lançamento fica nas folhas, e as
+contas herdadas aparecem marcadas com `via <código>`, sem checkbox editável
+(quem manda é o pai). A vantagem é acompanhar o ERP: conta nova criada dentro de
+um grupo marcado entra sozinha na visão. Para escolher conta por conta, desmarque
+o grupo.
+
+A hierarquia é pelo prefixo do código, não por `totalizaEm`.
 
 Receita é lida como crédito − débito; despesa inverte. As duas voltam positivas,
 para a variação contra o planejado significar a mesma coisa nos dois casos.
