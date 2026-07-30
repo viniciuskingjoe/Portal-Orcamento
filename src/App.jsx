@@ -15,7 +15,7 @@ import TelaVisao from "./telas/TelaVisao.jsx";
 import TelaVisaoModulo from "./telas/TelaVisaoModulo.jsx";
 import TelaOrcamento, { TODAS_AS_CONTAS } from "./telas/TelaOrcamento.jsx";
 
-import { EMPRESA } from "./dados/seeds.js";
+import { EMPRESA, MESES } from "./dados/seeds.js";
 import { ehModulo, modulo as definicaoDoModulo } from "./dados/modulos.js";
 import { chavePlanejado, criarLinhasOrcamento, criarPlano, gerarId } from "./dados/plano.js";
 import {
@@ -155,6 +155,7 @@ export default function PlanejamentoOrcamentario() {
     if (!planoAtivo || !moduloDaTela) return [];
     return criarLinhasOrcamento({
       plano: planoAtivo,
+      visao: visaoDoPlano,
       moduloId: moduloDaTela.id,
       filiais: filiaisDoFiltro,
       centroId: filtros.centro,
@@ -370,32 +371,67 @@ export default function PlanejamentoOrcamentario() {
   // Edição de células
   // --------------------------------------------------------------------------
 
+  // Célula do filtro em tela. Só existe quando há uma filial e uma conta
+  // escolhidas — em "Total" o valor é soma de várias chaves e não há onde gravar.
+  function chaveDoFiltro(mes) {
+    return chavePlanejado(moduloDaTela.id, filtros.filial, filtros.centro, filtros.conta, mes);
+  }
+
+  function podeGravar() {
+    return (
+      planoAtivo &&
+      moduloDaTela &&
+      filtros.filial !== "total" &&
+      filtros.conta !== TODAS_AS_CONTAS
+    );
+  }
+
+  function gravarPlanejado(alteracoes) {
+    setPlanos((atuais) =>
+      atuais.map((plano) =>
+        plano.id === planoAtivoId
+          ? { ...plano, planejado: { ...plano.planejado, ...alteracoes } }
+          : plano
+      )
+    );
+  }
+
   const edicao = {
     editingCell,
+    // `valor` em texto entra cru: é o dígito que abriu a edição, e formatá-lo
+    // como número o transformaria em outra coisa.
     onIniciarEdicao: (id, valor, mes) =>
-      setEditingCell({ id, mes, valor: formatarParaEdicao(valor) }),
+      setEditingCell({
+        id,
+        mes,
+        valor: typeof valor === "string" ? valor : formatarParaEdicao(valor),
+      }),
     onAlterarEdicao: (valor) => setEditingCell((atual) => (atual ? { ...atual, valor } : atual)),
     onCancelarEdicao: () => setEditingCell(null),
-    onConfirmarEdicao: () => {
-      if (!editingCell || !planoAtivo || !moduloDaTela) return;
-      if (filtros.filial === "total" || filtros.conta === TODAS_AS_CONTAS) return;
+
+    onConfirmarEdicao: ({ id, replicar } = {}) => {
+      if (!editingCell) return;
+      // Blur de uma célula que a navegação já deixou para trás: quem está em
+      // edição agora é outra, e gravar aqui sobrescreveria a célula errada.
+      if (id && id !== editingCell.id) return;
+      if (!podeGravar()) return;
 
       const valor = Math.max(0, parseNumeroPtBr(editingCell.valor));
-      const chave = chavePlanejado(
-        moduloDaTela.id,
-        filtros.filial,
-        filtros.centro,
-        filtros.conta,
-        editingCell.mes
-      );
-      setPlanos((atuais) =>
-        atuais.map((plano) =>
-          plano.id === planoAtivoId
-            ? { ...plano, planejado: { ...plano.planejado, [chave]: valor } }
-            : plano
-        )
-      );
+      const meses = replicar ? MESES.filter((mes) => mes >= editingCell.mes) : [editingCell.mes];
+
+      const alteracoes = {};
+      meses.forEach((mes) => {
+        alteracoes[chaveDoFiltro(mes)] = valor;
+      });
+      gravarPlanejado(alteracoes);
       setEditingCell(null);
+    },
+
+    // Ctrl+D: copia o mês de cima, como no Excel.
+    onCopiarDeCima: (mes) => {
+      if (!podeGravar() || mes <= 1) return;
+      const acima = planoAtivo.planejado[chaveDoFiltro(mes - 1)] ?? 0;
+      gravarPlanejado({ [chaveDoFiltro(mes)]: acima });
     },
   };
 

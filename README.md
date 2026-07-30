@@ -67,6 +67,34 @@ Os 8 módulos são fixos em [src/dados/modulos.js](src/dados/modulos.js) e cada 
 só aceita contas do seu `LX_GRUPO_CONTABIL`: `R` nas receitas, `DV` em deduções,
 custos e despesas variáveis, `DF` nas despesas fixas.
 
+### Módulos em percentual
+
+**Deduções de vendas** e **Custos variáveis** têm `percentual: true`: não se
+digita o valor, digita-se o **percentual sobre a receita de vendas planejada** do
+mesmo mês e da mesma filial. A tabela mostra as duas colunas lado a lado —
+`Planejado %` (editável) e `Planejado R$` (calculado).
+
+O que fica gravado é o percentual. É isso que faz o plano acompanhar a receita:
+mudou a previsão de faturamento, a dedução recalcula sozinha.
+
+A conversão é **por filial**, nunca sobre a base consolidada — cada filial tem a
+sua receita, e somar os percentuais de várias para aplicar numa base única daria
+outro número justamente na tela "Total". Nas linhas de Total o percentual exibido
+é `valor ÷ base`, não a soma dos meses: somar taxas mensais não dá taxa de nada.
+
+### Digitação
+
+A tabela do plano se comporta como planilha:
+
+| Tecla | Efeito |
+|---|---|
+| clique, `Enter`, `F2` ou um dígito | abre a edição da célula |
+| `Enter` / `Tab` | grava e desce (com `Shift`, sobe) |
+| `↑` `↓` | gravam e movem |
+| `Ctrl+Enter` | grava o valor digitado deste mês **até dezembro** |
+| `Ctrl+D` | copia o valor do mês de cima |
+| `Esc` | cancela |
+
 ## Estrutura
 
 ```

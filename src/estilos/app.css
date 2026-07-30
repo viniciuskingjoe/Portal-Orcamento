@@ -1434,6 +1434,21 @@ button {
   box-shadow: inset 0 0 0 1px var(--accent);
 }
 
+/* A célula é focável por teclado (Enter abre, Ctrl+D copia de cima), então o
+   foco precisa ser tão visível quanto o hover — senão navegar por Tab deixa o
+   usuário sem saber onde está. */
+.celula-editavel:focus-visible {
+  outline: none;
+  background: var(--accent-soft) !important;
+  box-shadow: inset 0 0 0 2px var(--accent);
+}
+
+/* Coluna calculada (percentual × receita planejada): não recebe digitação, e o
+   tom mais fraco evita que alguém tente clicar nela. */
+.celula-calculada {
+  color: var(--text-soft);
+}
+
 .input-inline {
   width: 100%;
   min-width: 90px;

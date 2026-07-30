@@ -276,3 +276,106 @@ test("purgar filial sem edições devolve o mesmo objeto", () => {
   const planos = [plano()];
   assert.equal(purgarFilialDosPlanos(planos, "000001")[0], planos[0]);
 });
+
+// ---------------------------------------------------------------------------
+// Módulo percentual
+//
+// Em Deduções de vendas e Custos variáveis o que se digita é o percentual sobre
+// a receita de vendas planejada. O que fica gravado é o percentual; o valor em
+// reais é derivado.
+// ---------------------------------------------------------------------------
+
+const PERCENTUAL = "deducoes-vendas";
+const CONTA_DEDUCAO = "3.1.2.01.001";
+
+// Receita planejada: 1.000 na 000001 e 4.000 na 000025, tudo em janeiro.
+function visaoComReceita() {
+  let visao = definirContasDaFilial(criarVisao("v1", "X", "25"), MODULO, "000001", [CONTA]);
+  visao = definirContasDaFilial(visao, MODULO, "000025", [CONTA]);
+  return definirContasDaFilial(visao, PERCENTUAL, "000001", [CONTA_DEDUCAO]);
+}
+
+const RECEITA = {
+  [chavePlanejado(MODULO, "000001", SEM_CENTRO, CONTA, 1)]: 1000,
+  [chavePlanejado(MODULO, "000025", SEM_CENTRO, CONTA, 1)]: 4000,
+};
+
+const linhasPercentuais = (planejado, filiais = FILIAIS) =>
+  criarLinhasOrcamento({
+    plano: plano({ ...RECEITA, ...planejado }),
+    visao: visaoComReceita(),
+    moduloId: PERCENTUAL,
+    filiais,
+    centroId: SEM_CENTRO,
+    contas: [CONTA_DEDUCAO],
+    realizado: indexarRealizado([]),
+    realizadoAnterior: indexarRealizado([]),
+  });
+
+test("módulo percentual guarda o percentual e deriva o valor em reais", () => {
+  const lista = linhasPercentuais({
+    [chavePlanejado(PERCENTUAL, "000001", SEM_CENTRO, CONTA_DEDUCAO, 1)]: 10,
+  });
+
+  const janeiro = mes(lista, 1);
+  assert.equal(janeiro.planejadoPercentual, 10);
+  assert.equal(janeiro.planejado, 100); // 10% de 1.000
+  assert.equal(janeiro.base, 5000); // receita das duas filiais
+});
+
+test("o percentual de cada filial incide sobre a receita daquela filial", () => {
+  // Mesmos 10% nas duas filiais, bases diferentes: 10% de 1.000 + 10% de 4.000.
+  // Somar os percentuais (20%) e aplicar na base total (5.000) daria 1.000.
+  const lista = linhasPercentuais({
+    [chavePlanejado(PERCENTUAL, "000001", SEM_CENTRO, CONTA_DEDUCAO, 1)]: 10,
+    [chavePlanejado(PERCENTUAL, "000025", SEM_CENTRO, CONTA_DEDUCAO, 1)]: 10,
+  });
+
+  assert.equal(mes(lista, 1).planejado, 500);
+  assert.equal(mes(lista, 1).planejadoPercentual, 20);
+});
+
+test("percentual do total é valor ÷ base, não a soma dos meses", () => {
+  const lista = linhasPercentuais({
+    [chavePlanejado(PERCENTUAL, "000001", SEM_CENTRO, CONTA_DEDUCAO, 1)]: 10,
+  });
+
+  const total = totalDe(lista);
+  assert.equal(total.planejado, 100);
+  assert.equal(total.base, 5000);
+  assert.equal(total.planejadoPercentual, 2); // 100 / 5.000, não os 10 digitados
+  assert.equal(mediaDe(lista).planejadoPercentual, null);
+});
+
+test("sem receita planejada o percentual não vira valor", () => {
+  const lista = criarLinhasOrcamento({
+    plano: plano({ [chavePlanejado(PERCENTUAL, "000001", SEM_CENTRO, CONTA_DEDUCAO, 1)]: 10 }),
+    visao: visaoComReceita(),
+    moduloId: PERCENTUAL,
+    filiais: FILIAIS,
+    contas: [CONTA_DEDUCAO],
+    realizado: indexarRealizado([]),
+    realizadoAnterior: indexarRealizado([]),
+  });
+
+  assert.equal(mes(lista, 1).planejadoPercentual, 10);
+  assert.equal(mes(lista, 1).planejado, 0);
+  assert.equal(totalDe(lista).base, 0);
+});
+
+test("módulo em reais não ganha coluna de percentual", () => {
+  assert.equal(mes(linhas(), 1).planejadoPercentual, null);
+});
+
+test("o total do ano de um módulo percentual sai em reais", () => {
+  const total = totalPlanejadoNoAno({
+    plano: plano({
+      ...RECEITA,
+      [chavePlanejado(PERCENTUAL, "000001", SEM_CENTRO, CONTA_DEDUCAO, 1)]: 10,
+    }),
+    visao: visaoComReceita(),
+    moduloId: PERCENTUAL,
+    filiais: FILIAIS,
+  });
+  assert.equal(total, 100);
+});

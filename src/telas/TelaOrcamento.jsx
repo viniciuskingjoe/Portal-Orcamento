@@ -27,6 +27,13 @@ export default function TelaOrcamento({
 }) {
   const usaCentro = usaCentroDeCusto(visao, modulo.id);
   const grupo = GRUPOS[modulo.grupo];
+  const percentual = modulo.percentual === true;
+
+  // Percentual sobre receita zero não vira valor nenhum. Sem dizer isso, a
+  // coluna em reais fica em 0,00 com o percentual digitado ao lado, e parece
+  // que a digitação não pegou.
+  const totalDaTabela = linhas.find((linha) => linha.id === "total");
+  const semBase = percentual && !totalDaTabela?.base;
 
   // Editar só faz sentido em uma célula única: uma filial e uma conta. Em
   // "Total" o valor é soma de várias chaves e não há onde gravar.
@@ -44,7 +51,7 @@ export default function TelaOrcamento({
         ? "Este módulo usa centro de custo: escolha um para lançar."
         : filtros.conta === TODAS_AS_CONTAS
           ? "Escolha uma conta na lista à esquerda para lançar o planejado."
-          : "Edição liberada: clique em um valor da coluna Planejado.";
+          : `Digite na coluna Planejado${percentual ? " %" : ""} — Enter grava e desce · Ctrl+Enter repete até dezembro · Ctrl+D copia o mês de cima · Esc cancela.`;
 
   return (
     <main className="conteudo conteudo--orcamento">
@@ -167,8 +174,21 @@ export default function TelaOrcamento({
         <section className="orcamento-dados">
           <DicaEdicao pronta={podeEditar}>{motivo}</DicaEdicao>
 
+          {semBase ? (
+            <p className="modulo-aviso modulo-aviso--atencao">
+              <Icone nome="info" tamanho={16} />
+              <span>
+                Este módulo é lançado em percentual sobre a receita de vendas planejada, e não há
+                receita planejada para {filtros.filial === "total" ? "estas filiais" : "esta filial"}{" "}
+                em {plano.ano}. Enquanto isso, a coluna em reais fica zerada. Lance Receita de vendas
+                primeiro.
+              </span>
+            </p>
+          ) : null}
+
           <TabelaOrcamento
             linhas={linhas}
+            percentual={percentual}
             podeEditar={podeEditar}
             prefixoCelula={`${modulo.id}|${filtros.filial}|${filtros.centro}|${filtros.conta}`}
             {...edicao}
