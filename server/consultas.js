@@ -37,14 +37,15 @@ function objeto(variavel, padrao = null) {
   return nome;
 }
 
-// Tipos de lançamento que não são movimento do período e precisam ficar de fora
-// do realizado.
+// Tipos de lançamento que não são movimento do período e ficam de fora do
+// realizado. Mesma lista que o Scoreplan usa.
 //
 // ELD = encerramento do exercício. Em dezembro o Linx zera as contas de
 // resultado com um débito do tamanho do ano inteiro (R$ 115 mi em 2025). Sem
 // excluir, dezembro fica com sinal invertido e o total do ano some.
+// LAC/LAD/ELC = lançamentos de apuração e encerramento, mesma natureza.
 function tiposExcluidos() {
-  const bruto = process.env.DB_TIPOS_LANCAMENTO_EXCLUIDOS ?? "ELD";
+  const bruto = process.env.DB_TIPOS_LANCAMENTO_EXCLUIDOS ?? "ELD,LAC,ELC,LAD";
   return bruto
     .split(",")
     .map((item) => item.trim().toUpperCase())
@@ -151,20 +152,32 @@ export async function listarCentrosDeCusto() {
 
 // Realizado mensal por classificação, filial e centro de custo.
 //
-// O de/para conta contábil -> classificação vive em dbo.CTB_PLANO_VISAO, com
-// OPERADOR (+/-) e PORCENTAGEM de rateio. O join é feito aqui em vez de usar
-// dbo.W_CTB_LANCAMENTO_CLASSIFICACAO porque aquela view arrasta 48 colunas que
-// não são usadas: mesmo resultado, 0,9 s contra 17,5 s.
+// O de/para conta contábil -> classificação vive em dbo.CTB_PLANO_VISAO. O join é
+// feito aqui em vez de usar dbo.W_CTB_LANCAMENTO_CLASSIFICACAO porque aquela view
+// arrasta 48 colunas que não são usadas: mesmo resultado, 0,9 s contra 17,5 s.
+//
+// RATEIO DE CENTRO DE CUSTO
+// `i.RATEIO_CENTRO_CUSTO` NÃO é um centro: é o código de um rateio, que
+// dbo.CTB_CENTRO_CUSTO_RATEIO_ITEM abre em um ou mais centros com percentual
+// (o R00001 abre em 36). Na base, 47 dos 89 rateios abrem em mais de um centro.
+// Sem essa expansão o "centro" seria o código do rateio e nunca casaria com um
+// centro de verdade. Os percentuais somam 100% em todos os 89, então o total não
+// muda — o que muda é o detalhe por centro.
+//
+// LEFT JOIN, não INNER: rateio sem item cadastrado mantém o lançamento com o
+// próprio código como centro e 100%. Com INNER, esse lançamento sumiria em
+// silêncio do realizado.
 //
 // Filtro por range de data, não YEAR(DATA_LANCAMENTO) — com a função em volta da
 // coluna o SQL Server não usa índice e a consulta estoura o timeout.
 //
-// Débito e crédito voltam separados, já com sinal e rateio aplicados. Quem
-// consome decide a leitura: receita usa crédito − débito, despesa inverte.
+// Débito e crédito voltam separados. Quem consome decide a leitura: receita usa
+// crédito − débito, despesa inverte.
 export async function listarRealizado({ ano, filialId, visao } = {}) {
   const cabecalho = objeto("DB_TABELA_LANCAMENTO", "dbo.CTB_LANCAMENTO");
   const itens = objeto("DB_TABELA_LANCAMENTO_ITEM", "dbo.CTB_LANCAMENTO_ITEM");
   const mapa = objeto("DB_TABELA_PLANO_VISAO", "dbo.CTB_PLANO_VISAO");
+  const rateio = objeto("DB_TABELA_RATEIO_ITEM", "dbo.CTB_CENTRO_CUSTO_RATEIO_ITEM");
 
   const excluidos = tiposExcluidos();
   const parametros = {
@@ -183,19 +196,23 @@ export async function listarRealizado({ ano, filialId, visao } = {}) {
         .join(", ")})`
     : "";
 
-  const sinal = (coluna) =>
-    `SUM(ISNULL(${coluna}, 0) * ISNULL(pv.PORCENTAGEM, 100) / 100.0
+  // PORCENTAGEM/OPERADOR de CTB_PLANO_VISAO seguem aplicados: na visão 25 são
+  // sempre + e 100, mas outra visão contábil pode usar rateio ou sinal invertido.
+  const parcela = (coluna) =>
+    `SUM(ISNULL(${coluna}, 0)
+        * ISNULL(pv.PORCENTAGEM, 100) / 100.0
+        * ISNULL(cri.PORCENTAGEM, 100) / 100.0
         * CASE WHEN RTRIM(pv.OPERADOR) = '-' THEN -1 ELSE 1 END)`;
 
   return query(
     `
     SELECT
-      RTRIM(pv.CLASSIFICACAO)                        AS classificacao,
-      RTRIM(l.COD_FILIAL)                            AS filial,
-      RTRIM(ISNULL(i.RATEIO_CENTRO_CUSTO, ''))       AS centro,
-      MONTH(l.DATA_LANCAMENTO)                       AS mes,
-      ${sinal("i.DEBITO")}                           AS debito,
-      ${sinal("i.CREDITO")}                          AS credito
+      RTRIM(pv.CLASSIFICACAO) AS classificacao,
+      RTRIM(l.COD_FILIAL)     AS filial,
+      RTRIM(COALESCE(cri.CENTRO_CUSTO, i.RATEIO_CENTRO_CUSTO, '')) AS centro,
+      MONTH(l.DATA_LANCAMENTO) AS mes,
+      ${parcela("i.DEBITO")}   AS debito,
+      ${parcela("i.CREDITO")}  AS credito
     FROM ${itens} AS i
     INNER JOIN ${cabecalho} AS l
       ON l.LANCAMENTO = i.LANCAMENTO
@@ -203,12 +220,15 @@ export async function listarRealizado({ ano, filialId, visao } = {}) {
     INNER JOIN ${mapa} AS pv
       ON pv.CONTA_CONTABIL = i.CONTA_CONTABIL
      AND pv.VISAO_CONTABIL = @visao
+    LEFT JOIN ${rateio} AS cri
+      ON RTRIM(cri.RATEIO_CENTRO_CUSTO) = RTRIM(i.RATEIO_CENTRO_CUSTO)
     WHERE l.DATA_LANCAMENTO >= @inicio
       AND l.DATA_LANCAMENTO <  @fim
       AND (@filial IS NULL OR RTRIM(l.COD_FILIAL) = @filial)
       ${filtroTipos}
     GROUP BY RTRIM(pv.CLASSIFICACAO), RTRIM(l.COD_FILIAL),
-             RTRIM(ISNULL(i.RATEIO_CENTRO_CUSTO, '')), MONTH(l.DATA_LANCAMENTO)
+             RTRIM(COALESCE(cri.CENTRO_CUSTO, i.RATEIO_CENTRO_CUSTO, '')),
+             MONTH(l.DATA_LANCAMENTO)
     ORDER BY classificacao, mes
   `,
     parametros

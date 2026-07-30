@@ -201,56 +201,6 @@ export default function TelaVisaoModulo({
         <span className={`chip chip--${grupo?.chip ?? "receita"}`}>
           {grupo?.rotulo ?? modulo.tipo} · {modulo.grupo}
         </span>
-
-        <label className="campo-inline">
-          <span>Filial</span>
-          <select value={filialId ?? ""} onChange={(e) => setFilialId(e.target.value || null)}>
-            {filiais.map((filial) => {
-              const quantas = contasDaFilial(visao, modulo.id, filial.id).length;
-              return (
-                <option value={filial.id} key={filial.id}>
-                  {filial.nome}
-                  {quantas ? ` (${quantas})` : ""}
-                </option>
-              );
-            })}
-          </select>
-        </label>
-
-        {usaCentro ? (
-          <label className="campo-inline">
-            <span>Centro de custo</span>
-            <select value={centroId} onChange={(e) => setCentroId(e.target.value)}>
-              <option value={SEM_CENTRO}>Contas da filial (todas)</option>
-              {centros.map((centro) => {
-                const quantas = filialId
-                  ? contasDoCentro(visao, modulo.id, filialId, centro.id).length
-                  : 0;
-                return (
-                  <option value={centro.id} key={centro.id}>
-                    {centro.id} — {centro.nome}
-                    {quantas ? ` (${quantas})` : ""}
-                  </option>
-                );
-              })}
-            </select>
-          </label>
-        ) : null}
-
-        <label className="check-inline">
-          <input
-            type="checkbox"
-            checked={usaCentro}
-            onChange={(e) => onAlternarUsaCentro(modulo.id, e.target.checked)}
-          />
-          <span className="checkbox-visual">
-            <Icone nome="check" tamanho={13} />
-          </span>
-          Usa centro de custo
-        </label>
-      </div>
-
-      <div className="modulo-barra">
         <label className="campo-busca">
           <input
             value={busca}
@@ -275,71 +225,161 @@ export default function TelaVisaoModulo({
         >
           Recolher
         </button>
+        <label className="check-inline">
+          <input
+            type="checkbox"
+            checked={usaCentro}
+            onChange={(e) => onAlternarUsaCentro(modulo.id, e.target.checked)}
+          />
+          <span className="checkbox-visual">
+            <Icone nome="check" tamanho={13} />
+          </span>
+          Usa centro de custo
+        </label>
       </div>
 
       {carregando ? <Carregando texto="Carregando plano de contas…" /> : null}
       {erro ? <AvisoErro mensagem={erro} onTentarDeNovo={onRecarregar} /> : null}
 
-      {!carregando && !erro && !filialId ? (
-        <p className="modulo-aviso">
-          <Icone nome="info" tamanho={16} />
-          Nenhuma filial ativa. Escolha as filiais em Configurações → Filiais.
-        </p>
-      ) : null}
+      {!carregando && !erro ? (
+        <div className="orcamento-layout">
+          {/* Filial e centro viram painéis à esquerda, como na tela do plano:
+              a escolha fica sempre visível junto do que ela filtra. */}
+          <aside className="orcamento-lateral">
+            <section className="painel-selecao">
+              <h3>Filiais</h3>
+              {filiais.length ? (
+                filiais.map((filial) => {
+                  const quantas = contasDaFilial(visao, modulo.id, filial.id).length;
+                  return (
+                    <button
+                      type="button"
+                      key={filial.id}
+                      className={`selecao-item ${filial.id === filialId ? "is-active" : ""}`}
+                      aria-pressed={filial.id === filialId}
+                      onClick={() => setFilialId(filial.id)}
+                    >
+                      <span>{filial.nome}</span>
+                      {quantas ? <b>{quantas}</b> : null}
+                    </button>
+                  );
+                })
+              ) : (
+                <p className="sem-contas">
+                  Nenhuma filial ativa. Escolha em Configurações → Filiais.
+                </p>
+              )}
+            </section>
 
-      {!carregando && !erro && filialId ? (
-        <div className="contas-seletor">
-          <div className="contas-seletor__topo">
-            <span>
-              {editandoCentro ? `Contas do centro ${centroId}` : "Contas da filial"}
-              <small className="contas-seletor__origem">
-                {editandoCentro
-                  ? `escolhidas entre as ${daFilial.length} da filial`
-                  : `plano de contas do grupo ${modulo.grupo}`}
-              </small>
-            </span>
-            <span className="contas-seletor__acoes">
-              <small>
-                {selecionadas.length} {selecionadas.length === 1 ? "selecionada" : "selecionadas"}
-              </small>
-              <button type="button" className="botao-texto" onClick={() => salvar(new Set())} disabled={!selecionadas.length}>
-                Limpar
-              </button>
-            </span>
-          </div>
+            {usaCentro ? (
+              <section className="painel-selecao">
+                <h3>Centros de custo</h3>
+                <button
+                  type="button"
+                  className={`selecao-item ${centroId === SEM_CENTRO ? "is-active" : ""}`}
+                  aria-pressed={centroId === SEM_CENTRO}
+                  onClick={() => setCentroId(SEM_CENTRO)}
+                >
+                  <span>Contas da filial</span>
+                  {daFilial.length ? <b>{daFilial.length}</b> : null}
+                </button>
+                {centros.map((centro) => {
+                  const quantas = filialId
+                    ? contasDoCentro(visao, modulo.id, filialId, centro.id).length
+                    : 0;
+                  return (
+                    <button
+                      type="button"
+                      key={centro.id}
+                      className={`selecao-item selecao-item--conta ${
+                        centro.id === centroId ? "is-active" : ""
+                      }`}
+                      aria-pressed={centro.id === centroId}
+                      onClick={() => setCentroId(centro.id)}
+                      disabled={!daFilial.length}
+                      title={daFilial.length ? undefined : "Escolha primeiro as contas da filial"}
+                    >
+                      <code>{centro.id}</code>
+                      <span>
+                        {centro.nome}
+                        {quantas ? ` · ${quantas}` : ""}
+                      </span>
+                    </button>
+                  );
+                })}
+              </section>
+            ) : null}
+          </aside>
 
-          <div className="contas-seletor__lista contas-seletor__lista--alta">
-            {linhas.length ? (
-              linhas.map((item) => (
-                <Linha
-                  key={item.codigo}
-                  item={item}
-                  estado={estadoDaSelecao(resumo, item.codigo)}
-                  marcadosAbaixo={
-                    item.temFilhos
-                      ? (resumo.get(item.codigo)?.marcados ?? 0) - (marcadas.has(item.codigo) ? 1 : 0)
-                      : 0
-                  }
-                  onAlternar={alternar}
-                  onAlternarNo={alternarNo}
-                />
-              ))
+          <section className="orcamento-dados">
+            {filialId ? (
+              <div className="contas-seletor">
+                <div className="contas-seletor__topo">
+                  <span>
+                    {editandoCentro ? `Contas do centro ${centroId}` : "Contas da filial"}
+                    <small className="contas-seletor__origem">
+                      {editandoCentro
+                        ? `escolhidas entre as ${daFilial.length} da filial`
+                        : `plano de contas do grupo ${modulo.grupo}`}
+                    </small>
+                  </span>
+                  <span className="contas-seletor__acoes">
+                    <small>
+                      {selecionadas.length}{" "}
+                      {selecionadas.length === 1 ? "selecionada" : "selecionadas"}
+                    </small>
+                    <button
+                      type="button"
+                      className="botao-texto"
+                      onClick={() => salvar(new Set())}
+                      disabled={!selecionadas.length}
+                    >
+                      Limpar
+                    </button>
+                  </span>
+                </div>
+
+                <div className="contas-seletor__lista contas-seletor__lista--alta">
+                  {linhas.length ? (
+                    linhas.map((item) => (
+                      <Linha
+                        key={item.codigo}
+                        item={item}
+                        estado={estadoDaSelecao(resumo, item.codigo)}
+                        marcadosAbaixo={
+                          item.temFilhos
+                            ? (resumo.get(item.codigo)?.marcados ?? 0) -
+                              (marcadas.has(item.codigo) ? 1 : 0)
+                            : 0
+                        }
+                        onAlternar={alternar}
+                        onAlternarNo={alternarNo}
+                      />
+                    ))
+                  ) : (
+                    <p className="sem-contas">
+                      {editandoCentro && !daFilial.length
+                        ? "Escolha primeiro as contas da filial: o centro seleciona entre elas."
+                        : "Nenhuma conta corresponde ao filtro."}
+                    </p>
+                  )}
+                </div>
+              </div>
             ) : (
-              <p className="sem-contas">
-                {editandoCentro && !daFilial.length
-                  ? "Escolha primeiro as contas da filial: o centro seleciona entre elas."
-                  : "Nenhuma conta corresponde ao filtro."}
+              <p className="modulo-aviso">
+                <Icone nome="info" tamanho={16} />
+                Escolha uma filial na lateral para configurar as contas dela.
               </p>
             )}
-          </div>
-        </div>
-      ) : null}
 
-      {usaCentro && centrosComContas.length ? (
-        <p className="modulo-aviso">
-          <Icone nome="info" tamanho={16} />
-          Centros com contas nesta filial: {centrosComContas.join(", ")}.
-        </p>
+            {usaCentro && centrosComContas.length ? (
+              <p className="modulo-aviso">
+                <Icone nome="info" tamanho={16} />
+                Centros com contas nesta filial: {centrosComContas.join(", ")}.
+              </p>
+            ) : null}
+          </section>
+        </div>
       ) : null}
     </main>
   );

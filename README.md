@@ -162,7 +162,7 @@ curl "http://localhost:3000/api/realizado?ano=2025"
 | `/api/contas?visao=X` | `dbo.CTB_VISAO` | só classificações com ponto; devolve `LX_GRUPO_CONTABIL` |
 | `/api/filiais` | `dbo.FILIAIS` | id = `COD_FILIAL`, nome = `FILIAL`; 25 registros |
 | `/api/centros-de-custo` | `dbo.CTB_CENTRO_CUSTO` | nome = `DESC_CENTRO_CUSTO`; só `INATIVA = 0` (37 de 42) |
-| `/api/realizado` | `dbo.CTB_LANCAMENTO` + `_ITEM` + `CTB_PLANO_VISAO` | por classificação, filial, centro e mês; exclui `LX_TIPO_LANCAMENTO = ELD` |
+| `/api/realizado` | `CTB_LANCAMENTO` + `_ITEM` + `CTB_PLANO_VISAO` + `CTB_CENTRO_CUSTO_RATEIO_ITEM` | por classificação, filial, centro e mês |
 
 A árvore se monta pelo PREFIXO do código: 3.1 -> 3.1.1 -> 3.1.1.01 -> 3.1.1.01.001.
 `CLASSIFICACAO_TOTALIZA_EM` NAO serve para isso: indica para onde o valor
@@ -180,8 +180,15 @@ O realizado sai de `CTB_LANCAMENTO_ITEM`, que grava `CONTA_CONTABIL` (6 dígitos
 ex. `111101`). O de/para conta → classificação está em `dbo.CTB_PLANO_VISAO`, com
 `OPERADOR` (+/−) e `PORCENTAGEM` de rateio — o join é feito na consulta.
 
+**Rateio de centro de custo.** `RATEIO_CENTRO_CUSTO` no item de lançamento não é
+um centro: é o código de um rateio, que `CTB_CENTRO_CUSTO_RATEIO_ITEM` abre em um
+ou mais centros com percentual (o `R00001` abre em 36). Na base, 47 dos 89
+rateios abrem em mais de um centro, e todos somam 100% — então o total não muda,
+mas sem a expansão o detalhe por centro fica errado. O join é `LEFT`: rateio sem
+item cadastrado mantém o lançamento em vez de sumir em silêncio.
+
 **Encerramento do exercício fica de fora.** Em dezembro o Linx zera as contas de
-resultado com lançamentos `LX_TIPO_LANCAMENTO = ELD` ("ENC. DO EXERCÍCIO"), do
+resultado com lançamentos `LX_TIPO_LANCAMENTO` em `ELD, LAC, ELC, LAD` ("ENC. DO EXERCÍCIO" e apuração), do
 tamanho do ano inteiro — R$ 115 mi em 2025. Sem excluir, dezembro inverte de
 sinal e o total do ano some. Confirmado contra o Scoreplan: dez/2025 da MEN HUB
 dá −978.568,61 com ELD e 177.347,66 sem, que é o valor certo.
