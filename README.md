@@ -1,10 +1,12 @@
 # Portal Orçamento
 
-Planejamento orçamentário da King & Joe / AKR Brands. SPA em React + Vite.
+Planejamento orçamentário da King & Joe / AKR Brands. Front em React + Vite,
+API em Node + Express sobre SQL Server.
 
-> **Estado atual: protótipo de interface.** Não há backend, banco nem
-> autenticação. Os números vêm de um mock determinístico e as edições ficam no
-> `localStorage` do navegador. Não use como fonte de verdade contábil.
+> **Estado atual: front funcional sobre mock; API sem credencial.** As telas
+> funcionam com números gerados e as edições ficam no `localStorage`. O backend
+> está no ar mas ainda não tem `.env` nem os nomes das views do ERP. Não use
+> como fonte de verdade contábil.
 
 ## Executar
 
@@ -12,30 +14,68 @@ Requer Node.js 20 ou superior.
 
 ```bash
 npm install
-npm run dev      # servidor de desenvolvimento (com Fast Refresh)
+npm run dev      # front em http://localhost:5173 (com Fast Refresh)
+npm run api      # API em http://localhost:3000 — precisa de .env
 npm test         # testes da camada de dados
 npm run build    # build de produção em dist/
-npm run preview  # serve o build
 ```
+
+O Vite encaminha `/api/*` para a API, então dev e produção usam a mesma origem.
+
+## Conceitos
+
+**Visão** — global, não pertence a nenhum plano. Define, para cada um dos 8
+módulos do orçamento, quais contas o compõem. Ex.: `DRE 2025`.
+
+**Plano** — escolhe **uma visão** na criação. Os módulos que o plano orça são os
+módulos configurados naquela visão; um módulo sem conta selecionada não aparece.
+
+**Configurações do plano** — filiais e centros de custo. São dimensões do plano,
+não da visão.
+
+```
+Visões (global)
+└── DRE 2025
+    ├── Receita de vendas             4 contas
+    ├── Receitas não operacionais     1 conta
+    ├── Deduções de vendas            4 contas
+    ├── Custos variáveis              —
+    └── … (8 módulos fixos)
+
+Plano "Oficial"  → visão DRE 2025
+├── Configurações → Filiais, Centro de Custos
+└── Orçamentos    → só os módulos com conta na DRE 2025
+                    → tabela mensal (planejado / realizado / ano anterior)
+```
+
+Os 8 módulos são fixos em [src/dados/modulos.js](src/dados/modulos.js):
+2 de receita (verde) e 6 de despesa (vermelho).
 
 ## Estrutura
 
 ```
+server/
+├── index.js                 Express + rotas /api/*
+├── sqlserver.js             pool mssql, query/queryOne/transaction
+└── consultas.js             SELECTs do ERP        ← views a confirmar
+
 src/
 ├── main.jsx                 entrada; importa os CSS
 ├── App.jsx                  estado da aplicação e roteamento entre telas
 ├── dados/
-│   ├── contas.js            plano de contas (receita e dedução)
-│   ├── seeds.js             dimensões iniciais + parâmetros do mock
+│   ├── modulos.js           os 8 módulos fixos (+ parâmetro do mock)
+│   ├── contas.js            plano de contas       ← provisório
+│   ├── visao.js             modelo da visão
+│   ├── seeds.js             dimensões e visão iniciais
 │   ├── calendario.js        até que mês existe "realizado"
 │   ├── mock.js              geradores determinísticos  ← trocar pelo banco
 │   └── plano.js             modelo do plano, agregações e cálculos
 ├── lib/
 │   ├── formato.js           moeda/percentual pt-BR e leitura de números
-│   ├── persistencia.js      localStorage             ← trocar pela API
+│   ├── persistencia.js      localStorage          ← trocar pela API
 │   └── tema.js              tema claro/escuro
-├── componentes/             UI reutilizável (Sidebar, Modal, Tabela, ...)
-├── telas/                   uma tela por módulo
+├── componentes/             UI reutilizável (Sidebar, Modal, Tabela, …)
+├── telas/                   uma tela por rota
 └── estilos/
     ├── tokens.css           tokens de cor claro/escuro (PADRAO §2)
     └── app.css              estilos dos componentes
@@ -43,28 +83,47 @@ src/
 
 ### Como o plano guarda os valores
 
-`plano.planejado` e `plano.pctPlanejado` guardam **somente as edições manuais**.
-Quando não há edição para uma célula, o valor vem do gerador em `dados/mock.js`,
-usando os parâmetros que vivem na própria dimensão (`fator` da filial, `bases`
-do canal, `percentualBase` da dedução).
+`plano.planejado` guarda **somente as edições manuais**, com chave
+`modulo|filial|ano|mes`. Sem edição, o valor vem do gerador em
+[src/dados/mock.js](src/dados/mock.js), usando o `base` do módulo e o `fator` da
+filial.
 
-Consequência prática: uma filial ou canal criado pela tela nasce com parâmetro
-`0` e fica coerente — planejado **e** realizado zerados. Dimensões criadas na
-tela recebem `manual: true` e por isso não somem quando o filtro "ocultar canais
-sem valores" está ligado.
+Duas consequências desejadas:
 
-### Trocar o mock pelo banco
+- Uma filial criada pela tela nasce com `fator: 0` — planejado **e** realizado
+  zerados, sem divergir entre os dois.
+- Um módulo sem conta na visão devolve zeros em vez de número inventado.
 
-Três arquivos concentram tudo que é falso:
+## Ligar no banco
+
+O backend já sobe e responde. Falta:
+
+1. **`.env`** — copie de [.env.example](.env.example) e preencha. Use uma
+   **conta de serviço** do SQL Server, não uma conta pessoal, e não sysadmin.
+   O `.env` está no `.gitignore` e nunca deve ser commitado.
+2. **Nomes das views** — `DB_VIEW_CONTAS`, `DB_VIEW_FILIAIS`, `DB_VIEW_CENTROS`,
+   `DB_VIEW_REALIZADO`. Sem elas a rota responde `503` dizendo o que falta.
+3. **Colunas** — os SELECTs em `server/consultas.js` estão com a forma esperada,
+   mas os nomes de coluna são suposições. Ajustar ao confirmar.
+
+Verificar a conexão:
+
+```bash
+curl http://localhost:3000/api/health     # { ok: true, banco: "KINGEJOE", ... }
+curl http://localhost:3000/api/contas
+```
+
+Depois disso, a troca do mock pelo banco é local:
 
 | Arquivo | O que substituir |
 |---|---|
-| `src/dados/mock.js` | as quatro funções `gerar*` viram consultas |
-| `src/dados/seeds.js` | dimensões iniciais e os campos de parâmetro do mock |
+| `src/dados/contas.js` | `contasDoModulo()` passa a ler `/api/contas` |
+| `src/dados/mock.js` | `gerarRealizado()` passa a ler `/api/realizado` |
+| `src/dados/seeds.js` | filiais e centros vêm de `/api/filiais` e `/api/centros-de-custo` |
 | `src/lib/persistencia.js` | `localStorage` vira `fetch` da API |
 
-`src/dados/plano.js` já trabalha só com os dados agregados, então as telas não
-mudam.
+Regras que não podem ser afrouxadas (PADRAO §5): parâmetro sempre por bind,
+`Date` tipado como `DateTime2(3)`, ERP só por `SELECT` em view.
 
 ## Padrão visual
 
@@ -74,26 +133,32 @@ tema claro e escuro, script de tema inline no `<head>` (evita o flash branco),
 modais em `<dialog>` com layout flex-column e botão desabilitado com aparência
 de desabilitado.
 
-Duas divergências conscientes do padrão:
+Duas divergências conscientes:
 
 - **Sem card de usuário com "Sair"** no rodapé da sidebar. O portal ainda não
   tem autenticação; o rodapé identifica a empresa em vez de simular um login.
-- **Stack React + Vite puro**, não TanStack Start + Tailwind. O projeto nasceu
-  assim e migrar não traria ganho enquanto for protótipo de tela.
+- **Stack React + Vite puro**, não TanStack Start + Tailwind.
 
 ## Testes
 
-`npm test` roda a camada de dados com o runner nativo do Node (`node --test`).
-A cobertura foca nos pontos onde um erro vira número errado na tela: leitura de
-número pt-BR, corte temporal do realizado, coerência de dimensões novas,
-denominador das médias e limpeza de chaves órfãs ao excluir uma dimensão.
+`npm test` roda a camada de dados com o runner nativo do Node (`node --test`),
+sem dependência extra. A cobertura foca nos pontos onde um erro vira número
+errado na tela: leitura de número pt-BR, corte temporal do realizado, módulo sem
+contas, isolamento da edição por módulo/filial/ano, denominador das médias e
+limpeza de chaves órfãs.
 
 Os componentes não têm teste automatizado — foram verificados por renderização.
 
 ## Pendências conhecidas
 
-- Sem backend: os dados vivem no navegador de cada usuário e não são compartilhados.
+- **API sem `.env` e sem os nomes das views** — é o próximo passo.
+- **Plano de contas incompleto**: só receita (`3.1.1.x`) e dedução (`3.1.9.x`).
+  Custos variáveis, despesas operacionais, despesas com pessoal e outras
+  despesas ainda oferecem a lista de dedução como provisório.
 - Sem autenticação nem RBAC (o padrão exige enforcement no backend).
-- Sem deploy: falta `deploy/setup.sh`, service systemd e `.env.example`.
-- `localStorage` tem limite de ~5 MB; muitos planos com muitas edições podem
-  estourar. A aplicação avisa na tela quando a gravação falha.
+- Sem deploy: falta `deploy/setup.sh` e service systemd.
+- `localStorage` tem limite de ~5 MB; a aplicação avisa na tela se a gravação
+  falhar.
+- **Dados locais da versão anterior foram descartados**: o modelo mudou (canais
+  e deduções saíram, visões entraram) e a chave de armazenamento subiu para
+  `:v2`.
