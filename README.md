@@ -134,8 +134,8 @@ curl "http://localhost:3000/api/realizado?ano=2025"
 | Rota | Objeto | Observação |
 |---|---|---|
 | `/api/contas` | `dbo.CTB_VISAO` | visão contábil 25, só classificações com ponto |
-| `/api/filiais` | `dbo.FILIAIS` | `COD_FILIAL` + `FILIAL` |
-| `/api/centros-de-custo` | `dbo.CTB_CENTRO_CUSTO` | só os com `INATIVA = 0` |
+| `/api/filiais` | `dbo.FILIAIS` | id = `COD_FILIAL`, nome = `FILIAL`; 25 registros |
+| `/api/centros-de-custo` | `dbo.CTB_CENTRO_CUSTO` | nome = `DESC_CENTRO_CUSTO`; só `INATIVA = 0` (37 de 42) |
 | `/api/realizado` | `dbo.CTB_LANCAMENTO` + `_ITEM` | agregado por conta, filial e mês |
 
 A árvore se monta pelo PREFIXO do código: 3.1 -> 3.1.1 -> 3.1.1.01 -> 3.1.1.01.001.
@@ -146,6 +146,9 @@ folhas) e 8 raízes; onde falta um nível intermediário (existe 4.1.2.01 mas n�
 
 Colunas `char`/`varchar` do Linx vêm com espaço à direita — todo texto passa por
 `RTRIM` em `server/consultas.js`.
+
+O id da filial é o `COD_FILIAL`, não o nome: é por ele que o realizado vem
+agrupado e é ele que entra na chave do planejado. Nome muda, código não.
 
 O realizado sai de `CTB_LANCAMENTO_ITEM`, que grava `CONTA_CONTABIL` (6 dígitos,
 ex. `111101`). O de/para conta → classificação está em `dbo.CTB_PLANO_VISAO`, com

@@ -82,7 +82,13 @@ export async function listarContas() {
   );
 }
 
-// Filiais do ERP. Substitui FILIAIS_SEED.
+// Filiais do ERP: `FILIAL` é o nome, `COD_FILIAL` é o código.
+//
+// O id é o COD_FILIAL, não o nome: é por ele que o realizado vem agrupado
+// (CTB_LANCAMENTO.COD_FILIAL) e é ele que entra na chave do planejado. Nome muda,
+// código não. Verificado no banco: 25 filiais, COD_FILIAL único e nunca vazio.
+//
+// Ordenado por nome, que é o que aparece na tela.
 export async function listarFiliais() {
   const tabela = objeto("DB_VIEW_FILIAIS", "dbo.FILIAIS");
   return query(`
@@ -93,11 +99,14 @@ export async function listarFiliais() {
       RTRIM(TIPO_FILIAL) AS tipo
     FROM ${tabela}
     WHERE RTRIM(ISNULL(FILIAL, '')) <> ''
-    ORDER BY COD_FILIAL
+    ORDER BY FILIAL
   `);
 }
 
-// Centros de custo do ERP. Substitui CENTROS_SEED.
+// Centros de custo do ERP: `CENTRO_CUSTO` é o código, `DESC_CENTRO_CUSTO` o nome.
+//
+// Só os ativos. Dos 42 cadastrados, 5 estão com INATIVA = 1 (BOOTCAMP,
+// TRANSPORTE e outros) — orçar contra centro desativado não faz sentido.
 export async function listarCentrosDeCusto() {
   const tabela = objeto("DB_VIEW_CENTROS", "dbo.CTB_CENTRO_CUSTO");
   return query(`
@@ -107,7 +116,7 @@ export async function listarCentrosDeCusto() {
       INATIVA                  AS inativa
     FROM ${tabela}
     WHERE ISNULL(INATIVA, 0) = 0
-    ORDER BY CENTRO_CUSTO
+    ORDER BY DESC_CENTRO_CUSTO
   `);
 }
 
