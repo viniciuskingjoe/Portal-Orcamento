@@ -31,10 +31,10 @@ function CardModulo({ modulo, visao, onAbrir }) {
   );
 }
 
-export default function TelaHome({ plano, visao, onAbrirModulo, onAbrirConfiguracoes, onVoltar }) {
+export default function TelaHome({ plano, visao, onAbrirModulo, onVoltar }) {
   const grupos = [
-    { numero: "02", titulo: "Receitas", modulos: MODULOS_RECEITA },
-    { numero: "03", titulo: "Despesas", modulos: MODULOS_DESPESA },
+    { numero: "01", titulo: "Receitas", modulos: MODULOS_RECEITA },
+    { numero: "02", titulo: "Despesas", modulos: MODULOS_DESPESA },
   ];
 
   return (
@@ -44,36 +44,6 @@ export default function TelaHome({ plano, visao, onAbrirModulo, onAbrirConfigura
         subtitulo={`Período de ${plano.inicio} a ${plano.fim}${visao ? ` · visão ${visao.nome}` : ""}`}
         onVoltar={onVoltar}
       />
-
-      <section className="secao-modulos">
-        <div className="secao-modulos__cabecalho">
-          <div>
-            <span className="numero-secao">01</span>
-            <h2>Configuração</h2>
-          </div>
-          <p>Dimensões deste plano.</p>
-        </div>
-        <div className="grid-modulos grid-modulos--config">
-          <button
-            type="button"
-            className="card-modulo card-modulo--config"
-            onClick={onAbrirConfiguracoes}
-          >
-            <span className="card-modulo__icone">
-              <Icone nome="settings" tamanho={23} />
-            </span>
-            <span className="card-modulo__texto">
-              <strong>Configurações</strong>
-              <small>
-                {plano.filiais.length} {plano.filiais.length === 1 ? "filial" : "filiais"} ·{" "}
-                {plano.centros.length}{" "}
-                {plano.centros.length === 1 ? "centro de custo" : "centros de custo"}
-              </small>
-            </span>
-            <Icone nome="chevron" tamanho={17} />
-          </button>
-        </div>
-      </section>
 
       {visao ? (
         grupos.map((grupo) => (

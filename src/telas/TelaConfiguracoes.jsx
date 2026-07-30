@@ -20,34 +20,36 @@ const CARTOES = [
   },
 ];
 
-export default function TelaConfiguracoes({ plano, onAbrir, onVoltar }) {
+export default function TelaConfiguracoes({ configuracao, onAbrir }) {
   return (
     <main className="conteudo">
       <Cabecalho
         titulo="Configurações"
-        subtitulo="Dimensões deste plano. Os módulos e as contas do orçamento vêm da visão escolhida na criação."
-        onVoltar={onVoltar}
+        subtitulo="Dimensões do portal. Valem para todos os planos orçamentários."
       />
       <div className="grid-modulos grid-modulos--config">
-        {CARTOES.map((cartao) => (
-          <button
-            type="button"
-            className="card-modulo card-modulo--config"
-            key={cartao.id}
-            onClick={() => onAbrir(cartao.id)}
-          >
-            <span className="card-modulo__icone">
-              <Icone nome={cartao.icone} tamanho={23} />
-            </span>
-            <span className="card-modulo__texto">
-              <strong>{cartao.titulo}</strong>
-              <small>
-                {plano[cartao.campo].length} {cartao.rotulo} · {cartao.descricao}
-              </small>
-            </span>
-            <Icone nome="chevron" tamanho={17} />
-          </button>
-        ))}
+        {CARTOES.map((cartao) => {
+          const total = configuracao[cartao.campo].length;
+          return (
+            <button
+              type="button"
+              className="card-modulo card-modulo--config"
+              key={cartao.id}
+              onClick={() => onAbrir(cartao.id)}
+            >
+              <span className="card-modulo__icone">
+                <Icone nome={cartao.icone} tamanho={23} />
+              </span>
+              <span className="card-modulo__texto">
+                <strong>{cartao.titulo}</strong>
+                <small>
+                  {total} {cartao.rotulo} · {cartao.descricao}
+                </small>
+              </span>
+              <Icone nome="chevron" tamanho={17} />
+            </button>
+          );
+        })}
       </div>
     </main>
   );

@@ -1,7 +1,7 @@
 import Icone from "./Icone.jsx";
 import { anosDoPlano } from "../dados/plano.js";
 
-export function FiltrosOrcamento({ plano, filtros, onAlterarFiltro }) {
+export function FiltrosOrcamento({ plano, filiais, filtros, onAlterarFiltro }) {
   return (
     <div className="filtros-orcamento">
       <label>
@@ -11,7 +11,7 @@ export function FiltrosOrcamento({ plano, filtros, onAlterarFiltro }) {
           onChange={(evento) => onAlterarFiltro({ filial: evento.target.value })}
         >
           <option value="total">Total — todas as filiais</option>
-          {plano.filiais.map((filial) => (
+          {filiais.map((filial) => (
             <option value={filial.id} key={filial.id}>
               {filial.nome}
             </option>

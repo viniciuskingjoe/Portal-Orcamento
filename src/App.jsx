@@ -17,12 +17,17 @@ import TelaOrcamento from "./telas/TelaOrcamento.jsx";
 import { EMPRESA } from "./dados/seeds.js";
 import { ehModulo, modulo as definicaoDoModulo } from "./dados/modulos.js";
 import {
+  adicionarItem,
   campoDaDimensao,
+  removerItem,
+  renomearItem,
+} from "./dados/configuracao.js";
+import {
   chavePlanejado,
   criarLinhasOrcamento,
   criarPlano,
   gerarId,
-  removerDimensao,
+  purgarFilialDosPlanos,
 } from "./dados/plano.js";
 import { criarVisao, definirContasDoModulo } from "./dados/visao.js";
 import { carregarEstado, salvarEstado } from "./lib/persistencia.js";
@@ -35,8 +40,9 @@ const TELAS_CRUD = new Set(["filiais", "centros"]);
 export default function PlanejamentoOrcamentario() {
   const inicial = useMemo(carregarEstado, []);
 
-  const [planos, setPlanos] = useState(inicial.planos);
+  const [configuracao, setConfiguracao] = useState(inicial.configuracao);
   const [visoes, setVisoes] = useState(inicial.visoes);
+  const [planos, setPlanos] = useState(inicial.planos);
 
   const [tela, setTela] = useState("planos");
   const [planoAtivoId, setPlanoAtivoId] = useState(null);
@@ -79,18 +85,25 @@ export default function PlanejamentoOrcamentario() {
   }, [tema]);
 
   useEffect(() => {
-    const resultado = salvarEstado({ planos, visoes });
+    const resultado = salvarEstado({ configuracao, visoes, planos });
     setAvisoPersistencia(
       resultado.ok
         ? ""
         : "Não foi possível salvar neste navegador. As alterações valem só para esta sessão."
     );
-  }, [planos, visoes]);
+  }, [configuracao, visoes, planos]);
 
   const linhasOrcamento = useMemo(() => {
     if (!planoAtivo || !moduloDaTela) return [];
-    return criarLinhasOrcamento(planoAtivo, visaoDoPlano, moduloDaTela.id, filtros.filial, filtros.ano);
-  }, [planoAtivo, visaoDoPlano, moduloDaTela, filtros.filial, filtros.ano]);
+    return criarLinhasOrcamento({
+      plano: planoAtivo,
+      visao: visaoDoPlano,
+      filiais: configuracao.filiais,
+      moduloId: moduloDaTela.id,
+      filialId: filtros.filial,
+      ano: filtros.ano,
+    });
+  }, [planoAtivo, visaoDoPlano, configuracao.filiais, moduloDaTela, filtros.filial, filtros.ano]);
 
   // --------------------------------------------------------------------------
   // Navegação
@@ -158,7 +171,7 @@ export default function PlanejamentoOrcamentario() {
     if (tela === "visao-modulo") return navegar("visao");
     if (tela === "visao") return navegar("visoes");
     if (TELAS_CRUD.has(tela)) return navegar("configuracoes");
-    if (tela === "configuracoes" || moduloDaTela) return navegar("home");
+    if (moduloDaTela) return navegar("home");
     return navegar("planos");
   }
 
@@ -232,7 +245,7 @@ export default function PlanejamentoOrcamentario() {
   }
 
   // --------------------------------------------------------------------------
-  // Dimensões do plano
+  // Configuração global (filiais, centros de custo)
   // --------------------------------------------------------------------------
 
   function abrirModalDimensao(tipo, item = null) {
@@ -242,27 +255,22 @@ export default function PlanejamentoOrcamentario() {
 
   function salvarDimensao() {
     const nome = modalNome.trim();
-    const campo = campoDaDimensao(modalDimensao?.tipo);
-    if (!nome || !planoAtivo || !campo) return;
+    const tipo = modalDimensao?.tipo;
+    if (!nome || !campoDaDimensao(tipo)) return;
 
-    atualizarPlanoAtivo((plano) => {
-      const lista = plano[campo];
-      if (modalDimensao.id) {
-        return {
-          ...plano,
-          [campo]: lista.map((item) => (item.id === modalDimensao.id ? { ...item, nome } : item)),
-        };
-      }
+    if (modalDimensao.id) {
+      setConfiguracao((atual) => renomearItem(atual, tipo, modalDimensao.id, nome));
+    } else {
       // Filial criada na tela nasce com o parâmetro do mock zerado, o que mantém
       // planejado e realizado coerentes (ambos zero).
       const novo = {
-        id: gerarId(modalDimensao.tipo),
+        id: gerarId(tipo),
         nome,
         manual: true,
-        ...(modalDimensao.tipo === "filiais" ? { fator: 0 } : {}),
+        ...(tipo === "filiais" ? { fator: 0 } : {}),
       };
-      return { ...plano, [campo]: [...lista, novo] };
-    });
+      setConfiguracao((atual) => adicionarItem(atual, tipo, novo));
+    }
 
     setModalDimensao(null);
   }
@@ -281,13 +289,18 @@ export default function PlanejamentoOrcamentario() {
     if (confirmacao?.tipo === "visao") {
       const emUso = planos.filter((plano) => plano.visaoId === confirmacao.id).length;
       return emUso
-        ? `${emUso} ${emUso === 1 ? "plano usa" : "planos usam"} esta visão e ${emUso === 1 ? "ficará" : "ficarão"} sem módulos de orçamento.`
+        ? `${emUso} ${emUso === 1 ? "plano usa" : "planos usam"} esta visão e ${
+            emUso === 1 ? "ficará" : "ficarão"
+          } sem módulos de orçamento.`
         : "Nenhum plano usa esta visão.";
     }
     if (confirmacao?.tipo === "filiais") {
-      return "A filial e todos os valores digitados para ela serão removidos deste plano.";
+      return "A filial é global: os valores digitados para ela serão removidos de TODOS os planos.";
     }
-    return "Esta ação afeta apenas este plano orçamentário.";
+    if (confirmacao?.tipo === "centros") {
+      return "O centro de custo sai da configuração do portal.";
+    }
+    return "Esta ação não pode ser desfeita.";
   }
 
   function confirmarExclusao() {
@@ -300,8 +313,11 @@ export default function PlanejamentoOrcamentario() {
       setVisoes((atuais) => atuais.filter((visao) => visao.id !== confirmacao.id));
       if (confirmacao.id === visaoAbertaId) navegar("visoes");
     } else {
-      atualizarPlanoAtivo((plano) => removerDimensao(plano, confirmacao.tipo, confirmacao.id));
-      if (filtros.filial === confirmacao.id) alterarFiltro({ filial: "total" });
+      setConfiguracao((atual) => removerItem(atual, confirmacao.tipo, confirmacao.id));
+      if (confirmacao.tipo === "filiais") {
+        setPlanos((atuais) => purgarFilialDosPlanos(atuais, confirmacao.id));
+        if (filtros.filial === confirmacao.id) alterarFiltro({ filial: "total" });
+      }
     }
 
     setConfirmacao(null);
@@ -370,6 +386,23 @@ export default function PlanejamentoOrcamentario() {
       );
     }
 
+    if (tela === "configuracoes") {
+      return <TelaConfiguracoes configuracao={configuracao} onAbrir={(id) => navegar(id)} />;
+    }
+
+    if (TELAS_CRUD.has(tela)) {
+      return (
+        <TelaCrud
+          tela={tela}
+          lista={configuracao[campoDaDimensao(tela)]}
+          onAdicionar={() => abrirModalDimensao(tela)}
+          onEditar={(item) => abrirModalDimensao(tela, item)}
+          onExcluir={pedirExclusao(tela)}
+          onVoltar={voltar}
+        />
+      );
+    }
+
     if (tela === "planos" || !planoAtivo) {
       return (
         <TelaPlanos
@@ -382,30 +415,12 @@ export default function PlanejamentoOrcamentario() {
       );
     }
 
-    if (tela === "configuracoes") {
-      return (
-        <TelaConfiguracoes plano={planoAtivo} onAbrir={(id) => navegar(id)} onVoltar={voltar} />
-      );
-    }
-
-    if (TELAS_CRUD.has(tela)) {
-      return (
-        <TelaCrud
-          tela={tela}
-          lista={planoAtivo[campoDaDimensao(tela)]}
-          onAdicionar={() => abrirModalDimensao(tela)}
-          onEditar={(item) => abrirModalDimensao(tela, item)}
-          onExcluir={pedirExclusao(tela)}
-          onVoltar={voltar}
-        />
-      );
-    }
-
     if (moduloDaTela && visaoDoPlano) {
       return (
         <TelaOrcamento
           plano={planoAtivo}
           visao={visaoDoPlano}
+          filiais={configuracao.filiais}
           modulo={moduloDaTela}
           filtros={filtros}
           onAlterarFiltro={alterarFiltro}
@@ -421,7 +436,6 @@ export default function PlanejamentoOrcamentario() {
         plano={planoAtivo}
         visao={visaoDoPlano}
         onAbrirModulo={abrirModulo}
-        onAbrirConfiguracoes={() => navegar("configuracoes")}
         onVoltar={voltar}
       />
     );
@@ -431,6 +445,7 @@ export default function PlanejamentoOrcamentario() {
     <div className="app">
       <Sidebar
         empresa={EMPRESA}
+        configuracao={configuracao}
         planoAtivo={planoAtivo}
         visaoDoPlano={visaoDoPlano}
         tela={tela}

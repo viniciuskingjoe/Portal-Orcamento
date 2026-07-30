@@ -18,6 +18,7 @@ function ItemNav({ id, titulo, icone, badge, ativo, onNavegar }) {
 
 export default function Sidebar({
   empresa,
+  configuracao,
   planoAtivo,
   visaoDoPlano,
   tela,
@@ -26,6 +27,7 @@ export default function Sidebar({
   onAlternarTema,
 }) {
   const modulos = visaoDoPlano ? modulosDaVisao(visaoDoPlano) : [];
+  const totalDeConfiguracoes = configuracao.filiais.length + configuracao.centros.length;
 
   return (
     <aside className="sidebar">
@@ -60,6 +62,16 @@ export default function Sidebar({
           ativo={tela === "visoes" || tela === "visao" || tela === "visao-modulo"}
           onNavegar={onNavegar}
         />
+        {/* Configurações é global: filiais e centros de custo valem para todos
+            os planos, então a tela fica fora de qualquer plano. */}
+        <ItemNav
+          id="configuracoes"
+          titulo="Configurações"
+          icone="settings"
+          badge={totalDeConfiguracoes}
+          ativo={tela === "configuracoes" || tela === "filiais" || tela === "centros"}
+          onNavegar={onNavegar}
+        />
 
         {planoAtivo ? (
           <>
@@ -70,13 +82,6 @@ export default function Sidebar({
                 titulo="Visão geral"
                 icone="calendar"
                 ativo={tela === "home"}
-                onNavegar={onNavegar}
-              />
-              <ItemNav
-                id="configuracoes"
-                titulo="Configurações"
-                icone="settings"
-                ativo={tela === "configuracoes" || tela === "filiais" || tela === "centros"}
                 onNavegar={onNavegar}
               />
             </div>

@@ -8,6 +8,7 @@ import { contasDoModulo } from "../dados/visao.js";
 export default function TelaOrcamento({
   plano,
   visao,
+  filiais,
   modulo,
   filtros,
   onAlterarFiltro,
@@ -26,7 +27,12 @@ export default function TelaOrcamento({
         onVoltar={onVoltar}
       />
 
-      <FiltrosOrcamento plano={plano} filtros={filtros} onAlterarFiltro={onAlterarFiltro} />
+      <FiltrosOrcamento
+        plano={plano}
+        filiais={filiais}
+        filtros={filtros}
+        onAlterarFiltro={onAlterarFiltro}
+      />
 
       <details className="contas-do-modulo">
         <summary>

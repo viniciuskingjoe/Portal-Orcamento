@@ -1,18 +1,19 @@
-import { CENTROS_SEED, FILIAIS_SEED, MESES } from "./seeds.js";
+import { MESES } from "./seeds.js";
 import { modulo as definicaoDoModulo } from "./modulos.js";
-import { contasDoModulo, moduloConfigurado } from "./visao.js";
+import { moduloConfigurado } from "./visao.js";
 import { gerarPlanejado, gerarRealizado } from "./mock.js";
 import { mesTemRealizado } from "./calendario.js";
 
 // ============================================================================
 // MODELO DO PLANO
 //
-// O plano guarda as dimensões de configuração (filiais, centros de custo), a
-// visão escolhida na criação e as edições manuais do orçamento.
+// O plano guarda o período, a visão escolhida na criação e as edições manuais
+// do orçamento. Filiais e centros de custo NÃO ficam aqui: são configuração
+// global do portal (ver dados/configuracao.js).
 //
 // `plano.planejado` guarda SOMENTE as edições manuais, com chave
 // `modulo|filial|ano|mes`. Sem edição, o valor vem do gerador — o que mantém
-// filiais novas coerentes (fator 0 -> zero nos dois lados) e o registro pequeno
+// filial nova coerente (fator 0 -> zero nos dois lados) e o registro pequeno
 // o bastante para caber no localStorage.
 // ============================================================================
 
@@ -25,16 +26,7 @@ export function chavePlanejado(moduloId, filialId, ano, mes) {
 }
 
 export function criarPlano(id, nome, inicio, fim, visaoId) {
-  return {
-    id,
-    nome,
-    inicio,
-    fim,
-    visaoId,
-    filiais: FILIAIS_SEED.map((item) => ({ ...item })),
-    centros: CENTROS_SEED.map((item) => ({ ...item })),
-    planejado: {},
-  };
+  return { id, nome, inicio, fim, visaoId, planejado: {} };
 }
 
 export function anosDoPlano(plano) {
@@ -42,9 +34,9 @@ export function anosDoPlano(plano) {
 }
 
 // "total" seleciona a lista inteira; caso contrário, o item correspondente.
-function itensSelecionados(lista, idSelecionado) {
-  if (idSelecionado === "total") return lista;
-  const item = lista.find((entry) => entry.id === idSelecionado);
+function filiaisSelecionadas(filiais, filialId) {
+  if (filialId === "total") return filiais;
+  const item = filiais.find((entry) => entry.id === filialId);
   return item ? [item] : [];
 }
 
@@ -97,18 +89,13 @@ function linhaMedia(meses, ano) {
 }
 
 function linhasVazias(ano) {
-  const meses = MESES.map((mes) => ({
-    id: mes,
-    label: `${String(mes).padStart(2, "0")}/${ano}`,
-    planejado: 0,
-    realizado: 0,
-    anterior: 0,
-    variacao: 0,
-    variacaoPercentual: 0,
-  }));
   const zero = { planejado: 0, realizado: 0, anterior: 0, variacao: 0, variacaoPercentual: 0 };
   return [
-    ...meses,
+    ...MESES.map((mes) => ({
+      id: mes,
+      label: `${String(mes).padStart(2, "0")}/${ano}`,
+      ...zero,
+    })),
     { id: "total", label: "Total", ...zero },
     { id: "media", label: "Média", ...zero },
   ];
@@ -116,14 +103,14 @@ function linhasVazias(ano) {
 
 // Um módulo sem conta selecionada na visão não tem o que somar: devolve zeros
 // em vez de números inventados.
-export function criarLinhasOrcamento(plano, visao, moduloId, filialId, ano) {
+export function criarLinhasOrcamento({ plano, visao, filiais, moduloId, filialId, ano }) {
   const modulo = definicaoDoModulo(moduloId);
   if (!modulo || !moduloConfigurado(visao, moduloId)) return linhasVazias(ano);
 
-  const filiais = itensSelecionados(plano.filiais, filialId);
+  const selecionadas = filiaisSelecionadas(filiais ?? [], filialId);
 
   const meses = MESES.map((mes) => {
-    const valores = somarMes(plano, modulo, filiais, ano, mes);
+    const valores = somarMes(plano, modulo, selecionadas, ano, mes);
     return {
       id: mes,
       label: `${String(mes).padStart(2, "0")}/${ano}`,
@@ -145,50 +132,25 @@ export function criarLinhasOrcamento(plano, visao, moduloId, filialId, ano) {
   return [...meses, total, linhaMedia(meses, ano)];
 }
 
-export function totalDoModuloNoAno(plano, visao, moduloId, filialId, ano) {
+export function totalDoModuloNoAno({ plano, visao, filiais, moduloId, filialId, ano }) {
   const modulo = definicaoDoModulo(moduloId);
   if (!modulo || !moduloConfigurado(visao, moduloId)) return 0;
-  const filiais = itensSelecionados(plano.filiais, filialId);
+  const selecionadas = filiaisSelecionadas(filiais ?? [], filialId);
   return MESES.reduce(
-    (total, mes) => total + somarMes(plano, modulo, filiais, ano, mes).planejado,
+    (total, mes) => total + somarMes(plano, modulo, selecionadas, ano, mes).planejado,
     0
   );
 }
 
-// Quantidade de contas que o módulo tem na visão do plano — usada nos cartões.
-export function contasDoModuloNoPlano(visao, moduloId) {
-  return contasDoModulo(visao, moduloId);
-}
-
-// --------------------------------------------------------------------------
-// Dimensões de configuração
-// --------------------------------------------------------------------------
-
-const CAMPO_POR_TIPO = {
-  filiais: "filiais",
-  centros: "centros",
-};
-
-export function campoDaDimensao(tipo) {
-  return CAMPO_POR_TIPO[tipo] ?? null;
-}
-
-// Sem esta limpeza as edições de uma filial excluída ficavam órfãs no plano e
-// ressuscitavam se alguém recriasse a filial com o mesmo id.
-export function removerDimensao(plano, tipo, id) {
-  const campo = campoDaDimensao(tipo);
-  if (!campo) return plano;
-
-  const proximo = {
-    ...plano,
-    [campo]: plano[campo].filter((item) => item.id !== id),
-  };
-
-  if (tipo === "filiais") {
-    proximo.planejado = Object.fromEntries(
-      Object.entries(plano.planejado).filter(([chave]) => chave.split("|")[1] !== id)
+// Filial é global, então excluir uma tem que limpar as edições dela em TODOS os
+// planos — senão as chaves ficam órfãs e ressuscitam se a filial for recriada
+// com o mesmo id.
+export function purgarFilialDosPlanos(planos, filialId) {
+  return planos.map((plano) => {
+    const restante = Object.fromEntries(
+      Object.entries(plano.planejado).filter(([chave]) => chave.split("|")[1] !== filialId)
     );
-  }
-
-  return proximo;
+    if (Object.keys(restante).length === Object.keys(plano.planejado).length) return plano;
+    return { ...plano, planejado: restante };
+  });
 }

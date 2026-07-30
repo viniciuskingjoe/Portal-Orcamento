@@ -7,7 +7,7 @@ import { carregarEstado, estadoInicial, salvarEstado } from "../src/lib/persiste
 // armazenamento real do runtime (que no Node não existe).
 function comArmazenamento(conteudo, executar) {
   const original = globalThis.localStorage;
-  const dados = new Map(conteudo ? [["portal-orcamento:estado:v2", conteudo]] : []);
+  const dados = new Map(conteudo ? [["portal-orcamento:estado:v3", conteudo]] : []);
   globalThis.localStorage = {
     getItem: (chave) => (dados.has(chave) ? dados.get(chave) : null),
     setItem: (chave, valor) => dados.set(chave, String(valor)),
@@ -20,6 +20,92 @@ function comArmazenamento(conteudo, executar) {
     else globalThis.localStorage = original;
   }
 }
+
+// Armazenamento com uma chave arbitrária, para exercitar a migração da v2.
+function comChave(chave, conteudo, executar) {
+  const original = globalThis.localStorage;
+  const dados = new Map([[chave, conteudo]]);
+  globalThis.localStorage = {
+    getItem: (k) => (dados.has(k) ? dados.get(k) : null),
+    setItem: (k, v) => dados.set(k, String(v)),
+    removeItem: (k) => dados.delete(k),
+  };
+  try {
+    return executar();
+  } finally {
+    if (original === undefined) delete globalThis.localStorage;
+    else globalThis.localStorage = original;
+  }
+}
+
+test("estado inicial tem configuração global além de visões e planos", () => {
+  const estado = estadoInicial();
+  assert.ok(estado.configuracao.filiais.length > 0);
+  assert.ok(estado.configuracao.centros.length > 0);
+  // Na v3 filiais e centros NÃO ficam dentro do plano.
+  estado.planos.forEach((plano) => {
+    assert.equal(plano.filiais, undefined);
+    assert.equal(plano.centros, undefined);
+  });
+});
+
+test("v2 é migrada: filiais e centros sobem dos planos para a configuração", () => {
+  const v2 = {
+    visoes: [{ id: "v1", nome: "DRE", modulos: {} }],
+    planos: [
+      {
+        id: "p1",
+        nome: "Um",
+        inicio: 2024,
+        fim: 2026,
+        visaoId: "v1",
+        planejado: { "receita-vendas|akr|2026|1": 500 },
+        filiais: [{ id: "akr", nome: "AKR", fator: 1 }],
+        centros: [{ id: "adm", nome: "ADM" }],
+      },
+      {
+        id: "p2",
+        nome: "Dois",
+        inicio: 2024,
+        fim: 2026,
+        visaoId: "v1",
+        planejado: {},
+        // Lista divergente: união por id, senão a filial só desta cópia se perderia
+        // e as edições ligadas a ela ficariam órfãs.
+        filiais: [{ id: "akr", nome: "AKR", fator: 1 }, { id: "loja", nome: "Loja", fator: 0.6 }],
+        centros: [{ id: "adm", nome: "ADM" }],
+      },
+    ],
+  };
+
+  comChave("portal-orcamento:estado:v2", JSON.stringify(v2), () => {
+    const estado = carregarEstado();
+    assert.deepEqual(
+      estado.configuracao.filiais.map((f) => f.id).sort(),
+      ["akr", "loja"]
+    );
+    assert.deepEqual(estado.configuracao.centros.map((c) => c.id), ["adm"]);
+    // As edições do plano sobrevivem e filiais/centros saem de dentro dele.
+    assert.deepEqual(estado.planos[0].planejado, { "receita-vendas|akr|2026|1": 500 });
+    assert.equal(estado.planos[0].filiais, undefined);
+    assert.equal(estado.planos[0].centros, undefined);
+  });
+});
+
+test("v3 tem prioridade sobre v2", () => {
+  const original = globalThis.localStorage;
+  const dados = new Map([
+    ["portal-orcamento:estado:v2", JSON.stringify({ visoes: [], planos: [{ id: "velho", nome: "Velho", inicio: 2024, fim: 2026 }] })],
+    ["portal-orcamento:estado:v3", JSON.stringify({ configuracao: { filiais: [], centros: [] }, visoes: [], planos: [{ id: "novo", nome: "Novo", inicio: 2024, fim: 2026 }] })],
+  ]);
+  globalThis.localStorage = { getItem: (k) => dados.get(k) ?? null, setItem: () => {} };
+  try {
+    assert.deepEqual(carregarEstado().planos.map((p) => p.id), ["novo"]);
+  } finally {
+    if (original === undefined) delete globalThis.localStorage;
+    else globalThis.localStorage = original;
+  }
+});
 
 test("estado inicial tem visão e planos apontando para ela", () => {
   const estado = estadoInicial();
