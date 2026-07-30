@@ -78,6 +78,35 @@ test("plano tem um ano, e o rótulo dos meses usa ele", () => {
   assert.equal(mes(lista, 12).label, "12/2026");
 });
 
+// O razão tem lançamento com data futura (juros, pró-labore, aluguel,
+// depreciação são lançados com meses de antecedência). Mês que não aconteceu
+// não pode aparecer como realizado — nem no mês, nem no total.
+test("mês que ainda não aconteceu fica com realizado zero", () => {
+  const hoje = new Date();
+  const anoCorrente = hoje.getFullYear();
+  const mesCorrente = hoje.getMonth() + 1;
+  if (mesCorrente === 12) return; // dezembro não tem mês futuro no ano
+
+  const futuro = mesCorrente + 1;
+  const comFuturo = indexarRealizado([
+    { classificacao: CONTA, filial: "000001", centro: "002", mes: mesCorrente, debito: 0, credito: 100 },
+    { classificacao: CONTA, filial: "000001", centro: "002", mes: futuro, debito: 0, credito: 900 },
+  ]);
+
+  const lista = criarLinhasOrcamento({
+    plano: { ...criarPlano("p1", "Oficial", anoCorrente, "v1"), planejado: {} },
+    moduloId: MODULO,
+    filiais: FILIAIS,
+    contas: [CONTA],
+    realizado: comFuturo,
+    realizadoAnterior: indexarRealizado([]),
+  });
+
+  assert.equal(mes(lista, mesCorrente).realizado, 100);
+  assert.equal(mes(lista, futuro).realizado, 0);
+  assert.equal(totalDe(lista).realizado, 100);
+});
+
 // ---------------------------------------------------------------------------
 // Planejado por módulo, filial, centro e conta
 // ---------------------------------------------------------------------------

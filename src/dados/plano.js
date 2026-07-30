@@ -113,13 +113,22 @@ export function criarLinhasOrcamento({
     visaoContabil,
   };
 
+  // Mês que ainda não aconteceu não tem realizado, mesmo que o razão já tenha
+  // lançamento com data futura — e tem: juros de financiamento, pró-labore,
+  // aluguel e depreciação são lançados com meses de antecedência. Somá-los aqui
+  // punha em "Realizado" um valor de mês que nem começou, e ainda brigava com a
+  // média, que já divide só pelos meses com dado.
   const meses = MESES.map((mes) => {
     const linha = {
       id: mes,
       label: `${String(mes).padStart(2, "0")}/${ano}`,
       planejado: planejadoDoMes(plano, moduloId, filiais, centroId, contas, mes),
-      realizado: somarRealizado({ ...comum, indice: realizado, mes }),
-      anterior: somarRealizado({ ...comum, indice: realizadoAnterior, mes }),
+      realizado: mesTemRealizado(ano, mes)
+        ? somarRealizado({ ...comum, indice: realizado, mes })
+        : 0,
+      anterior: mesTemRealizado(ano - 1, mes)
+        ? somarRealizado({ ...comum, indice: realizadoAnterior, mes })
+        : 0,
     };
     return { ...linha, ...calcularVariacao(linha.realizado, linha.anterior) };
   });
