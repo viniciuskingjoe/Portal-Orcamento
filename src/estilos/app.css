@@ -2389,3 +2389,14 @@ dialog::backdrop {
     transition-duration: 0.01ms !important;
   }
 }
+
+/* Aviso que muda a leitura do número na tela, não só informa. */
+.modulo-aviso--atencao {
+  background: var(--warning-soft);
+  border-color: var(--warning);
+  color: var(--warning);
+}
+
+.modulo-aviso--atencao strong {
+  color: inherit;
+}

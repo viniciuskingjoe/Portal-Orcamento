@@ -1,5 +1,6 @@
 import Cabecalho from "../componentes/Cabecalho.jsx";
 import TabelaOrcamento from "../componentes/TabelaOrcamento.jsx";
+import Icone from "../componentes/Icone.jsx";
 import { Carregando } from "../componentes/Estados.jsx";
 import { DicaEdicao } from "../componentes/FiltrosOrcamento.jsx";
 import { conta as buscarConta } from "../dados/contas.js";
@@ -16,6 +17,7 @@ export default function TelaOrcamento({
   filiais,
   centros,
   contasDisponiveis,
+  filiaisIgnoradas,
   filtros,
   onAlterarFiltro,
   linhas,
@@ -55,11 +57,16 @@ export default function TelaOrcamento({
       <div className="filtros-orcamento">
         <label>
           <span>Filial</span>
+          {/* "Total" é o total das filiais EM USO, não do ERP inteiro. Dizer
+              "todas" faria o número parecer errado contra qualquer relatório que
+              não filtre filial. */}
           <select
             value={filtros.filial}
             onChange={(evento) => onAlterarFiltro({ filial: evento.target.value })}
           >
-            <option value="total">Total — todas as filiais</option>
+            <option value="total">
+              Total — {filiais.length} {filiais.length === 1 ? "filial em uso" : "filiais em uso"}
+            </option>
             {filiais.map((filial) => (
               <option value={filial.id} key={filial.id}>
                 {filial.nome}
@@ -96,6 +103,23 @@ export default function TelaOrcamento({
       </div>
 
       {carregandoRealizado ? <Carregando texto="Carregando realizado do ERP…" /> : null}
+
+      {/* Sem este aviso o total sai menor que o do ERP sem nada na tela explicar
+          por quê — foi exatamente o que gerou dúvida contra o Scoreplan. */}
+      {filiaisIgnoradas?.length ? (
+        <p className="modulo-aviso modulo-aviso--atencao">
+          <Icone nome="info" tamanho={16} />
+          <span>
+            {filiaisIgnoradas.length}{" "}
+            {filiaisIgnoradas.length === 1
+              ? "filial tem movimento no período e está fora"
+              : "filiais têm movimento no período e estão fora"}{" "}
+            das filiais em uso, então não entram nestes totais:{" "}
+            <strong>{filiaisIgnoradas.map((f) => f.nome ?? f.id).join(", ")}</strong>. Ajuste em
+            Configurações → Filiais.
+          </span>
+        </p>
+      ) : null}
 
       <div className="orcamento-layout">
         {/* Lista de contas à esquerda, como no ERP: escolhe-se a conta e lança-se

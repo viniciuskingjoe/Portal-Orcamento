@@ -9,7 +9,11 @@ import { correcaoDeSinal } from "./mapeamentoPadrao.js";
 // lançamentos de encerramento/apuração.
 // ============================================================================
 
-export const REALIZADO_VAZIO = { porChave: new Map(), porContaFilialMes: new Map() };
+export const REALIZADO_VAZIO = {
+  porChave: new Map(),
+  porContaFilialMes: new Map(),
+  filiais: new Set(),
+};
 
 function acumular(mapa, chave, linha) {
   const atual = mapa.get(chave) ?? { debito: 0, credito: 0 };
@@ -24,14 +28,24 @@ function acumular(mapa, chave, linha) {
 export function indexarRealizado(bruto) {
   const porChave = new Map();
   const porContaFilialMes = new Map();
+  // Filiais que têm movimento no período. Serve para avisar quando alguma delas
+  // está fora das filiais em uso — o total da tela sairia menor sem explicação.
+  const filiais = new Set();
 
   (bruto ?? []).forEach((linha) => {
     const centro = linha.centro ?? SEM_CENTRO;
     acumular(porChave, `${linha.classificacao}|${linha.filial}|${centro}|${linha.mes}`, linha);
     acumular(porContaFilialMes, `${linha.classificacao}|${linha.filial}|${linha.mes}`, linha);
+    filiais.add(linha.filial);
   });
 
-  return { porChave, porContaFilialMes };
+  return { porChave, porContaFilialMes, filiais };
+}
+
+// Filiais com movimento que estão fora da lista em uso.
+export function filiaisForaDoUso(indice, filiaisEmUso) {
+  const emUso = new Set((filiaisEmUso ?? []).map((filial) => filial.id));
+  return [...(indice?.filiais ?? [])].filter((id) => !emUso.has(id)).sort();
 }
 
 // O sinal é da CONTA, não do módulo, e sai de três camadas nesta ordem:

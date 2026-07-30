@@ -40,6 +40,11 @@ configurados nela.
 **Configurações** — filiais e centros de custo vêm do ERP. O portal só decide
 quais filiais usar.
 
+> O `Total` das telas de orçamento é o total das **filiais em uso**, não do ERP
+> inteiro. Comparando com um relatório que não filtra filial, a diferença é
+> exatamente o que ficou de fora — a tela avisa quando alguma filial com
+> movimento no período está fora da configuração.
+
 ```
 Visão "DRE 2026"  →  visão contábil 25 (DRE GERENCIAL)
 ├── Receita de vendas

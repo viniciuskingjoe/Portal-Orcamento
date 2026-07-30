@@ -2,7 +2,12 @@ import { strict as assert } from "node:assert";
 import { test } from "node:test";
 
 import { indexarContas } from "../src/dados/contas.js";
-import { indexarRealizado, somarRealizado, tipoDaConta } from "../src/dados/realizado.js";
+import {
+  filiaisForaDoUso,
+  indexarRealizado,
+  somarRealizado,
+  tipoDaConta,
+} from "../src/dados/realizado.js";
 import { SEM_CENTRO } from "../src/dados/visao.js";
 
 const FILIAIS = [{ id: "000001" }, { id: "000008" }];
@@ -159,4 +164,25 @@ test("linha sem centro entra como sem centro", () => {
   ]);
   assert.equal(somar({ indice: semCentro, contas: ["X"] }), 300);
   assert.equal(somar({ indice: semCentro, contas: ["X"], centroId: SEM_CENTRO }), 300);
+});
+
+// ---------------------------------------------------------------------------
+// Filiais com movimento fora da configuração
+// ---------------------------------------------------------------------------
+
+test("índice registra as filiais com movimento", () => {
+  assert.deepEqual([...indice.filiais].sort(), ["000001", "000008"]);
+  assert.deepEqual([...indexarRealizado([]).filiais], []);
+});
+
+test("aponta filial com movimento que está fora das em uso", () => {
+  // Sem esse aviso o total sai menor que o do ERP e parece erro de cálculo — foi
+  // o que gerou a dúvida contra o Scoreplan.
+  assert.deepEqual(filiaisForaDoUso(indice, [{ id: "000001" }]), ["000008"]);
+  assert.deepEqual(filiaisForaDoUso(indice, FILIAIS), []);
+  assert.deepEqual(filiaisForaDoUso(indice, []), ["000001", "000008"]);
+});
+
+test("filiais fora do uso não quebra com índice ausente", () => {
+  assert.deepEqual(filiaisForaDoUso(null, FILIAIS), []);
 });

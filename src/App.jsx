@@ -30,6 +30,7 @@ import {
   usaCentroDeCusto,
 } from "./dados/visao.js";
 import { conta as buscarConta } from "./dados/contas.js";
+import { filiaisForaDoUso } from "./dados/realizado.js";
 import { contasDoMapeamento, temMapeamentoPadrao } from "./dados/mapeamentoPadrao.js";
 import { MODULOS } from "./dados/modulos.js";
 import { carregarEstado, salvarEstado } from "./lib/persistencia.js";
@@ -137,6 +138,13 @@ export default function PlanejamentoOrcamentario() {
       .filter((codigo) => buscarConta(contas.catalogo, codigo)?.sintetica === false)
       .sort();
   }, [visaoDoPlano, moduloDaTela, filiaisDoFiltro, filtros.centro, contas.catalogo]);
+
+  // Filiais com movimento que ficaram de fora da configuração. Sem avisar, o
+  // total sai menor que o do ERP e parece erro de cálculo.
+  const filiaisIgnoradas = useMemo(() => {
+    const fora = filiaisForaDoUso(realizado.doAno, filiaisAtivas);
+    return fora.map((id) => erp.filiais.find((filial) => filial.id === id) ?? { id });
+  }, [realizado.doAno, filiaisAtivas, erp.filiais]);
 
   const contasDaTabela =
     filtros.conta === TODAS_AS_CONTAS ? contasDisponiveis : [filtros.conta];
@@ -525,6 +533,7 @@ export default function PlanejamentoOrcamentario() {
           filiais={filiaisAtivas}
           centros={erp.centros}
           contasDisponiveis={contasDisponiveis}
+          filiaisIgnoradas={filiaisIgnoradas}
           filtros={filtros}
           onAlterarFiltro={alterarFiltro}
           linhas={linhasOrcamento}
