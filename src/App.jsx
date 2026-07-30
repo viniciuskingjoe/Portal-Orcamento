@@ -297,10 +297,17 @@ export default function PlanejamentoOrcamentario() {
   // Render
   // --------------------------------------------------------------------------
 
-  function renderizarTela() {
-    // Sem o ERP não há filial, conta nem realizado: qualquer tela mostraria
-    // estrutura vazia sem explicar por quê.
-    if (erp.carregando) return <Carregando />;
+  // Só as telas que dependem do ERP esperam por ele. Visões, planos e a grade de
+  // módulos são dados do portal: travar tudo na carga escondia o botão de criar
+  // visão quando a API estava fora.
+  function exigirErp(conteudo) {
+    if (erp.carregando) {
+      return (
+        <main className="conteudo">
+          <Carregando />
+        </main>
+      );
+    }
     if (erp.erro) {
       return (
         <main className="conteudo">
@@ -308,7 +315,10 @@ export default function PlanejamentoOrcamentario() {
         </main>
       );
     }
+    return conteudo;
+  }
 
+  function renderizarTela() {
     if (tela === "visoes") {
       return (
         <TelaVisoes
@@ -332,12 +342,17 @@ export default function PlanejamentoOrcamentario() {
       );
     }
 
+    // A árvore de contas trata carregando/erro por dentro, para o cabeçalho e o
+    // filtro continuarem visíveis.
     if (tela === "visao-modulo" && visaoAberta && ehModulo(moduloAbertoId)) {
       return (
         <TelaVisaoModulo
           visao={visaoAberta}
           modulo={definicaoDoModulo(moduloAbertoId)}
           catalogo={erp.catalogo}
+          carregando={erp.carregando}
+          erro={erp.erro}
+          onRecarregar={erp.recarregar}
           onAlterarContas={(contasIds) =>
             alterarContasDoModulo(visaoAberta.id, moduloAbertoId, contasIds)
           }
@@ -347,7 +362,7 @@ export default function PlanejamentoOrcamentario() {
     }
 
     if (tela === "configuracoes") {
-      return (
+      return exigirErp(
         <TelaConfiguracoes
           filiais={erp.filiais}
           centros={erp.centros}
@@ -358,7 +373,7 @@ export default function PlanejamentoOrcamentario() {
     }
 
     if (TELAS_ERP.has(tela)) {
-      return (
+      return exigirErp(
         <TelaListaErp
           tela={tela}
           lista={tela === "filiais" ? erp.filiais : erp.centros}
@@ -380,7 +395,7 @@ export default function PlanejamentoOrcamentario() {
     }
 
     if (moduloDaTela && visaoDoPlano) {
-      return (
+      return exigirErp(
         <TelaOrcamento
           plano={planoAtivo}
           visao={visaoDoPlano}
@@ -392,6 +407,17 @@ export default function PlanejamentoOrcamentario() {
           linhas={linhasOrcamento}
           carregandoRealizado={realizado.carregando}
           edicao={edicao}
+          onVoltar={voltar}
+        />
+      );
+    }
+
+    if (tela === "home" && planoAtivo) {
+      return (
+        <TelaHome
+          plano={planoAtivo}
+          visao={visaoDoPlano}
+          onAbrirModulo={abrirModulo}
           onVoltar={voltar}
         />
       );

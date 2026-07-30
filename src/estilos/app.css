@@ -1639,6 +1639,89 @@ dialog::backdrop {
   font-size: 11.5px;
 }
 
+/* --- árvore de classificações ------------------------------------------- */
+
+.arvore-conta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 38px;
+  padding-right: 14px;
+  border-bottom: 1px solid var(--border);
+}
+
+.arvore-conta:last-child {
+  border-bottom: 0;
+}
+
+.arvore-conta:hover {
+  background: var(--surface-hover);
+}
+
+/* Grupo (CLASSIFICACAO_ANALITICA = 1) não recebe lançamento — marcar vale pelos
+   descendentes, e o negrito sinaliza isso. */
+.arvore-conta.is-grupo {
+  background: var(--surface-tint);
+}
+
+.arvore-conta.is-grupo code,
+.arvore-conta.is-grupo .arvore-conta__rotulo > span:last-child {
+  font-weight: 700;
+}
+
+.arvore-conta.is-marcada {
+  background: var(--accent-soft);
+}
+
+.arvore-toggle--vazio {
+  cursor: default;
+  background: transparent;
+}
+
+.arvore-conta__rotulo {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  display: grid;
+  grid-template-columns: 18px 132px 1fr;
+  align-items: center;
+  gap: 11px;
+  padding: 6px 0;
+  cursor: pointer;
+}
+
+.arvore-conta__rotulo input {
+  position: absolute;
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.arvore-conta__rotulo code {
+  color: var(--accent);
+  font-size: 11.5px;
+  font-variant-numeric: tabular-nums;
+}
+
+.arvore-conta__rotulo > span:last-child {
+  color: var(--text-soft);
+  font-size: 12.5px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.arvore-conta__rotulo input:checked + .checkbox-visual {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+
+.arvore-conta__rotulo input:focus-visible + .checkbox-visual {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
 /* Indentação pelo nível do código ("3" -> 0, "3.1.1.1.02" -> 4): a hierarquia do
    plano de contas fica legível sem virar uma árvore com toggles. */
 .conta-checkbox--nivel-1 {

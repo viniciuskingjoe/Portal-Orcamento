@@ -99,9 +99,8 @@ src/
 `plano.planejado` tem chave `modulo|filial|ano|mes`. **Célula sem valor digitado é
 zero**, não um número gerado — não existe planejamento que ninguém fez.
 
-Marcar uma classificação sintética em um módulo vale pelos descendentes: o
-lançamento fica nas folhas, e a hierarquia é seguida por `totalizaEm`, não pelo
-prefixo do código (no ERP `3.1.1.3` totaliza em `3.1.2`, apesar do código).
+Marcar um grupo em um módulo vale pelos descendentes: o lançamento fica nas
+folhas. A hierarquia é pelo prefixo do código, não por `totalizaEm`.
 
 Receita é lida como crédito − débito; despesa inverte. As duas voltam positivas,
 para a variação contra o planejado significar a mesma coisa nos dois casos.
@@ -127,32 +126,23 @@ curl "http://localhost:3000/api/realizado?ano=2025"
 
 | Rota | Objeto | Observação |
 |---|---|---|
-| `/api/contas` | `dbo.CTB_VISAO` | filtrado por `VISAO_CONTABIL = 03` e `INDICA_CTRL_ORCAMENTO = 1` |
+| `/api/contas` | `dbo.CTB_VISAO` | visão contábil 25, só classificações com ponto |
 | `/api/filiais` | `dbo.FILIAIS` | `COD_FILIAL` + `FILIAL` |
 | `/api/centros-de-custo` | `dbo.CTB_CENTRO_CUSTO` | só os com `INATIVA = 0` |
 | `/api/realizado` | `dbo.CTB_LANCAMENTO` + `_ITEM` | agregado por conta, filial e mês |
 
-`CTB_VISAO` é a árvore de classificação do Linx: `CLASSIFICACAO`,
-`DESCR_CONTA` e `CLASSIFICACAO_TOTALIZA_EM` (o pai), o que permite montar a
-hierarquia `3` → `3.1` → `3.1.1` → `3.1.1.1.02 COLEÇÃO`.
+A árvore se monta pelo PREFIXO do código: 3.1 -> 3.1.1 -> 3.1.1.01 -> 3.1.1.01.001.
+`CLASSIFICACAO_TOTALIZA_EM` NAO serve para isso: indica para onde o valor
+totaliza no DRE. A visão 25 tem 682 classificações com ponto (86 grupos, 596
+folhas) e 8 raízes; onde falta um nível intermediário (existe 4.1.2.01 mas não
+4.1.2), o nó sobe para o ancestral que existe.
 
 Colunas `char`/`varchar` do Linx vêm com espaço à direita — todo texto passa por
 `RTRIM` em `server/consultas.js`.
 
-### O que falta para o front consumir o banco
-
-| Arquivo | O que substituir |
-|---|---|
-| `src/dados/contas.js` | `contasDoModulo()` passa a ler `/api/contas` |
-| `src/dados/configuracao.js` | filiais e centros vêm de `/api/filiais` e `/api/centros-de-custo` |
-| `src/dados/mock.js` | `gerarRealizado()` passa a ler `/api/realizado` |
-| `src/lib/persistencia.js` | `localStorage` vira `fetch` da API |
-
-**Pendência no realizado:** os itens de lançamento gravam `CONTA_CONTABIL`
-(código de 6 dígitos, ex. `111101`), não a classificação da visão
-(`3.1.1.1.02`). Falta confirmar em que tabela vive o de/para conta →
-classificação — candidata: `dbo.CTB_CONTA_PLANO` — para agregar o realizado por
-módulo do portal.
+O realizado sai de `CTB_LANCAMENTO_ITEM`, que grava `CONTA_CONTABIL` (6 dígitos,
+ex. `111101`). O de/para conta → classificação está em `dbo.CTB_PLANO_VISAO`, com
+`OPERADOR` (+/−) e `PORCENTAGEM` de rateio — o join é feito na consulta.
 
 Regras que não podem ser afrouxadas (PADRAO §5): parâmetro sempre por bind,
 `Date` tipado como `DateTime2(3)`, ERP só por `SELECT`, nunca alterar tabela do

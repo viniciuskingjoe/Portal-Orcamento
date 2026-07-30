@@ -5,7 +5,7 @@ import { indexarContas } from "../src/dados/contas.js";
 import { indexarRealizado, somarRealizado } from "../src/dados/realizado.js";
 
 const catalogo = indexarContas([
-  { codigo: "3.1.1.1", descricao: "VENDA DE MERCADORIA", totalizaEm: "3.1.1", sintetica: true },
+  { codigo: "3.1.1.1", descricao: "VENDA DE MERCADORIA", totalizaEm: null, sintetica: true },
   { codigo: "3.1.1.1.01", descricao: "BAZAR", totalizaEm: "3.1.1.1", sintetica: false },
   { codigo: "3.1.1.1.02", descricao: "COLEÇÃO", totalizaEm: "3.1.1.1", sintetica: false },
   { codigo: "4.1", descricao: "CUSTOS", totalizaEm: null, sintetica: true },

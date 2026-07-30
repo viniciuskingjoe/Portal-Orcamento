@@ -37,8 +37,7 @@ function objeto(variavel, padrao = null) {
   return nome;
 }
 
-// Qual visão contábil do ERP fornece as contas do portal. Na KINGEJOE é a "03",
-// a única com INDICA_CTRL_ORCAMENTO — as demais não são orçamentárias.
+// Qual visão contábil do ERP fornece as contas do portal. Na KINGEJOE é a "07".
 function visaoContabil() {
   const valor = process.env.DB_VISAO_CONTABIL?.trim();
   if (!valor) {
@@ -49,22 +48,34 @@ function visaoContabil() {
   return valor;
 }
 
-// Plano de contas orçamentário. Substitui `contasDoModulo()` do front.
+// Classificações da visão contábil — a árvore que o usuário monta nos módulos.
 //
-// `totalizaEm` é o pai na hierarquia: permite montar a árvore
-// (Total -> 3 -> 3.1 -> 3.1.1 -> 3.1.1.1 -> 3.1.1.1.02 COLEÇÃO).
+// Só as que têm ponto no código. A visão 07 guarda dois esquemas na mesma
+// tabela: 969 linhas do plano de contas posicional (`1`, `11`, `111101`) e 142
+// da estrutura gerencial (`3.1`, `3.1.1`, `3.1.1.1.02`). É a segunda que
+// interessa; sem o filtro a lista viria com 1111 itens misturados.
+//
+// `INDICA_CTRL_ORCAMENTO` NÃO entra no filtro: na visão 07 é 0 em todas as
+// linhas, e filtrar por ele devolveria lista vazia.
+//
+// `sintetica` vem de CLASSIFICACAO_ANALITICA: 1 nos grupos (3.1, 3.1.1), 0 nas
+// folhas, que são as que recebem lançamento.
+//
+// `totalizaEm` volta só como informação — é para onde o valor totaliza no DRE,
+// NÃO o pai da árvore. Ex.: "3.1.1.3" totaliza em "3.1.2", mas na árvore é filho
+// de "3.1.1". A hierarquia se monta pelo prefixo do código, no front.
 export async function listarContas() {
   const tabela = objeto("DB_VIEW_CONTAS", "dbo.CTB_VISAO");
   return query(
     `
     SELECT
-      RTRIM(CLASSIFICACAO)               AS codigo,
-      RTRIM(DESCR_CONTA)                 AS descricao,
+      RTRIM(CLASSIFICACAO)                         AS codigo,
+      RTRIM(DESCR_CONTA)                           AS descricao,
       NULLIF(RTRIM(CLASSIFICACAO_TOTALIZA_EM), '') AS totalizaEm,
-      CLASSIFICACAO_ANALITICA            AS sintetica
+      CLASSIFICACAO_ANALITICA                      AS sintetica
     FROM ${tabela}
     WHERE RTRIM(VISAO_CONTABIL) = @visao
-      AND INDICA_CTRL_ORCAMENTO = 1
+      AND CHARINDEX('.', RTRIM(CLASSIFICACAO)) > 0
     ORDER BY CLASSIFICACAO
   `,
     { visao: visaoContabil() }
