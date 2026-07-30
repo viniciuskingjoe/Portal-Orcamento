@@ -18,7 +18,9 @@ function ItemNav({ id, titulo, icone, badge, ativo, onNavegar }) {
 
 export default function Sidebar({
   empresa,
-  configuracao,
+  // Fica `undefined` enquanto o ERP não respondeu: um badge "0" pareceria dado
+  // real, como se o ERP não tivesse filial nenhuma.
+  badgeConfiguracoes,
   planoAtivo,
   visaoDoPlano,
   tela,
@@ -27,7 +29,6 @@ export default function Sidebar({
   onAlternarTema,
 }) {
   const modulos = visaoDoPlano ? modulosDaVisao(visaoDoPlano) : [];
-  const totalDeConfiguracoes = configuracao.filiais.length + configuracao.centros.length;
 
   return (
     <aside className="sidebar">
@@ -68,7 +69,7 @@ export default function Sidebar({
           id="configuracoes"
           titulo="Configurações"
           icone="settings"
-          badge={totalDeConfiguracoes}
+          badge={badgeConfiguracoes}
           ativo={tela === "configuracoes" || tela === "filiais" || tela === "centros"}
           onNavegar={onNavegar}
         />

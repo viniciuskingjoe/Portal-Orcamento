@@ -13,20 +13,20 @@ Requer Node.js 20 ou superior.
 
 ```bash
 npm install
-npm run dev:all  # API + front juntos — é o que você quer no dia a dia
+npm run dev      # sobe a API e o front juntos — é o comando do dia a dia
 npm test         # testes da camada de dados
 npm run build    # build de produção em dist/
 
 # separados, se precisar:
-npm run api      # API em http://localhost:3000 — precisa de .env
-npm run dev      # front em http://localhost:5173
+npm run api      # só a API, em http://localhost:3000 (precisa de .env)
+npm run dev:web  # só o front, em http://localhost:5173
 ```
 
 O Vite encaminha `/api/*` para a API, então dev e produção usam a mesma origem.
 
-**Rodar só `npm run dev` deixa as telas do ERP sem dados**: o proxy responde 500
-quando não alcança o backend. A tela avisa e manda rodar a API — mas `dev:all`
-evita o problema.
+`npm run dev` sobe os dois de propósito: com só o front no ar, o proxy responde
+500 (`ECONNREFUSED`) e toda tela que depende do ERP fica vazia. A tela avisa o
+motivo, mas o certo é não deixar acontecer.
 
 ## Conceitos
 

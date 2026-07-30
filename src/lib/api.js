@@ -1,7 +1,8 @@
 // Cliente da API do portal. O Vite encaminha /api/* para o backend, então em
 // dev e em produção o caminho é o mesmo — sem base URL configurável, sem CORS.
 
-const RODAR_API = "A API não está respondendo. Rode `npm run api` (ou `npm run dev:all`).";
+const RODAR_API =
+  "A API não está respondendo. Pare o servidor e rode `npm run dev`, que sobe a API junto com o front.";
 
 class ErroDaApi extends Error {
   constructor(mensagem, status) {

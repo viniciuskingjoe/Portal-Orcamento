@@ -9,7 +9,7 @@ if (!existsSync(".env")) {
   process.exit(1);
 }
 
-// Argumentos extras vão para o Vite: `npm run dev:all -- --host` ou `-- --open false`.
+// Argumentos extras vão para o Vite: `npm run dev -- --host` ou `-- --open false`.
 const extras = process.argv.slice(2);
 
 // Chama o Vite pelo entry dele em vez de `npx vite`: sem `shell: true`, que o

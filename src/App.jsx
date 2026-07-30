@@ -437,7 +437,9 @@ export default function PlanejamentoOrcamentario() {
     <div className="app">
       <Sidebar
         empresa={EMPRESA}
-        configuracao={{ filiais: erp.filiais, centros: erp.centros }}
+        badgeConfiguracoes={
+          erp.carregando || erp.erro ? undefined : erp.filiais.length + erp.centros.length
+        }
         planoAtivo={planoAtivo}
         visaoDoPlano={visaoDoPlano}
         tela={tela}

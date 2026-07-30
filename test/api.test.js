@@ -44,13 +44,13 @@ test("500 sem corpo aponta que a API está fora", async () => {
   // vazio. A mensagem antes era "Erro 500 em /api/contas", que não diz o que
   // fazer — e o usuário lê como bug do portal.
   await comFetch(resposta(500, ""), async () => {
-    await assert.rejects(api.contas(), /npm run api/);
+    await assert.rejects(api.contas(), /npm run dev/);
   });
 });
 
 test("500 com HTML também aponta a API fora", async () => {
   await comFetch(resposta(500, "<html>Internal Server Error</html>"), async () => {
-    await assert.rejects(api.contas(), /npm run api/);
+    await assert.rejects(api.contas(), /npm run dev/);
   });
 });
 
@@ -60,7 +60,7 @@ test("falha de rede aponta a API fora", async () => {
     throw new TypeError("Failed to fetch");
   };
   try {
-    await assert.rejects(api.contas(), /npm run api/);
+    await assert.rejects(api.contas(), /npm run dev/);
   } finally {
     globalThis.fetch = original;
   }
