@@ -3,10 +3,10 @@
 Planejamento orçamentário da King & Joe / AKR Brands. Front em React + Vite,
 API em Node + Express sobre SQL Server.
 
-> **Estado atual: front funcional sobre mock; API sem credencial.** As telas
-> funcionam com números gerados e as edições ficam no `localStorage`. O backend
-> está no ar mas ainda não tem `.env` nem os nomes das views do ERP. Não use
-> como fonte de verdade contábil.
+> **Estado atual: API conectada; front ainda sobre mock.** A conexão com o
+> SQL Server funciona e as rotas devolvem dados reais (contas, filiais, centros
+> de custo, lançamentos). As telas, porém, ainda leem números gerados e gravam
+> no `localStorage`. Não use como fonte de verdade contábil.
 
 ## Executar
 
@@ -30,8 +30,8 @@ módulos do orçamento, quais contas o compõem. Ex.: `DRE 2025`.
 **Plano** — escolhe **uma visão** na criação. Os módulos que o plano orça são os
 módulos configurados naquela visão; um módulo sem conta selecionada não aparece.
 
-**Configurações do plano** — filiais e centros de custo. São dimensões do plano,
-não da visão.
+**Configurações** — filiais e centros de custo. São **globais** do portal, não de
+um plano: os dois vêm do ERP e valem para todos os planos.
 
 ```
 Visões (global)
@@ -42,8 +42,11 @@ Visões (global)
     ├── Custos variáveis              —
     └── … (8 módulos fixos)
 
+Configurações (global)
+├── Filiais
+└── Centro de Custos
+
 Plano "Oficial"  → visão DRE 2025
-├── Configurações → Filiais, Centro de Custos
 └── Orçamentos    → só os módulos com conta na DRE 2025
                     → tabela mensal (planejado / realizado / ano anterior)
 ```
@@ -57,7 +60,7 @@ Os 8 módulos são fixos em [src/dados/modulos.js](src/dados/modulos.js):
 server/
 ├── index.js                 Express + rotas /api/*
 ├── sqlserver.js             pool mssql, query/queryOne/transaction
-└── consultas.js             SELECTs do ERP        ← views a confirmar
+└── consultas.js             SELECTs do ERP (views confirmadas)
 
 src/
 ├── main.jsx                 entrada; importa os CSS
@@ -66,6 +69,7 @@ src/
 │   ├── modulos.js           os 8 módulos fixos (+ parâmetro do mock)
 │   ├── contas.js            plano de contas       ← provisório
 │   ├── visao.js             modelo da visão
+│   ├── configuracao.js      filiais e centros (global) ← trocar pelo banco
 │   ├── seeds.js             dimensões e visão iniciais
 │   ├── calendario.js        até que mês existe "realizado"
 │   ├── mock.js              geradores determinísticos  ← trocar pelo banco
@@ -94,36 +98,57 @@ Duas consequências desejadas:
   zerados, sem divergir entre os dois.
 - Um módulo sem conta na visão devolve zeros em vez de número inventado.
 
-## Ligar no banco
+## Banco
 
-O backend já sobe e responde. Falta:
+Copie [.env.example](.env.example) para `.env` e preencha as credenciais. O
+`.env` está no `.gitignore` e nunca deve ser commitado. Use uma **conta de
+serviço**, não uma conta pessoal, e não sysadmin.
 
-1. **`.env`** — copie de [.env.example](.env.example) e preencha. Use uma
-   **conta de serviço** do SQL Server, não uma conta pessoal, e não sysadmin.
-   O `.env` está no `.gitignore` e nunca deve ser commitado.
-2. **Nomes das views** — `DB_VIEW_CONTAS`, `DB_VIEW_FILIAIS`, `DB_VIEW_CENTROS`,
-   `DB_VIEW_REALIZADO`. Sem elas a rota responde `503` dizendo o que falta.
-3. **Colunas** — os SELECTs em `server/consultas.js` estão com a forma esperada,
-   mas os nomes de coluna são suposições. Ajustar ao confirmar.
-
-Verificar a conexão:
+Verificar:
 
 ```bash
-curl http://localhost:3000/api/health     # { ok: true, banco: "KINGEJOE", ... }
+npm run api
+curl http://localhost:3000/api/health            # { ok: true, banco: "KINGEJOE" }
 curl http://localhost:3000/api/contas
+curl http://localhost:3000/api/filiais
+curl http://localhost:3000/api/centros-de-custo
+curl "http://localhost:3000/api/realizado?ano=2025"
 ```
 
-Depois disso, a troca do mock pelo banco é local:
+### Objetos usados (KINGEJOE)
+
+| Rota | Objeto | Observação |
+|---|---|---|
+| `/api/contas` | `dbo.CTB_VISAO` | filtrado por `VISAO_CONTABIL = 03` e `INDICA_CTRL_ORCAMENTO = 1` |
+| `/api/filiais` | `dbo.FILIAIS` | `COD_FILIAL` + `FILIAL` |
+| `/api/centros-de-custo` | `dbo.CTB_CENTRO_CUSTO` | só os com `INATIVA = 0` |
+| `/api/realizado` | `dbo.CTB_LANCAMENTO` + `_ITEM` | agregado por conta, filial e mês |
+
+`CTB_VISAO` é a árvore de classificação do Linx: `CLASSIFICACAO`,
+`DESCR_CONTA` e `CLASSIFICACAO_TOTALIZA_EM` (o pai), o que permite montar a
+hierarquia `3` → `3.1` → `3.1.1` → `3.1.1.1.02 COLEÇÃO`.
+
+Colunas `char`/`varchar` do Linx vêm com espaço à direita — todo texto passa por
+`RTRIM` em `server/consultas.js`.
+
+### O que falta para o front consumir o banco
 
 | Arquivo | O que substituir |
 |---|---|
 | `src/dados/contas.js` | `contasDoModulo()` passa a ler `/api/contas` |
+| `src/dados/configuracao.js` | filiais e centros vêm de `/api/filiais` e `/api/centros-de-custo` |
 | `src/dados/mock.js` | `gerarRealizado()` passa a ler `/api/realizado` |
-| `src/dados/seeds.js` | filiais e centros vêm de `/api/filiais` e `/api/centros-de-custo` |
 | `src/lib/persistencia.js` | `localStorage` vira `fetch` da API |
 
+**Pendência no realizado:** os itens de lançamento gravam `CONTA_CONTABIL`
+(código de 6 dígitos, ex. `111101`), não a classificação da visão
+(`3.1.1.1.02`). Falta confirmar em que tabela vive o de/para conta →
+classificação — candidata: `dbo.CTB_CONTA_PLANO` — para agregar o realizado por
+módulo do portal.
+
 Regras que não podem ser afrouxadas (PADRAO §5): parâmetro sempre por bind,
-`Date` tipado como `DateTime2(3)`, ERP só por `SELECT` em view.
+`Date` tipado como `DateTime2(3)`, ERP só por `SELECT`, nunca alterar tabela do
+ERP.
 
 ## Padrão visual
 
@@ -151,14 +176,18 @@ Os componentes não têm teste automatizado — foram verificados por renderiza�
 
 ## Pendências conhecidas
 
-- **API sem `.env` e sem os nomes das views** — é o próximo passo.
-- **Plano de contas incompleto**: só receita (`3.1.1.x`) e dedução (`3.1.9.x`).
-  Custos variáveis, despesas operacionais, despesas com pessoal e outras
-  despesas ainda oferecem a lista de dedução como provisório.
+- **O front ainda não consome a API** — as rotas funcionam, mas as telas leem o
+  mock. É o próximo passo.
+- **De/para conta contábil → classificação** não confirmado, o que bloqueia
+  agregar o realizado por módulo (ver seção Banco).
+- **Plano de contas do front ainda é provisório**: só receita (`3.1.1.x`) e
+  dedução (`3.1.9.x`) em `src/dados/contas.js`. Custos variáveis, despesas
+  operacionais, despesas com pessoal e outras despesas oferecem a lista de
+  dedução até `/api/contas` ser ligado.
 - Sem autenticação nem RBAC (o padrão exige enforcement no backend).
 - Sem deploy: falta `deploy/setup.sh` e service systemd.
 - `localStorage` tem limite de ~5 MB; a aplicação avisa na tela se a gravação
   falhar.
-- **Dados locais da versão anterior foram descartados**: o modelo mudou (canais
-  e deduções saíram, visões entraram) e a chave de armazenamento subiu para
-  `:v2`.
+- **Chave de armazenamento em `:v3`.** A v2 (filiais e centros dentro do plano) é
+  migrada na leitura, com união por id entre os planos. A v1 (canais e deduções)
+  não tem equivalente e é ignorada.
