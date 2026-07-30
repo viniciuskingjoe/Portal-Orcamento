@@ -11,31 +11,54 @@ import sql from "mssql";
 //   - dados do ERP (Linx) só por `SELECT` em view; nunca alterar tabela do ERP.
 // ============================================================================
 
-function obrigatorio(nome) {
-  const valor = process.env[nome];
+// Aceita os nomes `SQLSERVER_*` (padrão dos outros portais) e cai nos `DB_*`
+// como alternativa. Valor vazio conta como não definido: `VAR=` no .env é
+// descuido comum, e tratar "" como valor faria o pool subir com host vazio.
+function ler(nomes) {
+  for (const nome of nomes) {
+    const valor = process.env[nome];
+    if (valor != null && valor.trim() !== "") return valor.trim();
+  }
+  return null;
+}
+
+function obrigatorio(nomes) {
+  const valor = ler(nomes);
   if (!valor) {
     throw new Error(
-      `Variável de ambiente ${nome} não definida. Copie .env.example para .env e preencha.`
+      `Variável de ambiente ${nomes[0]} não definida. Copie .env.example para .env e preencha.`
     );
   }
   return valor;
 }
 
+function booleano(nomes, padrao) {
+  const valor = ler(nomes);
+  if (valor == null) return padrao;
+  return !["false", "0", "no", "nao", "não"].includes(valor.toLowerCase());
+}
+
+function numero(nomes, padrao) {
+  const valor = Number(ler(nomes));
+  return Number.isFinite(valor) && valor > 0 ? valor : padrao;
+}
+
 function configuracao() {
   return {
-    server: obrigatorio("DB_HOST"),
-    database: obrigatorio("DB_NAME"),
-    user: obrigatorio("DB_USER"),
-    password: obrigatorio("DB_PASS"),
-    port: Number(process.env.DB_PORT ?? 1433),
+    server: obrigatorio(["SQLSERVER_HOST", "DB_HOST"]),
+    database: obrigatorio(["SQLSERVER_DATABASE", "DB_NAME"]),
+    user: obrigatorio(["SQLSERVER_USER", "DB_USER"]),
+    password: obrigatorio(["SQLSERVER_PASSWORD", "DB_PASS"]),
+    port: numero(["SQLSERVER_PORT", "DB_PORT"], 1433),
     options: {
-      // Instância interna com certificado próprio; a conexão continua criptografada.
-      encrypt: process.env.DB_ENCRYPT !== "false",
-      trustServerCertificate: process.env.DB_TRUST_CERT !== "false",
+      encrypt: booleano(["SQLSERVER_ENCRYPT", "DB_ENCRYPT"], true),
+      // Instância on-premise sem certificado assinado por CA pública.
+      trustServerCertificate: booleano(["SQLSERVER_TRUST_CERTIFICATE", "DB_TRUST_CERT"], true),
       enableArithAbort: true,
     },
     pool: { max: 10, min: 0, idleTimeoutMillis: 30000 },
-    requestTimeout: Number(process.env.DB_TIMEOUT ?? 30000),
+    connectionTimeout: numero(["SQLSERVER_TIMEOUT", "DB_TIMEOUT"], 30000),
+    requestTimeout: numero(["SQLSERVER_TIMEOUT", "DB_TIMEOUT"], 30000),
   };
 }
 
