@@ -13,13 +13,20 @@ Requer Node.js 20 ou superior.
 
 ```bash
 npm install
-npm run dev      # front em http://localhost:5173 (com Fast Refresh)
-npm run api      # API em http://localhost:3000 — precisa de .env
+npm run dev:all  # API + front juntos — é o que você quer no dia a dia
 npm test         # testes da camada de dados
 npm run build    # build de produção em dist/
+
+# separados, se precisar:
+npm run api      # API em http://localhost:3000 — precisa de .env
+npm run dev      # front em http://localhost:5173
 ```
 
 O Vite encaminha `/api/*` para a API, então dev e produção usam a mesma origem.
+
+**Rodar só `npm run dev` deixa as telas do ERP sem dados**: o proxy responde 500
+quando não alcança o backend. A tela avisa e manda rodar a API — mas `dev:all`
+evita o problema.
 
 ## Conceitos
 

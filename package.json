@@ -9,6 +9,7 @@
   "scripts": {
     "dev": "vite",
     "api": "node --env-file=.env server/index.js",
+    "dev:all": "node scripts/dev.mjs",
     "build": "vite build",
     "preview": "vite preview",
     "test": "node --test"

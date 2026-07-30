@@ -1,6 +1,8 @@
 // Cliente da API do portal. O Vite encaminha /api/* para o backend, então em
 // dev e em produção o caminho é o mesmo — sem base URL configurável, sem CORS.
 
+const RODAR_API = "A API não está respondendo. Rode `npm run api` (ou `npm run dev:all`).";
+
 class ErroDaApi extends Error {
   constructor(mensagem, status) {
     super(mensagem);
@@ -19,14 +21,29 @@ async function buscar(caminho, parametros) {
   try {
     resposta = await fetch(url, { headers: { Accept: "application/json" } });
   } catch (erro) {
-    // API no ar é pré-requisito: sem ela não há dado nenhum, e a mensagem
-    // genérica de rede não diz o que fazer.
-    throw new ErroDaApi(`Não foi possível falar com a API (${erro.message}). Ela está rodando? \`npm run api\``, 0);
+    throw new ErroDaApi(`${RODAR_API} (${erro.message})`, 0);
   }
 
-  const corpo = await resposta.json().catch(() => null);
+  // Lê como texto para poder distinguir "a API respondeu um erro" de "quem
+  // respondeu não foi a API". Quando o backend está fora, o proxy do Vite
+  // devolve 500 com HTML — e `Erro 500 em /api/contas` não diz o que fazer.
+  const texto = await resposta.text();
+  let corpo = null;
+  try {
+    corpo = texto ? JSON.parse(texto) : null;
+  } catch {
+    corpo = null;
+  }
+
   if (!resposta.ok) {
-    throw new ErroDaApi(corpo?.erro ?? `Erro ${resposta.status} em ${caminho}`, resposta.status);
+    if (corpo?.erro) throw new ErroDaApi(corpo.erro, resposta.status);
+    // Sem JSON no corpo, o erro não veio do nosso handler: é o proxy sem alcançar
+    // o backend, ou um intermediário no caminho.
+    throw new ErroDaApi(`${RODAR_API} (HTTP ${resposta.status} em ${caminho})`, resposta.status);
+  }
+
+  if (corpo == null) {
+    throw new ErroDaApi(`Resposta inesperada em ${caminho}: não era JSON.`, resposta.status);
   }
   return corpo;
 }
