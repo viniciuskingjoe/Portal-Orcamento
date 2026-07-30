@@ -2,11 +2,7 @@ import { strict as assert } from "node:assert";
 import { test } from "node:test";
 
 import { indexarContas } from "../src/dados/contas.js";
-import {
-  contasDoMapeamento,
-  inversoesDoMapeamento,
-  temMapeamentoPadrao,
-} from "../src/dados/mapeamentoPadrao.js";
+import { contasDoMapeamento, correcaoDeSinal, temMapeamentoPadrao } from "../src/dados/mapeamentoPadrao.js";
 
 const catalogo = indexarContas([
   { codigo: "3.1.1.01", descricao: "RECEITA BRUTA", totalizaEm: null, sintetica: true, grupo: "R" },
@@ -49,11 +45,12 @@ test("módulo sem equivalente no Scoreplan devolve vazio", () => {
   assert.deepEqual(contasDoMapeamento(catalogo, "despesas-pessoal"), []);
 });
 
-test("inversões cobrem as contas de receita marcadas como despesa no ERP", () => {
-  // 4.6.5.01 é INDENIZAÇÃO DE SEGUROS: receita cadastrada como DF.
-  assert.deepEqual(inversoesDoMapeamento(catalogo), ["4.6.5.01.001"]);
-});
-
-test("inversões só listam o que existe no catálogo", () => {
-  assert.deepEqual(inversoesDoMapeamento(indexarContas([])), []);
+test("correção de sinal vale por prefixo e por visão contábil", () => {
+  // 4.6.5.01 é INDENIZAÇÃO DE SEGUROS: receita cadastrada como DF no ERP.
+  assert.equal(correcaoDeSinal("25", "4.6.5.01.001"), "receita");
+  assert.equal(correcaoDeSinal("25", "4.6.5.02.007"), "receita");
+  assert.equal(correcaoDeSinal("25", "4.4.1.01.001"), null, "conta normal não é corrigida");
+  assert.equal(correcaoDeSinal("21", "4.6.5.01.001"), null, "outra visão não herda");
+  assert.equal(correcaoDeSinal(null, "4.6.5.01.001"), null);
+  assert.equal(correcaoDeSinal("25", null), null);
 });

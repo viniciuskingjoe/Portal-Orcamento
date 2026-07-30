@@ -142,32 +142,31 @@ export function contasEfetivasDoModulo(visao, moduloId, filialId, centroId = SEM
 }
 
 // --------------------------------------------------------------------------
-// Exceções de sinal
+// Sinal por conta
 //
-// O sinal de cada conta vem do LX_GRUPO_CONTABIL dela (R é receita). Algumas
-// contas estão classificadas errado no ERP — 4.6.5.01 INDENIZAÇÃO DE SEGUROS e
-// 4.6.5.02 OUTRAS RECEITAS são receita marcada como DF. Aqui ficam as exceções,
-// por módulo.
+// O sinal sai do LX_GRUPO_CONTABIL da conta, com as correções conhecidas por
+// cima (ver dados/mapeamentoPadrao.js). Aqui fica só o que o usuário definiu à
+// mão, que ganha das duas camadas.
+//
+// Guardar o tipo, e não um "inverter", evita ambiguidade: com uma correção
+// automática embaixo, "inverter" mudaria de significado conforme a correção
+// existisse ou não.
 // --------------------------------------------------------------------------
 
-export function contasInvertidas(visao, moduloId) {
-  const lista = moduloDaVisao(visao, moduloId).inverter;
-  return Array.isArray(lista) ? lista : [];
+export function sinaisDoModulo(visao, moduloId) {
+  const sinais = moduloDaVisao(visao, moduloId).sinais;
+  return sinais && typeof sinais === "object" ? sinais : {};
 }
 
-export function definirContasInvertidas(visao, moduloId, codigos) {
+export function definirSinalDaConta(visao, moduloId, codigo, tipo) {
   const modulo = moduloDaVisao(visao, moduloId);
-  return {
-    ...visao,
-    modulos: { ...visao.modulos, [moduloId]: { ...modulo, inverter: [...new Set(codigos)] } },
-  };
-}
+  const sinais = { ...sinaisDoModulo(visao, moduloId) };
 
-export function alternarInversao(visao, moduloId, codigo) {
-  const atuais = new Set(contasInvertidas(visao, moduloId));
-  if (atuais.has(codigo)) atuais.delete(codigo);
-  else atuais.add(codigo);
-  return definirContasInvertidas(visao, moduloId, [...atuais]);
+  // `null` volta a conta para o comportamento automático.
+  if (tipo === "receita" || tipo === "despesa") sinais[codigo] = tipo;
+  else delete sinais[codigo];
+
+  return { ...visao, modulos: { ...visao.modulos, [moduloId]: { ...modulo, sinais } } };
 }
 
 // --------------------------------------------------------------------------

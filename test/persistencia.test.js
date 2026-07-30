@@ -57,7 +57,7 @@ test("ida e volta preserva visão, filiais ativas e planejado", () => {
         modulos: {
           "receita-vendas": {
             usaCentro: false,
-            inverter: [],
+            sinais: {},
             filiais: { "000025": { contas: ["3.1.1.01.001"], centros: {} } },
           },
         },

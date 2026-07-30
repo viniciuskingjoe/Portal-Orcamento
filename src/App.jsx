@@ -20,22 +20,17 @@ import { ehModulo, modulo as definicaoDoModulo } from "./dados/modulos.js";
 import { chavePlanejado, criarLinhasOrcamento, criarPlano, gerarId } from "./dados/plano.js";
 import {
   SEM_CENTRO,
-  alternarInversao,
   contasEfetivasDoModulo,
-  contasInvertidas,
   criarVisao,
-  definirContasInvertidas,
+  definirSinalDaConta,
+  sinaisDoModulo,
   definirContasDaFilial,
   definirContasDoCentro,
   definirUsaCentroDeCusto,
   usaCentroDeCusto,
 } from "./dados/visao.js";
 import { conta as buscarConta } from "./dados/contas.js";
-import {
-  contasDoMapeamento,
-  inversoesDoMapeamento,
-  temMapeamentoPadrao,
-} from "./dados/mapeamentoPadrao.js";
+import { contasDoMapeamento, temMapeamentoPadrao } from "./dados/mapeamentoPadrao.js";
 import { MODULOS } from "./dados/modulos.js";
 import { carregarEstado, salvarEstado } from "./lib/persistencia.js";
 import { formatarParaEdicao, parseNumeroPtBr } from "./lib/formato.js";
@@ -155,7 +150,8 @@ export default function PlanejamentoOrcamentario() {
       centroId: filtros.centro,
       contas: contasDaTabela,
       catalogo: contas.catalogo,
-      inverter: new Set(contasInvertidas(visaoDoPlano, moduloDaTela.id)),
+      sinais: sinaisDoModulo(visaoDoPlano, moduloDaTela.id),
+      visaoContabil: visaoDoPlano?.visaoContabil,
       realizado: realizado.doAno,
       realizadoAnterior: realizado.doAnoAnterior,
     });
@@ -297,8 +293,6 @@ export default function PlanejamentoOrcamentario() {
   // visão continua sendo escolha de quem monta.
   function aplicarMapeamentoPadrao() {
     if (!visaoAberta || !temMapeamentoPadrao(visaoAberta.visaoContabil)) return;
-    const inversoes = inversoesDoMapeamento(contas.catalogo);
-
     atualizarVisaoAberta((visao) => {
       let proxima = visao;
       MODULOS.forEach((modulo) => {
@@ -307,10 +301,6 @@ export default function PlanejamentoOrcamentario() {
         filiaisAtivas.forEach((filial) => {
           proxima = definirContasDaFilial(proxima, modulo.id, filial.id, codigos);
         });
-        const doModulo = inversoes.filter((codigo) => codigos.includes(codigo));
-        if (doModulo.length) {
-          proxima = definirContasInvertidas(proxima, modulo.id, doModulo);
-        }
       });
       return proxima;
     });
@@ -480,8 +470,8 @@ export default function PlanejamentoOrcamentario() {
           onAlternarUsaCentro={(moduloId, usa) =>
             atualizarVisaoAberta((visao) => definirUsaCentroDeCusto(visao, moduloId, usa))
           }
-          onAlternarInversao={(moduloId, codigo) =>
-            atualizarVisaoAberta((visao) => alternarInversao(visao, moduloId, codigo))
+          onDefinirSinal={(moduloId, codigo, tipo) =>
+            atualizarVisaoAberta((visao) => definirSinalDaConta(visao, moduloId, codigo, tipo))
           }
           onVoltar={voltar}
         />

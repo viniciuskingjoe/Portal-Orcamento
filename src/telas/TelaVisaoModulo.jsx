@@ -17,7 +17,7 @@ import { tipoDaConta } from "../dados/realizado.js";
 import {
   SEM_CENTRO,
   centrosDaFilial,
-  contasInvertidas,
+  sinaisDoModulo,
   contasDaFilial,
   contasDoCentro,
   usaCentroDeCusto,
@@ -91,12 +91,12 @@ function Linha({ item, estado, marcadosAbaixo, sinal, onInverter, onAlternar, on
       {sinal ? (
         <button
           type="button"
-          className={`arvore-conta__sinal is-${sinal.tipo} ${sinal.invertido ? "is-invertido" : ""}`}
-          onClick={() => onInverter(item.codigo)}
+          className={`arvore-conta__sinal is-${sinal.tipo} ${sinal.manual ? "is-invertido" : ""}`}
+          onClick={() => onInverter(item.codigo, sinal)}
           title={
-            sinal.invertido
-              ? `Lida como ${sinal.tipo}, invertido do grupo ${sinal.grupo}. Clique para voltar.`
-              : `Lida como ${sinal.tipo} (grupo ${sinal.grupo}). Clique para inverter.`
+            sinal.manual
+              ? `Definida à mão como ${sinal.tipo}. Clique para voltar ao automático (${sinal.automatico}).`
+              : `Lida como ${sinal.tipo} (grupo ${sinal.grupo}). Clique para definir o contrário.`
           }
         >
           {sinal.tipo === "receita" ? "+ receita" : "− despesa"}
@@ -122,7 +122,7 @@ export default function TelaVisaoModulo({
   onDefinirContasDaFilial,
   onDefinirContasDoCentro,
   onAlternarUsaCentro,
-  onAlternarInversao,
+  onDefinirSinal,
   onVoltar,
 }) {
   const usaCentro = usaCentroDeCusto(visao, modulo.id);
@@ -206,17 +206,21 @@ export default function TelaVisaoModulo({
       return proximo;
     });
 
-  const invertidas = useMemo(
-    () => new Set(contasInvertidas(visao, modulo.id)),
-    [visao, modulo.id]
-  );
+  const sinais = useMemo(() => sinaisDoModulo(visao, modulo.id), [visao, modulo.id]);
+  const contexto = { sinais, visaoContabil: visao.visaoContabil };
 
   const sinalDaConta = (item) => {
     if (item.sintetica !== false || !marcadas.has(item.codigo)) return null;
+    const tipo = tipoDaConta(catalogo, item.codigo, modulo.tipo, contexto);
+    // Automático seria o mesmo cálculo sem o que o usuário definiu à mão.
+    const automatico = tipoDaConta(catalogo, item.codigo, modulo.tipo, {
+      visaoContabil: visao.visaoContabil,
+    });
     return {
-      tipo: tipoDaConta(catalogo, item.codigo, modulo.tipo, invertidas),
+      tipo,
       grupo: item.grupo ?? modulo.grupo,
-      invertido: invertidas.has(item.codigo),
+      manual: !!sinais[item.codigo] && sinais[item.codigo] !== automatico,
+      automatico,
     };
   };
 
@@ -387,7 +391,14 @@ export default function TelaVisaoModulo({
                             : 0
                         }
                         sinal={sinalDaConta(item)}
-                        onInverter={(codigo) => onAlternarInversao(modulo.id, codigo)}
+                        onInverter={(codigo, sinal) =>
+                          onDefinirSinal(
+                            modulo.id,
+                            codigo,
+                            // Já manual volta ao automático; senão fixa o contrário.
+                            sinal.manual ? null : sinal.tipo === "receita" ? "despesa" : "receita"
+                          )
+                        }
                         onAlternar={alternar}
                         onAlternarNo={alternarNo}
                       />

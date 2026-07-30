@@ -92,7 +92,8 @@ export function criarLinhasOrcamento({
   centroId = SEM_CENTRO,
   contas,
   catalogo = CATALOGO_VAZIO,
-  inverter,
+  sinais,
+  visaoContabil,
   realizado,
   realizadoAnterior,
 }) {
@@ -102,7 +103,15 @@ export function criarLinhasOrcamento({
 
   // O sinal é decidido conta a conta pelo grupo contábil dela, não pelo tipo do
   // módulo: "Outras despesas" contém contas de receita.
-  const comum = { contas, filiais, centroId, catalogo, tipoPadrao: modulo.tipo, inverter };
+  const comum = {
+    contas,
+    filiais,
+    centroId,
+    catalogo,
+    tipoPadrao: modulo.tipo,
+    sinais,
+    visaoContabil,
+  };
 
   const meses = MESES.map((mes) => {
     const linha = {

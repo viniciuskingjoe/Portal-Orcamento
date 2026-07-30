@@ -30,6 +30,14 @@ function listaDeTexto(valor) {
   return Array.isArray(valor) ? valor.filter((item) => typeof item === "string") : [];
 }
 
+function normalizarSinais(bruto) {
+  const sinais = {};
+  Object.entries(bruto ?? {}).forEach(([codigo, tipo]) => {
+    if (tipo === "receita" || tipo === "despesa") sinais[codigo] = tipo;
+  });
+  return sinais;
+}
+
 function normalizarConfiguracao(bruta) {
   const filiais = bruta?.filiaisAtivas;
   return { filiaisAtivas: Array.isArray(filiais) ? listaDeTexto(filiais) : null };
@@ -60,8 +68,8 @@ function normalizarVisao(visao) {
 
     modulos[moduloId] = {
       usaCentro: bruto?.usaCentro === true,
-      // Exceções de sinal: contas que o ERP classificou no grupo errado.
-      inverter: listaDeTexto(bruto?.inverter),
+      // Sinal definido à mão, conta a conta. Só receita/despesa entram.
+      sinais: normalizarSinais(bruto?.sinais),
       filiais,
     };
   });

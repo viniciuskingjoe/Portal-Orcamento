@@ -1,4 +1,5 @@
 import { SEM_CENTRO } from "./visao.js";
+import { correcaoDeSinal } from "./mapeamentoPadrao.js";
 
 // ============================================================================
 // REALIZADO
@@ -33,22 +34,26 @@ export function indexarRealizado(bruto) {
   return { porChave, porContaFilialMes };
 }
 
-// O sinal é da CONTA, não do módulo.
+// O sinal é da CONTA, não do módulo, e sai de três camadas nesta ordem:
 //
-// Um módulo de despesa pode conter contas de receita — "Outras despesas" tem
-// RECEITAS COM ATUALIZAÇÕES, JUROS OBTIDOS, OUTRAS RECEITAS OPERACIONAIS. Lê-las
-// como despesa inverteria o sinal delas no total.
+//   1. `sinais` — o que o usuário definiu na visão, conta a conta. Ganha de tudo.
+//   2. correção conhecida — conta que é receita mas está cadastrada como DF no
+//      ERP. Aplica sozinha, sem ninguém marcar nada.
+//   3. LX_GRUPO_CONTABIL da conta — R é receita, DV e DF são despesa.
 //
-// O critério é o LX_GRUPO_CONTABIL: R é receita, DV e DF são despesa. Isso
-// reproduz sozinho 17 das 19 contas que o ERP trata como receita dentro de
-// Outras despesas. As outras 2 (4.6.5.01 INDENIZAÇÃO DE SEGUROS e 4.6.5.02
-// OUTRAS RECEITAS) estão marcadas DF no ERP apesar de serem receita — para essas
-// existe `inverter`, a lista de exceções da visão.
-export function tipoDaConta(catalogo, codigo, tipoPadrao, inverter) {
+// Sem isso, um módulo de despesa que contém contas de receita (JUROS OBTIDOS,
+// OUTRAS RECEITAS OPERACIONAIS) inverteria o sinal delas no total.
+export function tipoDaConta(catalogo, codigo, tipoPadrao, contexto = {}) {
+  const { sinais, visaoContabil } = contexto;
+
+  const definido = sinais?.[codigo];
+  if (definido === "receita" || definido === "despesa") return definido;
+
+  const corrigido = correcaoDeSinal(visaoContabil, codigo);
+  if (corrigido) return corrigido;
+
   const grupo = catalogo?.porCodigo?.get(codigo)?.grupo;
-  const base = grupo ? (grupo === "R" ? "receita" : "despesa") : tipoPadrao;
-  if (!inverter?.has?.(codigo)) return base;
-  return base === "receita" ? "despesa" : "receita";
+  return grupo ? (grupo === "R" ? "receita" : "despesa") : tipoPadrao;
 }
 
 // Receita cresce a crédito, despesa a débito. Devolver sempre positivo para o
@@ -66,7 +71,8 @@ export function somarRealizado({
   centroId,
   mes,
   tipoPadrao,
-  inverter,
+  sinais,
+  visaoContabil,
 }) {
   if (!indice) return 0;
   const semCentro = !centroId || centroId === SEM_CENTRO;
@@ -74,7 +80,7 @@ export function somarRealizado({
 
   let total = 0;
   (contas ?? []).forEach((conta) => {
-    const tipo = tipoDaConta(catalogo, conta, tipoPadrao, inverter);
+    const tipo = tipoDaConta(catalogo, conta, tipoPadrao, { sinais, visaoContabil });
     (filiais ?? []).forEach((filial) => {
       const chave = semCentro
         ? `${conta}|${filial.id}|${mes}`

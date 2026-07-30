@@ -72,15 +72,46 @@ test("inverter conserta conta classificada errada no ERP", () => {
     { classificacao: "4.6.5.01.001", filial: "000001", centro: "002", mes: 1, debito: 0, credito: 500 },
   ]);
   const args = { indice: seguros, contas: ["4.6.5.01.001"], tipoPadrao: "despesa" };
-  assert.equal(somar(args), -500, "sem a exceção sai negativo");
-  assert.equal(somar({ ...args, inverter: new Set(["4.6.5.01.001"]) }), 500);
+  // Com a visão contábil 25 a correção conhecida entra sozinha.
+  assert.equal(somar({ ...args, visaoContabil: "25" }), 500);
+  // Sem ela, cai no grupo do ERP, que está errado.
+  assert.equal(somar(args), -500);
+  // E o usuário ainda pode definir à mão.
+  assert.equal(somar({ ...args, sinais: { "4.6.5.01.001": "receita" } }), 500);
 });
 
-test("tipoDaConta resolve grupo, padrão e inversão", () => {
+test("tipoDaConta segue as tres camadas, nesta ordem", () => {
+  // 3. grupo do ERP
   assert.equal(tipoDaConta(catalogo, "3.1.1.01.001", "despesa"), "receita");
   assert.equal(tipoDaConta(catalogo, "4.4.1.01", "receita"), "despesa");
+  // conta fora do catalogo cai no tipo do modulo
   assert.equal(tipoDaConta(catalogo, "nao-existe", "despesa"), "despesa");
-  assert.equal(tipoDaConta(catalogo, "4.4.1.01", "receita", new Set(["4.4.1.01"])), "receita");
+
+  // 2. correcao conhecida ganha do grupo
+  assert.equal(tipoDaConta(catalogo, "4.6.5.01.001", "despesa"), "despesa", "sem visao contabil");
+  assert.equal(
+    tipoDaConta(catalogo, "4.6.5.01.001", "despesa", { visaoContabil: "25" }),
+    "receita"
+  );
+  // outra visao contabil nao herda a correcao da 25
+  assert.equal(
+    tipoDaConta(catalogo, "4.6.5.01.001", "despesa", { visaoContabil: "21" }),
+    "despesa"
+  );
+
+  // 1. o que o usuario definiu ganha de tudo
+  assert.equal(
+    tipoDaConta(catalogo, "4.6.5.01.001", "despesa", {
+      visaoContabil: "25",
+      sinais: { "4.6.5.01.001": "despesa" },
+    }),
+    "despesa"
+  );
+  // valor invalido em sinais e ignorado
+  assert.equal(
+    tipoDaConta(catalogo, "4.4.1.01", "receita", { sinais: { "4.4.1.01": "xpto" } }),
+    "despesa"
+  );
 });
 
 test("filial específica soma só ela", () => {

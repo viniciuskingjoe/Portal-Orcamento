@@ -57,10 +57,35 @@ export const MAPEAMENTO_PADRAO = {
   },
 };
 
-// Contas do ERP que o Scoreplan lê como receita mesmo estando em LX_GRUPO_CONTABIL
-// = DF. São receitas classificadas como despesa no cadastro; sem a exceção o
-// sinal delas sai invertido.
-export const INVERSOES_PADRAO = ["4.6.5.01", "4.6.5.02"];
+// ============================================================================
+// CORREÇÕES DE SINAL
+//
+// Contas que são receita mas estão cadastradas com LX_GRUPO_CONTABIL = DF no
+// ERP. Sem corrigir, o sinal delas sai invertido — é o que o Scoreplan resolve
+// com um CASE de prefixos.
+//
+// Valem por visão contábil e por prefixo de classificação, e são aplicadas
+// sozinhas: não dependem de ninguém marcar nada. Quando o cadastro do ERP for
+// corrigido, basta apagar a entrada daqui.
+//
+// A visão ainda pode sobrepor conta a conta — o que o usuário define ganha
+// destas correções.
+// ============================================================================
+
+export const CORRECOES_DE_SINAL = {
+  25: [
+    // 4.6.5.01 INDENIZAÇÃO DE SEGUROS · 4.6.5.02 OUTRAS RECEITAS
+    { prefixo: "4.6.5.01", tipo: "receita" },
+    { prefixo: "4.6.5.02", tipo: "receita" },
+  ],
+};
+
+export function correcaoDeSinal(visaoContabil, codigo) {
+  const regras = CORRECOES_DE_SINAL[visaoContabil];
+  if (!regras || !codigo) return null;
+  const regra = regras.find((item) => codigo.startsWith(item.prefixo));
+  return regra?.tipo ?? null;
+}
 
 export function temMapeamentoPadrao(visaoContabil) {
   return visaoContabil === VISAO_CONTABIL_PADRAO;
@@ -80,13 +105,3 @@ export function contasDoMapeamento(catalogo, moduloId) {
     .map((item) => item.codigo);
 }
 
-// Inversões que valem para as contas realmente presentes no catálogo.
-export function inversoesDoMapeamento(catalogo) {
-  const dentro = new Set();
-  catalogo.lista.forEach((item) => {
-    if (INVERSOES_PADRAO.some((prefixo) => item.codigo.startsWith(prefixo))) {
-      dentro.add(item.codigo);
-    }
-  });
-  return [...dentro];
-}

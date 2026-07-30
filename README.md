@@ -138,12 +138,20 @@ O sinal é da CONTA, não do módulo: `LX_GRUPO_CONTABIL = R` é receita (crédi
 débito), `DV`/`DF` é despesa (débito − crédito). As duas voltam positivas, para a
 variação significar a mesma coisa nos dois casos.
 
+O sinal sai de três camadas, nesta ordem:
+
+1. **O que a visão define**, conta a conta — ganha de tudo.
+2. **Correção conhecida** — conta que é receita mas está cadastrada como `DF` no
+   ERP. Aplica sozinha, sem ninguém marcar nada. Hoje são `4.6.5.01`
+   (INDENIZAÇÃO DE SEGUROS) e `4.6.5.02` (OUTRAS RECEITAS), em
+   [src/dados/mapeamentoPadrao.js](src/dados/mapeamentoPadrao.js). Quando o
+   cadastro do ERP for corrigido, é só apagar a entrada.
+3. **`LX_GRUPO_CONTABIL` da conta.**
+
 Isso importa porque um módulo de despesa contém contas de receita — "Outras
-despesas" tem JUROS OBTIDOS e OUTRAS RECEITAS OPERACIONAIS. Ler pelo tipo do
-módulo inverteria o sinal delas. O critério do grupo acerta 17 das 19 contas que
-o Scoreplan trata assim; as 2 restantes (`4.6.5.01` INDENIZAÇÃO DE SEGUROS e
-`4.6.5.02` OUTRAS RECEITAS) são receita cadastrada como `DF` no ERP e ficam na
-lista de exceções da visão, ajustável conta a conta na árvore.
+despesas" tem JUROS OBTIDOS e OUTRAS RECEITAS OPERACIONAIS. Conferido contra a
+regra do Scoreplan nas 79 folhas do módulo: 79 de 79 iguais, incluindo as 19 que
+ele lê como receita.
 
 ## Banco
 
