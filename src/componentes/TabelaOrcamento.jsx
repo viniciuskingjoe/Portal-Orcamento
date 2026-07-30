@@ -1,3 +1,5 @@
+import { useRef, useState } from "react";
+
 import { formatarMoeda, formatarPercentual } from "../lib/formato.js";
 
 const LINHAS_RESUMO = new Set(["total", "media"]);
@@ -25,6 +27,7 @@ export default function TabelaOrcamento({
   onConfirmarEdicao,
   onCancelarEdicao,
   onCopiarDeCima,
+  onPreencherAte,
   prefixoCelula,
 }) {
   const ehPercentual = formato === "percentual";
@@ -35,6 +38,59 @@ export default function TabelaOrcamento({
   const editaveis = linhas.filter((linha) => !LINHAS_RESUMO.has(linha.id));
   const idDaCelula = (linha) => `${prefixoCelula}|${linha.id}`;
   const digitado = (linha) => (percentual ? (linha.planejadoPercentual ?? 0) : linha.planejado);
+
+  // --------------------------------------------------------------------------
+  // Alça de preenchimento (o quadradinho do canto, como no Excel)
+  //
+  // `arrasto` guarda índices da lista de meses, não números de mês: é o que a
+  // marcação visual usa, e evita converter ida e volta a cada movimento.
+  // --------------------------------------------------------------------------
+  const [arrasto, setArrasto] = useState(null);
+  const celulas = useRef([]);
+
+  // Índice da linha sob o ponteiro. Fora da tabela, gruda no primeiro ou no
+  // último mês — arrastar além de dezembro deve preencher até dezembro, não
+  // cancelar o gesto.
+  function indiceNoPonto(clientY) {
+    const linhasVisiveis = celulas.current.filter(Boolean);
+    if (!linhasVisiveis.length) return null;
+
+    let encontrado = null;
+    celulas.current.forEach((elemento, indice) => {
+      if (!elemento) return;
+      const area = elemento.getBoundingClientRect();
+      if (clientY >= area.top && clientY <= area.bottom) encontrado = indice;
+    });
+    if (encontrado != null) return encontrado;
+
+    const primeira = linhasVisiveis[0].getBoundingClientRect();
+    return clientY < primeira.top ? 0 : celulas.current.length - 1;
+  }
+
+  function comecarArrasto(evento, indice) {
+    evento.preventDefault();
+    evento.currentTarget.setPointerCapture(evento.pointerId);
+    setArrasto({ origem: indice, ate: indice });
+  }
+
+  function moverArrasto(evento) {
+    if (!arrasto) return;
+    const indice = indiceNoPonto(evento.clientY);
+    if (indice != null && indice !== arrasto.ate) setArrasto({ ...arrasto, ate: indice });
+  }
+
+  function soltarArrasto() {
+    if (!arrasto) return;
+    if (arrasto.ate !== arrasto.origem) {
+      onPreencherAte?.(editaveis[arrasto.origem].id, editaveis[arrasto.ate].id);
+    }
+    setArrasto(null);
+  }
+
+  const noArrasto = (indice) =>
+    arrasto != null &&
+    indice >= Math.min(arrasto.origem, arrasto.ate) &&
+    indice <= Math.max(arrasto.origem, arrasto.ate);
 
   function irPara(indice, texto) {
     const alvo = editaveis[indice];
@@ -92,7 +148,7 @@ export default function TabelaOrcamento({
   }
 
   return (
-    <div className="tabela-wrap">
+    <div className={`tabela-wrap ${arrasto ? "is-arrastando" : ""}`}>
       <table className="tabela-orcamento">
         <thead>
           <tr>
@@ -115,7 +171,15 @@ export default function TabelaOrcamento({
 
             const celulaDigitavel = (
               <td
-                className={editavel ? "celula-editavel" : ""}
+                ref={(elemento) => {
+                  if (indice >= 0) celulas.current[indice] = elemento;
+                }}
+                className={[
+                  editavel ? "celula-editavel" : "",
+                  noArrasto(indice) ? "is-preenchendo" : "",
+                ]
+                  .filter(Boolean)
+                  .join(" ")}
                 tabIndex={editavel && !emEdicao ? 0 : undefined}
                 onClick={editavel && !emEdicao ? () => irPara(indice) : undefined}
                 onKeyDown={
@@ -125,6 +189,23 @@ export default function TabelaOrcamento({
                 }
                 title={editavel ? "Clique ou tecle Enter para editar" : undefined}
               >
+                {/* A alça só existe fora da edição: durante a digitação o canto
+                    da célula é do input. */}
+                {editavel && !emEdicao ? (
+                  <button
+                    type="button"
+                    className="alca-preenchimento"
+                    aria-label={`Arrastar ${linha.label} para os outros meses`}
+                    title="Arraste para repetir este valor nos outros meses"
+                    onPointerDown={(evento) => comecarArrasto(evento, indice)}
+                    onPointerMove={moverArrasto}
+                    onPointerUp={soltarArrasto}
+                    onPointerCancel={() => setArrasto(null)}
+                    // Sem isto, soltar a alça sobre a própria célula abriria a
+                    // edição logo depois do arrasto.
+                    onClick={(evento) => evento.stopPropagation()}
+                  />
+                ) : null}
                 {emEdicao ? (
                   <input
                     className="input-inline"

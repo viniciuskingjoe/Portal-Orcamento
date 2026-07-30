@@ -433,6 +433,22 @@ export default function PlanejamentoOrcamentario() {
       const acima = planoAtivo.planejado[chaveDoFiltro(mes - 1)] ?? 0;
       gravarPlanejado({ [chaveDoFiltro(mes)]: acima });
     },
+
+    // Alça de preenchimento: repete o valor do mês de origem em toda a faixa
+    // arrastada. Funciona nos dois sentidos — arrastar para cima é tão válido
+    // quanto para baixo.
+    onPreencherAte: (mesOrigem, mesFinal) => {
+      if (!podeGravar()) return;
+      const valor = planoAtivo.planejado[chaveDoFiltro(mesOrigem)] ?? 0;
+      const inicio = Math.min(mesOrigem, mesFinal);
+      const fim = Math.max(mesOrigem, mesFinal);
+
+      const alteracoes = {};
+      MESES.filter((mes) => mes >= inicio && mes <= fim).forEach((mes) => {
+        alteracoes[chaveDoFiltro(mes)] = valor;
+      });
+      gravarPlanejado(alteracoes);
+    },
   };
 
   // --------------------------------------------------------------------------

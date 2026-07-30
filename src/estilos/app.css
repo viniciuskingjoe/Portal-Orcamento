@@ -1424,9 +1424,53 @@ button {
 }
 
 .celula-editavel {
+  position: relative;
   cursor: pointer;
   box-shadow: inset 0 0 0 1px transparent;
   transition: 0.14s ease;
+}
+
+/* Alça de preenchimento: o quadradinho do canto inferior direito, como no
+   Excel. Fica escondida até a célula receber hover ou foco — doze alças visíveis
+   ao mesmo tempo poluiriam a tabela inteira. */
+.alca-preenchimento {
+  position: absolute;
+  right: -4px;
+  bottom: -4px;
+  z-index: 1;
+  width: 9px;
+  height: 9px;
+  padding: 0;
+  border: 1px solid var(--surface);
+  border-radius: 2px;
+  background: var(--accent);
+  opacity: 0;
+  cursor: crosshair;
+  transition: opacity 0.14s ease;
+  /* O gesto é de arrastar: sem isto o navegador rola a página no toque. */
+  touch-action: none;
+}
+
+.celula-editavel:hover .alca-preenchimento,
+.celula-editavel:focus-visible .alca-preenchimento,
+.alca-preenchimento:focus-visible {
+  opacity: 1;
+}
+
+/* Faixa que o arrasto vai preencher ao soltar. */
+.tabela-orcamento td.is-preenchendo {
+  background: var(--accent-soft) !important;
+  box-shadow: inset 0 0 0 1px var(--accent);
+}
+
+/* Durante o arrasto, selecionar texto atrapalha e a alça precisa continuar
+   visível mesmo quando o ponteiro já saiu da célula de origem. */
+.tabela-wrap.is-arrastando {
+  user-select: none;
+}
+
+.tabela-wrap.is-arrastando .alca-preenchimento {
+  opacity: 1;
 }
 
 .celula-editavel:hover {

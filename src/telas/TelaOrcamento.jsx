@@ -51,7 +51,7 @@ export default function TelaOrcamento({
         ? "Este módulo usa centro de custo: escolha um para lançar."
         : filtros.conta === TODAS_AS_CONTAS
           ? "Escolha uma conta na lista à esquerda para lançar o planejado."
-          : `Digite na coluna Planejado${percentual ? " %" : ""} — Enter grava e desce · Ctrl+Enter repete até dezembro · Ctrl+D copia o mês de cima · Esc cancela.`;
+          : `Digite na coluna Planejado${percentual ? " %" : ""} — Enter grava e desce · arraste o canto da célula (ou Ctrl+Enter) para repetir nos outros meses · Ctrl+D copia o mês de cima · Esc cancela.`;
 
   return (
     <main className="conteudo conteudo--orcamento">

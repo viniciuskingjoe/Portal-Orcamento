@@ -91,9 +91,15 @@ A tabela do plano se comporta como planilha:
 | clique, `Enter`, `F2` ou um dígito | abre a edição da célula |
 | `Enter` / `Tab` | grava e desce (com `Shift`, sobe) |
 | `↑` `↓` | gravam e movem |
+| **arrastar a alça** do canto inferior direito | repete o valor na faixa arrastada, nos dois sentidos |
 | `Ctrl+Enter` | grava o valor digitado deste mês **até dezembro** |
 | `Ctrl+D` | copia o valor do mês de cima |
 | `Esc` | cancela |
+
+A alça é o quadradinho do canto, igual ao do Excel: aparece no hover da célula,
+arrasta-se para cima ou para baixo e a faixa que vai ser preenchida fica marcada
+enquanto o botão está pressionado. Arrastar além de dezembro preenche até
+dezembro em vez de cancelar o gesto.
 
 ## Estrutura
 
