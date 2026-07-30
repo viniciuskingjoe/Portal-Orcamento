@@ -43,9 +43,20 @@ export function indexarRealizado(bruto) {
 }
 
 // Filiais com movimento que estão fora da lista em uso.
-export function filiaisForaDoUso(indice, filiaisEmUso) {
+//
+// Recebe TODOS os índices em tela — o do ano e o do anterior. Uma filial pode ter
+// movimento só no ano anterior (a 000004 fechou 2025 com 49.080,58 e não teve
+// nada em 2026) e ainda assim mudar a coluna comparativa. Olhar só o ano do
+// plano deixaria a diferença sem explicação.
+export function filiaisForaDoUso(indices, filiaisEmUso) {
   const emUso = new Set((filiaisEmUso ?? []).map((filial) => filial.id));
-  return [...(indice?.filiais ?? [])].filter((id) => !emUso.has(id)).sort();
+  const comMovimento = new Set();
+
+  (Array.isArray(indices) ? indices : [indices]).forEach((indice) => {
+    (indice?.filiais ?? []).forEach((id) => comMovimento.add(id));
+  });
+
+  return [...comMovimento].filter((id) => !emUso.has(id)).sort();
 }
 
 // O sinal é da CONTA, não do módulo, e sai de três camadas nesta ordem:

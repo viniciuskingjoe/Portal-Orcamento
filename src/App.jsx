@@ -139,12 +139,14 @@ export default function PlanejamentoOrcamentario() {
       .sort();
   }, [visaoDoPlano, moduloDaTela, filiaisDoFiltro, filtros.centro, contas.catalogo]);
 
-  // Filiais com movimento que ficaram de fora da configuração. Sem avisar, o
-  // total sai menor que o do ERP e parece erro de cálculo.
+  // Filiais com movimento que ficaram de fora da configuração, no ano do plano OU
+  // no anterior. Sem avisar, o total sai menor que o do ERP e parece erro de
+  // cálculo — e a filial que só tem movimento no ano anterior mexe só na coluna
+  // comparativa, o que é ainda mais difícil de perceber.
   const filiaisIgnoradas = useMemo(() => {
-    const fora = filiaisForaDoUso(realizado.doAno, filiaisAtivas);
+    const fora = filiaisForaDoUso([realizado.doAno, realizado.doAnoAnterior], filiaisAtivas);
     return fora.map((id) => erp.filiais.find((filial) => filial.id === id) ?? { id });
-  }, [realizado.doAno, filiaisAtivas, erp.filiais]);
+  }, [realizado.doAno, realizado.doAnoAnterior, filiaisAtivas, erp.filiais]);
 
   const contasDaTabela =
     filtros.conta === TODAS_AS_CONTAS ? contasDisponiveis : [filtros.conta];

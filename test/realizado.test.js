@@ -183,6 +183,17 @@ test("aponta filial com movimento que está fora das em uso", () => {
   assert.deepEqual(filiaisForaDoUso(indice, []), ["000001", "000008"]);
 });
 
+test("considera também a filial que só tem movimento no ano anterior", () => {
+  // Caso real: a 000004 fechou 2025 com 49.080,58 e não teve nada em 2026.
+  // Olhando só o ano do plano, a diferença aparecia apenas na coluna comparativa,
+  // sem nada na tela explicando.
+  const doAnoAnterior = indexarRealizado([
+    { classificacao: "3.1.1.01.001", filial: "000004", centro: "002", mes: 12, debito: 0, credito: 49080.58 },
+  ]);
+  assert.deepEqual(filiaisForaDoUso([indice, doAnoAnterior], FILIAIS), ["000004"]);
+});
+
 test("filiais fora do uso não quebra com índice ausente", () => {
   assert.deepEqual(filiaisForaDoUso(null, FILIAIS), []);
+  assert.deepEqual(filiaisForaDoUso([null, undefined], FILIAIS), []);
 });

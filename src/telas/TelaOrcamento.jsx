@@ -112,9 +112,9 @@ export default function TelaOrcamento({
           <span>
             {filiaisIgnoradas.length}{" "}
             {filiaisIgnoradas.length === 1
-              ? "filial tem movimento no período e está fora"
-              : "filiais têm movimento no período e estão fora"}{" "}
-            das filiais em uso, então não entram nestes totais:{" "}
+              ? "filial tem movimento em " + plano.ano + " ou em " + (plano.ano - 1) + " e está fora"
+              : "filiais têm movimento em " + plano.ano + " ou em " + (plano.ano - 1) + " e estão fora"}{" "}
+            das filiais em uso, então não entram nestes totais (nem no ano anterior):{" "}
             <strong>{filiaisIgnoradas.map((f) => f.nome ?? f.id).join(", ")}</strong>. Ajuste em
             Configurações → Filiais.
           </span>
