@@ -1,6 +1,7 @@
 import Cabecalho from "../componentes/Cabecalho.jsx";
 import Icone from "../componentes/Icone.jsx";
 import TabelaOrcamento from "../componentes/TabelaOrcamento.jsx";
+import { Carregando } from "../componentes/Estados.jsx";
 import { DicaEdicao, FiltrosOrcamento } from "../componentes/FiltrosOrcamento.jsx";
 import { conta as buscarConta } from "../dados/contas.js";
 import { contasDoModulo } from "../dados/visao.js";
@@ -9,10 +10,12 @@ export default function TelaOrcamento({
   plano,
   visao,
   filiais,
+  catalogo,
   modulo,
   filtros,
   onAlterarFiltro,
   linhas,
+  carregandoRealizado,
   edicao,
   onVoltar,
 }) {
@@ -23,7 +26,7 @@ export default function TelaOrcamento({
     <main className="conteudo conteudo--orcamento">
       <Cabecalho
         titulo={modulo.titulo}
-        subtitulo={`Visão ${visao.nome} · planejamento mensal, realizado e comparativo histórico.`}
+        subtitulo={`Visão ${visao.nome} · planejado digitado aqui, realizado vindo do ERP.`}
         onVoltar={onVoltar}
       />
 
@@ -41,22 +44,24 @@ export default function TelaOrcamento({
         </summary>
         <div className="contas-do-modulo__lista">
           {contas.length ? (
-            contas.map((contaId) => {
-              const item = buscarConta(contaId);
+            contas.map((codigo) => {
+              const item = buscarConta(catalogo, codigo);
               return (
-                <span className="chip-conta" key={contaId}>
-                  <code>{item?.codigo ?? contaId}</code>
-                  {item ? <span>{item.descricao}</span> : null}
+                <span className="chip-conta" key={codigo}>
+                  <code>{codigo}</code>
+                  {item ? <span>{item.descricao}</span> : <span className="negativo">fora da visão contábil</span>}
                 </span>
               );
             })
           ) : (
             <p className="sem-contas">
-              Nenhuma conta vinculada na visão — os valores ficam zerados.
+              Nenhuma conta vinculada na visão — planejado e realizado ficam zerados.
             </p>
           )}
         </div>
       </details>
+
+      {carregandoRealizado ? <Carregando texto="Carregando realizado do ERP…" /> : null}
 
       <DicaEdicao pronta={podeEditar}>
         {!contas.length

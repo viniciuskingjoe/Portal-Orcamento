@@ -763,6 +763,100 @@ button {
   justify-content: flex-end;
 }
 
+/* Listas somente leitura vindas do ERP: código, nome e (filiais) tipo. */
+.lista-crud__topo--filiais,
+.linha-crud--filiais {
+  grid-template-columns: 110px 1fr 200px;
+}
+
+.lista-crud__topo--centros,
+.linha-crud--centros {
+  grid-template-columns: 110px 1fr;
+}
+
+.linha-crud code {
+  color: var(--accent);
+  font-size: 12px;
+}
+
+.linha-crud--filiais strong,
+.linha-crud--centros strong {
+  font-size: 13.5px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.linha-crud__meta {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+/* ==========================================================================
+   Carregando / erro
+   ========================================================================== */
+
+.estado-carregando {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0 0 16px;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.spinner {
+  width: 15px;
+  height: 15px;
+  flex: 0 0 auto;
+  border: 2px solid var(--border-strong);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: girar 0.7s linear infinite;
+}
+
+@keyframes girar {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.aviso-erro {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  padding: 18px 20px;
+  border: 1px solid var(--danger);
+  border-radius: var(--radius-lg);
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+
+.aviso-erro__icone {
+  flex: 0 0 auto;
+  margin-top: 1px;
+}
+
+.aviso-erro strong {
+  display: block;
+  font-size: 14px;
+}
+
+.aviso-erro p {
+  margin: 5px 0 0;
+  color: var(--text-soft);
+  font-size: 13px;
+}
+
+.aviso-erro > div {
+  flex: 1;
+  min-width: 0;
+}
+
 /* ==========================================================================
    Visões — grade de módulos e seleção de contas
    ========================================================================== */
@@ -901,6 +995,19 @@ button {
 .chip--despesa {
   background: var(--danger-soft);
   color: var(--danger);
+}
+
+/* Marca de onde o dado vem — estes cadastros são do ERP, não do portal. */
+.chip--origem {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--surface-soft);
+  border: 1px solid var(--border);
+  color: var(--muted);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  text-transform: none;
+  letter-spacing: 0;
 }
 
 .campo-busca {
@@ -1530,6 +1637,34 @@ dialog::backdrop {
 .conta-checkbox code {
   color: var(--accent);
   font-size: 11.5px;
+}
+
+/* Indentação pelo nível do código ("3" -> 0, "3.1.1.1.02" -> 4): a hierarquia do
+   plano de contas fica legível sem virar uma árvore com toggles. */
+.conta-checkbox--nivel-1 {
+  padding-left: 30px;
+}
+.conta-checkbox--nivel-2 {
+  padding-left: 46px;
+}
+.conta-checkbox--nivel-3 {
+  padding-left: 62px;
+}
+.conta-checkbox--nivel-4 {
+  padding-left: 78px;
+}
+.conta-checkbox--nivel-5 {
+  padding-left: 94px;
+}
+
+/* Sintética não recebe lançamento — marcar vale pelos descendentes. */
+.conta-checkbox.is-sintetica > span:last-child,
+.conta-checkbox.is-sintetica code {
+  font-weight: 700;
+}
+
+.conta-checkbox.is-sintetica {
+  background: var(--surface-tint);
 }
 
 .modal__nota {

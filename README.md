@@ -3,10 +3,9 @@
 Planejamento orçamentário da King & Joe / AKR Brands. Front em React + Vite,
 API em Node + Express sobre SQL Server.
 
-> **Estado atual: API conectada; front ainda sobre mock.** A conexão com o
-> SQL Server funciona e as rotas devolvem dados reais (contas, filiais, centros
-> de custo, lançamentos). As telas, porém, ainda leem números gerados e gravam
-> no `localStorage`. Não use como fonte de verdade contábil.
+> **Estado atual: sem dados falsos.** Plano de contas, filiais, centros de custo
+> e realizado vêm do SQL Server. O que o portal guarda é só o que o usuário cria:
+> visões e valores planejados — ainda no `localStorage`, sem tabela própria.
 
 ## Executar
 
@@ -66,17 +65,18 @@ src/
 ├── main.jsx                 entrada; importa os CSS
 ├── App.jsx                  estado da aplicação e roteamento entre telas
 ├── dados/
-│   ├── modulos.js           os 8 módulos fixos (+ parâmetro do mock)
-│   ├── contas.js            plano de contas       ← provisório
+│   ├── modulos.js           os 8 módulos fixos
+│   ├── contas.js            índice do plano de contas vindo da API
 │   ├── visao.js             modelo da visão
-│   ├── configuracao.js      filiais e centros (global) ← trocar pelo banco
-│   ├── seeds.js             dimensões e visão iniciais
+│   ├── realizado.js         índice do realizado vindo da API
+│   ├── seeds.js             empresa e meses
 │   ├── calendario.js        até que mês existe "realizado"
-│   ├── mock.js              geradores determinísticos  ← trocar pelo banco
 │   └── plano.js             modelo do plano, agregações e cálculos
 ├── lib/
 │   ├── formato.js           moeda/percentual pt-BR e leitura de números
-│   ├── persistencia.js      localStorage          ← trocar pela API
+│   ├── api.js               cliente das rotas /api/*
+│   ├── useErp.js            carga dos cadastros e do realizado
+│   ├── persistencia.js      localStorage (visões e planejado)
 │   └── tema.js              tema claro/escuro
 ├── componentes/             UI reutilizável (Sidebar, Modal, Tabela, …)
 ├── telas/                   uma tela por rota
@@ -85,18 +85,26 @@ src/
     └── app.css              estilos dos componentes
 ```
 
-### Como o plano guarda os valores
+### O que é do ERP e o que é do portal
 
-`plano.planejado` guarda **somente as edições manuais**, com chave
-`modulo|filial|ano|mes`. Sem edição, o valor vem do gerador em
-[src/dados/mock.js](src/dados/mock.js), usando o `base` do módulo e o `fator` da
-filial.
+| Dado | Origem |
+|---|---|
+| Plano de contas (classificações) | `/api/contas` |
+| Filiais | `/api/filiais` — somente leitura |
+| Centros de custo | `/api/centros-de-custo` — somente leitura |
+| Realizado e ano anterior | `/api/realizado` |
+| Visões (módulo → contas) | portal, `localStorage` |
+| Valores planejados | portal, `localStorage` |
 
-Duas consequências desejadas:
+`plano.planejado` tem chave `modulo|filial|ano|mes`. **Célula sem valor digitado é
+zero**, não um número gerado — não existe planejamento que ninguém fez.
 
-- Uma filial criada pela tela nasce com `fator: 0` — planejado **e** realizado
-  zerados, sem divergir entre os dois.
-- Um módulo sem conta na visão devolve zeros em vez de número inventado.
+Marcar uma classificação sintética em um módulo vale pelos descendentes: o
+lançamento fica nas folhas, e a hierarquia é seguida por `totalizaEm`, não pelo
+prefixo do código (no ERP `3.1.1.3` totaliza em `3.1.2`, apesar do código).
+
+Receita é lida como crédito − débito; despesa inverte. As duas voltam positivas,
+para a variação contra o planejado significar a mesma coisa nos dois casos.
 
 ## Banco
 
@@ -176,18 +184,13 @@ Os componentes não têm teste automatizado — foram verificados por renderiza�
 
 ## Pendências conhecidas
 
-- **O front ainda não consome a API** — as rotas funcionam, mas as telas leem o
-  mock. É o próximo passo.
-- **De/para conta contábil → classificação** não confirmado, o que bloqueia
-  agregar o realizado por módulo (ver seção Banco).
-- **Plano de contas do front ainda é provisório**: só receita (`3.1.1.x`) e
-  dedução (`3.1.9.x`) em `src/dados/contas.js`. Custos variáveis, despesas
-  operacionais, despesas com pessoal e outras despesas oferecem a lista de
-  dedução até `/api/contas` ser ligado.
+- **Visões e valores planejados não têm tabela** — vivem no `localStorage` de
+  cada navegador, não são compartilhados nem sofrem backup. É o próximo passo:
+  tabelas `KING_PORTAL_*` no SQL Server (precisa de autorização para criar).
 - Sem autenticação nem RBAC (o padrão exige enforcement no backend).
 - Sem deploy: falta `deploy/setup.sh` e service systemd.
 - `localStorage` tem limite de ~5 MB; a aplicação avisa na tela se a gravação
   falhar.
-- **Chave de armazenamento em `:v3`.** A v2 (filiais e centros dentro do plano) é
-  migrada na leitura, com união por id entre os planos. A v1 (canais e deduções)
-  não tem equivalente e é ignorada.
+- **Chave de armazenamento em `:v4`.** Versões anteriores usavam ids fictícios
+  (filial `akr`, conta `3.1.1.01.001`) que não existem no ERP; migrar deixaria
+  chaves órfãs, então dados locais antigos são ignorados.

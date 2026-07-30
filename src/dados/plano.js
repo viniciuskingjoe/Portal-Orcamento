@@ -1,20 +1,18 @@
 import { MESES } from "./seeds.js";
 import { modulo as definicaoDoModulo } from "./modulos.js";
-import { moduloConfigurado } from "./visao.js";
-import { gerarPlanejado, gerarRealizado } from "./mock.js";
+import { contasDoModulo, moduloConfigurado } from "./visao.js";
+import { somarRealizado } from "./realizado.js";
 import { mesTemRealizado } from "./calendario.js";
 
 // ============================================================================
 // MODELO DO PLANO
 //
-// O plano guarda o período, a visão escolhida na criação e as edições manuais
-// do orçamento. Filiais e centros de custo NÃO ficam aqui: são configuração
-// global do portal (ver dados/configuracao.js).
+// O plano guarda o período, a visão escolhida na criação e os valores planejados
+// digitados pelo usuário — nada mais. Filiais, centros de custo, plano de contas
+// e realizado vêm do ERP.
 //
-// `plano.planejado` guarda SOMENTE as edições manuais, com chave
-// `modulo|filial|ano|mes`. Sem edição, o valor vem do gerador — o que mantém
-// filial nova coerente (fator 0 -> zero nos dois lados) e o registro pequeno
-// o bastante para caber no localStorage.
+// `plano.planejado` tem chave `modulo|filial|ano|mes`. Célula sem valor digitado
+// é ZERO, não um número gerado: não existe planejamento que ninguém fez.
 // ============================================================================
 
 export function gerarId(prefixo) {
@@ -33,7 +31,6 @@ export function anosDoPlano(plano) {
   return Array.from({ length: plano.fim - plano.inicio + 1 }, (_, i) => plano.inicio + i);
 }
 
-// "total" seleciona a lista inteira; caso contrário, o item correspondente.
 function filiaisSelecionadas(filiais, filialId) {
   if (filialId === "total") return filiais;
   const item = filiais.find((entry) => entry.id === filialId);
@@ -41,24 +38,14 @@ function filiaisSelecionadas(filiais, filialId) {
 }
 
 // --------------------------------------------------------------------------
-// Leitura de valores
+// Cálculo
 // --------------------------------------------------------------------------
 
-function planejadoDaCelula(plano, modulo, filial, ano, mes) {
-  const editado = plano.planejado[chavePlanejado(modulo.id, filial.id, ano, mes)];
-  return editado ?? gerarPlanejado(modulo, filial, ano, mes);
-}
-
-function somarMes(plano, modulo, filiais, ano, mes) {
-  let planejado = 0;
-  let realizado = 0;
-  let anterior = 0;
-  filiais.forEach((filial) => {
-    planejado += planejadoDaCelula(plano, modulo, filial, ano, mes);
-    realizado += gerarRealizado(modulo, filial, ano, mes, false);
-    anterior += gerarRealizado(modulo, filial, ano, mes, true);
-  });
-  return { planejado, realizado, anterior };
+function planejadoDoMes(plano, moduloId, filiais, ano, mes) {
+  return filiais.reduce(
+    (total, filial) => total + (plano.planejado[chavePlanejado(moduloId, filial.id, ano, mes)] ?? 0),
+    0
+  );
 }
 
 function calcularVariacao(realizado, anterior) {
@@ -101,50 +88,73 @@ function linhasVazias(ano) {
   ];
 }
 
-// Um módulo sem conta selecionada na visão não tem o que somar: devolve zeros
-// em vez de números inventados.
-export function criarLinhasOrcamento({ plano, visao, filiais, moduloId, filialId, ano }) {
+// `realizado` e `realizadoAnterior` são os índices de dados/realizado.js para o
+// ano selecionado e o anterior.
+export function criarLinhasOrcamento({
+  plano,
+  visao,
+  filiais,
+  catalogo,
+  realizado,
+  realizadoAnterior,
+  moduloId,
+  filialId,
+  ano,
+}) {
   const modulo = definicaoDoModulo(moduloId);
+  // Módulo sem classificação na visão não tem o que somar em nenhuma coluna.
   if (!modulo || !moduloConfigurado(visao, moduloId)) return linhasVazias(ano);
 
   const selecionadas = filiaisSelecionadas(filiais ?? [], filialId);
+  const classificacoes = contasDoModulo(visao, moduloId);
+  const somar = (indice, mes) =>
+    indice
+      ? somarRealizado({
+          indice,
+          catalogo,
+          classificacoes,
+          filiais: selecionadas,
+          mes,
+          tipo: modulo.tipo,
+        })
+      : 0;
 
   const meses = MESES.map((mes) => {
-    const valores = somarMes(plano, modulo, selecionadas, ano, mes);
-    return {
+    const linha = {
       id: mes,
       label: `${String(mes).padStart(2, "0")}/${ano}`,
-      ...valores,
-      ...calcularVariacao(valores.realizado, valores.anterior),
+      planejado: planejadoDoMes(plano, moduloId, selecionadas, ano, mes),
+      realizado: somar(realizado, mes),
+      anterior: somar(realizadoAnterior, mes),
     };
+    return { ...linha, ...calcularVariacao(linha.realizado, linha.anterior) };
   });
 
-  const somar = (campo) => meses.reduce((total, linha) => total + linha[campo], 0);
+  const somarColuna = (campo) => meses.reduce((total, linha) => total + linha[campo], 0);
   const total = {
     id: "total",
     label: "Total",
-    planejado: somar("planejado"),
-    realizado: somar("realizado"),
-    anterior: somar("anterior"),
+    planejado: somarColuna("planejado"),
+    realizado: somarColuna("realizado"),
+    anterior: somarColuna("anterior"),
   };
   Object.assign(total, calcularVariacao(total.realizado, total.anterior));
 
   return [...meses, total, linhaMedia(meses, ano)];
 }
 
-export function totalDoModuloNoAno({ plano, visao, filiais, moduloId, filialId, ano }) {
-  const modulo = definicaoDoModulo(moduloId);
-  if (!modulo || !moduloConfigurado(visao, moduloId)) return 0;
+// Total planejado do módulo no ano — usado nos cartões e nos resumos.
+export function totalPlanejadoNoAno({ plano, visao, filiais, moduloId, filialId, ano }) {
+  if (!definicaoDoModulo(moduloId) || !moduloConfigurado(visao, moduloId)) return 0;
   const selecionadas = filiaisSelecionadas(filiais ?? [], filialId);
   return MESES.reduce(
-    (total, mes) => total + somarMes(plano, modulo, selecionadas, ano, mes).planejado,
+    (total, mes) => total + planejadoDoMes(plano, moduloId, selecionadas, ano, mes),
     0
   );
 }
 
-// Filial é global, então excluir uma tem que limpar as edições dela em TODOS os
-// planos — senão as chaves ficam órfãs e ressuscitam se a filial for recriada
-// com o mesmo id.
+// Filial vem do ERP e é global; se uma sair de lá, as edições ligadas a ela
+// ficariam órfãs em todos os planos.
 export function purgarFilialDosPlanos(planos, filialId) {
   return planos.map((plano) => {
     const restante = Object.fromEntries(

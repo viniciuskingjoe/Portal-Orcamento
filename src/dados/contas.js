@@ -1,55 +1,53 @@
-import { modulo } from "./modulos.js";
-
 // ============================================================================
 // PLANO DE CONTAS
 //
-// PROVISÓRIO. Só as faixas de receita (3.1.1.x) e de dedução (3.1.9.x) existem
-// aqui. Custos variáveis, despesas operacionais, despesas com pessoal e outras
-// despesas ainda não têm suas contas — elas vêm do banco (view do ERP).
+// Vem inteiro de /api/contas (dbo.CTB_VISAO, visão contábil orçamentária). Não
+// há lista fixa aqui — este módulo só indexa e navega o que a API devolveu.
 //
-// Ao plugar o banco, `contasDoModulo()` é o único ponto que muda: passa a
-// consultar a view em vez de escolher entre estas duas listas.
+// Cada item: { codigo, descricao, totalizaEm, sintetica }
+//   codigo      "3.1.1.1.02"
+//   totalizaEm  "3.1.1.1"     o pai na hierarquia
 // ============================================================================
 
-export const CONTAS_RECEITA = [
-  { id: "3.1.1.01.001", codigo: "3.1.1.01.001", descricao: "VENDAS DE PRODUTOS - COLEÇÃO" },
-  { id: "3.1.1.01.002", codigo: "3.1.1.01.002", descricao: "VENDAS DE PRODUTOS - SALDO" },
-  { id: "3.1.1.01.003", codigo: "3.1.1.01.003", descricao: "VENDAS DE PRODUTOS - BAZAR" },
-  { id: "3.1.1.01.004", codigo: "3.1.1.01.004", descricao: "VENDAS DE PRODUTOS - E-COMMERCE" },
-  { id: "3.1.1.01.005", codigo: "3.1.1.01.005", descricao: "VENDAS DE PRODUTOS - MOSTRUÁRIO" },
-  { id: "3.1.1.01.006", codigo: "3.1.1.01.006", descricao: "VENDAS DE RESÍDUOS TÊXTEIS" },
-  { id: "3.1.1.01.007", codigo: "3.1.1.01.007", descricao: "VENDAS DE MERCADORIAS - COLEÇÃO" },
-  { id: "3.1.1.01.050", codigo: "3.1.1.01.050", descricao: "VENDAS DE PRODUTOS NO MERCADO EXTERNO" },
-  { id: "3.1.1.01.051", codigo: "3.1.1.01.051", descricao: "VENDAS DE MERCADORIAS NO MERCADO EXTERNO" },
-  { id: "3.1.1.01.052", codigo: "3.1.1.01.052", descricao: "VENDAS DE MERCADORIAS E PRODUTOS" },
-  { id: "3.1.1.01.060", codigo: "3.1.1.01.060", descricao: "FABRICAÇÃO POR ENCOMENDA" },
-  { id: "3.1.1.02.001", codigo: "3.1.1.02.001", descricao: "SERVIÇOS PRESTADOS MERCADO INTERNO" },
-  { id: "3.1.1.02.002", codigo: "3.1.1.02.002", descricao: "SERVIÇOS PRESTADOS MERCADO EXTERNO" },
-  { id: "3.1.1.05.001", codigo: "3.1.1.05.001", descricao: "VENDAS DE MERCADORIA - LOJAS" },
-];
+export const CATALOGO_VAZIO = { lista: [], porCodigo: new Map(), filhos: new Map() };
 
-export const CONTAS_DEDUCAO = [
-  { id: "3.1.9.01.001", codigo: "3.1.9.01.001", descricao: "DEVOLUÇÕES DE VENDAS" },
-  { id: "3.1.9.01.002", codigo: "3.1.9.01.002", descricao: "ABATIMENTOS E DESCONTOS" },
-  { id: "3.1.9.02.001", codigo: "3.1.9.02.001", descricao: "ICMS SOBRE VENDAS" },
-  { id: "3.1.9.02.002", codigo: "3.1.9.02.002", descricao: "PIS SOBRE VENDAS" },
-  { id: "3.1.9.02.003", codigo: "3.1.9.02.003", descricao: "COFINS SOBRE VENDAS" },
-  { id: "3.1.9.02.004", codigo: "3.1.9.02.004", descricao: "IPI SOBRE VENDAS" },
-  { id: "3.1.9.02.005", codigo: "3.1.9.02.005", descricao: "SIMPLES NACIONAL" },
-];
+// O nível vem da quantidade de segmentos do código: "3" -> 0, "3.1.1.1.02" -> 4.
+// Serve para indentar a árvore sem precisar percorrer `totalizaEm` em cascata.
+export function indexarContas(bruto) {
+  const lista = (bruto ?? []).map((conta) => ({
+    ...conta,
+    nivel: conta.codigo.split(".").length - 1,
+  }));
 
-const TODAS = [...CONTAS_RECEITA, ...CONTAS_DEDUCAO];
-const POR_ID = new Map(TODAS.map((conta) => [conta.id, conta]));
+  const porCodigo = new Map(lista.map((conta) => [conta.codigo, conta]));
 
-export function conta(id) {
-  return POR_ID.get(id) ?? null;
+  const filhos = new Map();
+  lista.forEach((conta) => {
+    if (!conta.totalizaEm) return;
+    if (!filhos.has(conta.totalizaEm)) filhos.set(conta.totalizaEm, []);
+    filhos.get(conta.totalizaEm).push(conta.codigo);
+  });
+
+  return { lista, porCodigo, filhos };
 }
 
-// Contas que podem ser vinculadas a um módulo.
-// ← PONTO DE TROCA PELO BANCO: substituir por consulta à view do plano de
-//   contas, filtrando pela faixa correspondente ao módulo.
-export function contasDoModulo(moduloId) {
-  const alvo = modulo(moduloId);
-  if (!alvo) return [];
-  return alvo.tipo === "receita" ? CONTAS_RECEITA : CONTAS_DEDUCAO;
+export function conta(catalogo, codigo) {
+  return catalogo.porCodigo.get(codigo) ?? null;
+}
+
+// Uma classificação sintética (ex. "3.1.1.1 VENDA DE MERCADORIA") não recebe
+// lançamento: o movimento fica nas folhas. Selecionar o pai em um módulo tem que
+// valer pelos descendentes, senão o total daria zero.
+//
+// Devolve um Set para o caso de pai e filho estarem selecionados ao mesmo tempo:
+// sem isso o valor do filho entraria duas vezes.
+export function expandirComDescendentes(catalogo, codigos) {
+  const resultado = new Set();
+  const visitar = (codigo) => {
+    if (resultado.has(codigo)) return;
+    resultado.add(codigo);
+    (catalogo.filhos.get(codigo) ?? []).forEach(visitar);
+  };
+  (codigos ?? []).forEach(visitar);
+  return resultado;
 }

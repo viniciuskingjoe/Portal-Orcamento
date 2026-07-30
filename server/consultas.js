@@ -100,32 +100,55 @@ export async function listarCentrosDeCusto() {
   `);
 }
 
-// Realizado mensal por conta contábil e filial. Substitui `gerarRealizado()`.
+// Realizado mensal por CLASSIFICAÇÃO da visão contábil e filial.
 //
-// PENDENTE: os itens de lançamento gravam CONTA_CONTABIL, não a classificação
-// da visão. Falta confirmar em que tabela vive o de/para conta -> classificação
-// (candidata: dbo.CTB_CONTA_PLANO) para agregar por módulo do portal. Até lá
-// esta rota devolve o realizado por conta contábil, sem o agrupamento.
+// O de/para conta contábil -> classificação vive em dbo.CTB_PLANO_VISAO, com
+// OPERADOR (+/-) e PORCENTAGEM de rateio. O join é feito aqui em vez de usar
+// dbo.W_CTB_LANCAMENTO_CLASSIFICACAO porque aquela view arrasta 48 colunas
+// (nomes de filial, centro de custo, NIVEL1..12) que não são usadas: mesmo
+// resultado, 0,9 s contra 17,5 s.
+//
+// Filtro por range de data, não YEAR(DATA_LANCAMENTO) — com a função em volta da
+// coluna o SQL Server não usa índice e a consulta estourava o timeout.
+//
+// Débito e crédito voltam separados, já com sinal e rateio aplicados. Quem
+// consome decide a leitura: receita usa crédito − débito, despesa inverte.
 export async function listarRealizado({ ano, filialId }) {
   const cabecalho = objeto("DB_TABELA_LANCAMENTO", "dbo.CTB_LANCAMENTO");
   const itens = objeto("DB_TABELA_LANCAMENTO_ITEM", "dbo.CTB_LANCAMENTO_ITEM");
+  const mapa = objeto("DB_TABELA_PLANO_VISAO", "dbo.CTB_PLANO_VISAO");
+
+  const sinal = (coluna) =>
+    `SUM(ISNULL(${coluna}, 0) * ISNULL(pv.PORCENTAGEM, 100) / 100.0
+        * CASE WHEN RTRIM(pv.OPERADOR) = '-' THEN -1 ELSE 1 END)`;
+
   return query(
     `
     SELECT
-      RTRIM(i.CONTA_CONTABIL)   AS conta,
-      RTRIM(l.COD_FILIAL)       AS filial,
-      MONTH(l.DATA_LANCAMENTO)  AS mes,
-      SUM(ISNULL(i.CREDITO, 0)) AS credito,
-      SUM(ISNULL(i.DEBITO, 0))  AS debito
+      RTRIM(pv.CLASSIFICACAO)  AS classificacao,
+      RTRIM(l.COD_FILIAL)      AS filial,
+      MONTH(l.DATA_LANCAMENTO) AS mes,
+      ${sinal("i.DEBITO")}     AS debito,
+      ${sinal("i.CREDITO")}    AS credito
     FROM ${itens} AS i
     INNER JOIN ${cabecalho} AS l
       ON l.LANCAMENTO = i.LANCAMENTO
      AND l.EMPRESA    = i.EMPRESA
-    WHERE YEAR(l.DATA_LANCAMENTO) = @ano
+    INNER JOIN ${mapa} AS pv
+      ON pv.CONTA_CONTABIL = i.CONTA_CONTABIL
+     AND pv.VISAO_CONTABIL = @visao
+    WHERE l.DATA_LANCAMENTO >= @inicio
+      AND l.DATA_LANCAMENTO <  @fim
       AND (@filial IS NULL OR RTRIM(l.COD_FILIAL) = @filial)
-    GROUP BY RTRIM(i.CONTA_CONTABIL), RTRIM(l.COD_FILIAL), MONTH(l.DATA_LANCAMENTO)
-    ORDER BY conta, mes
+    GROUP BY RTRIM(pv.CLASSIFICACAO), RTRIM(l.COD_FILIAL), MONTH(l.DATA_LANCAMENTO)
+    ORDER BY classificacao, mes
   `,
-    { ano, filial: filialId ?? null }
+    {
+      visao: visaoContabil(),
+      // Date vira DateTime2(3) no bind (ver sqlserver.js).
+      inicio: new Date(Date.UTC(ano, 0, 1)),
+      fim: new Date(Date.UTC(ano + 1, 0, 1)),
+      filial: filialId ?? null,
+    }
   );
 }

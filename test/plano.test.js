@@ -6,215 +6,214 @@ import {
   criarLinhasOrcamento,
   criarPlano,
   purgarFilialDosPlanos,
-  totalDoModuloNoAno,
+  totalPlanejadoNoAno,
 } from "../src/dados/plano.js";
-import { configuracaoInicial } from "../src/dados/configuracao.js";
+import { indexarContas } from "../src/dados/contas.js";
+import { indexarRealizado } from "../src/dados/realizado.js";
 import { criarVisao, definirContasDoModulo } from "../src/dados/visao.js";
 import { mesesComRealizado } from "../src/dados/calendario.js";
 
-const ANO = 2026;
+const ANO = 2025;
 const MODULO = "receita-vendas";
 
-const FILIAIS = configuracaoInicial().filiais;
+const catalogo = indexarContas([
+  { codigo: "3.1.1.1", descricao: "VENDA DE MERCADORIA", totalizaEm: "3.1.1", sintetica: true },
+  { codigo: "3.1.1.1.01", descricao: "BAZAR", totalizaEm: "3.1.1.1", sintetica: false },
+  { codigo: "3.1.1.1.02", descricao: "COLEÇÃO", totalizaEm: "3.1.1.1", sintetica: false },
+]);
 
-function visaoConfigurada() {
-  return definirContasDoModulo(criarVisao("v1", "DRE 2025"), MODULO, [
-    "3.1.1.01.001",
-    "3.1.1.01.002",
-  ]);
-}
+const FILIAIS = [{ id: "000001", nome: "KING&JOE" }, { id: "000008", nome: "E-COMMERCE" }];
 
-function planoBase(visaoId = "v1") {
-  return criarPlano("teste", "Plano de teste", 2024, 2026, visaoId);
-}
+const visao = definirContasDoModulo(criarVisao("v1", "DRE 2025"), MODULO, ["3.1.1.1.02"]);
 
-// Açúcar para não repetir o objeto de argumentos em cada caso.
+const realizado = indexarRealizado([
+  { classificacao: "3.1.1.1.02", filial: "000001", mes: 1, debito: 0, credito: 1000 },
+  { classificacao: "3.1.1.1.02", filial: "000008", mes: 1, debito: 0, credito: 500 },
+  { classificacao: "3.1.1.1.02", filial: "000001", mes: 2, debito: 0, credito: 2000 },
+]);
+
+const anterior = indexarRealizado([
+  { classificacao: "3.1.1.1.02", filial: "000001", mes: 1, debito: 0, credito: 800 },
+]);
+
+const plano = (planejado = {}) => ({
+  ...criarPlano("p1", "Oficial", 2024, 2026, "v1"),
+  planejado,
+});
+
 const linhas = (extra) =>
   criarLinhasOrcamento({
-    plano: planoBase(),
-    visao: visaoConfigurada(),
+    plano: plano(),
+    visao,
     filiais: FILIAIS,
+    catalogo,
+    realizado,
+    realizadoAnterior: anterior,
     moduloId: MODULO,
     filialId: "total",
     ano: ANO,
     ...extra,
   });
 
-const total = (extra) =>
-  totalDoModuloNoAno({
-    plano: planoBase(),
-    visao: visaoConfigurada(),
-    filiais: FILIAIS,
-    moduloId: MODULO,
-    filialId: "total",
-    ano: ANO,
-    ...extra,
-  });
-
-const linhasDeMes = (lista) => lista.filter((linha) => typeof linha.id === "number");
+const mes = (lista, numero) => lista.find((linha) => linha.id === numero);
 const totalDe = (lista) => lista.find((linha) => linha.id === "total");
 const mediaDe = (lista) => lista.find((linha) => linha.id === "media");
 
 // ---------------------------------------------------------------------------
-// Visão x orçamento
+// Planejado: só o que foi digitado
 // ---------------------------------------------------------------------------
 
-test("módulo sem contas na visão fica zerado", () => {
-  // Zerar é honesto: sem conta vinculada não há o que somar. O contrário seria
-  // exibir número gerado para um módulo que o usuário nunca configurou.
+test("célula sem valor digitado é zero, não número gerado", () => {
+  // O mock determinístico foi removido: não existe planejamento que ninguém fez.
+  const lista = linhas();
+  assert.equal(totalDe(lista).planejado, 0);
+  lista.forEach((linha) => assert.equal(linha.planejado, 0, `planejado de ${linha.label}`));
+});
+
+test("valor digitado aparece no mês e no total", () => {
+  const digitado = { [chavePlanejado(MODULO, "000001", ANO, 3)]: 12345 };
+  const lista = linhas({ plano: plano(digitado) });
+
+  assert.equal(mes(lista, 3).planejado, 12345);
+  assert.equal(mes(lista, 4).planejado, 0);
+  assert.equal(totalDe(lista).planejado, 12345);
+});
+
+test("planejado de 'total' soma as filiais", () => {
+  const digitado = {
+    [chavePlanejado(MODULO, "000001", ANO, 1)]: 100,
+    [chavePlanejado(MODULO, "000008", ANO, 1)]: 25,
+  };
+  const lista = linhas({ plano: plano(digitado) });
+  assert.equal(mes(lista, 1).planejado, 125);
+});
+
+test("edição vale só para o módulo, a filial e o ano da chave", () => {
+  const digitado = { [chavePlanejado(MODULO, "000001", ANO, 1)]: 999 };
+  const p = plano(digitado);
+
+  const outraFilial = mes(linhas({ plano: p, filialId: "000008" }), 1).planejado;
+  const outroAno = mes(linhas({ plano: p, filialId: "000001", ano: 2024 }), 1).planejado;
+  const outroModulo = mes(
+    linhas({
+      plano: p,
+      visao: definirContasDoModulo(visao, "custos-variaveis", ["3.1.1.1.02"]),
+      moduloId: "custos-variaveis",
+      filialId: "000001",
+    }),
+    1
+  ).planejado;
+
+  assert.equal(outraFilial, 0);
+  assert.equal(outroAno, 0);
+  assert.equal(outroModulo, 0);
+});
+
+test("totalPlanejadoNoAno soma os doze meses", () => {
+  const digitado = {
+    [chavePlanejado(MODULO, "000001", ANO, 1)]: 10,
+    [chavePlanejado(MODULO, "000001", ANO, 12)]: 90,
+  };
+  const total = totalPlanejadoNoAno({
+    plano: plano(digitado),
+    visao,
+    filiais: FILIAIS,
+    moduloId: MODULO,
+    filialId: "total",
+    ano: ANO,
+  });
+  assert.equal(total, 100);
+});
+
+// ---------------------------------------------------------------------------
+// Realizado: vem do ERP
+// ---------------------------------------------------------------------------
+
+test("realizado vem do índice do ERP, por filial e mês", () => {
+  const lista = linhas();
+  assert.equal(mes(lista, 1).realizado, 1500);
+  assert.equal(mes(lista, 2).realizado, 2000);
+  assert.equal(mes(lista, 3).realizado, 0);
+  assert.equal(totalDe(lista).realizado, 3500);
+});
+
+test("ano anterior usa o índice do ano anterior", () => {
+  const lista = linhas();
+  assert.equal(mes(lista, 1).anterior, 800);
+  assert.equal(mes(lista, 1).variacao, 700);
+  assert.equal(mes(lista, 1).variacaoPercentual, (700 / 800) * 100);
+});
+
+test("realizado ausente não quebra a tabela", () => {
+  const lista = linhas({ realizado: undefined, realizadoAnterior: undefined });
+  assert.equal(totalDe(lista).realizado, 0);
+  assert.equal(totalDe(lista).anterior, 0);
+  assert.equal(totalDe(lista).variacaoPercentual, 0);
+});
+
+test("módulo sem conta na visão zera todas as colunas", () => {
   const lista = linhas({ visao: criarVisao("v1", "Vazia") });
-
   assert.equal(lista.length, 14, "12 meses + total + média");
-  for (const linha of lista) {
-    assert.equal(linha.planejado, 0, `planejado de ${linha.label}`);
-    assert.equal(linha.realizado, 0, `realizado de ${linha.label}`);
-    assert.equal(linha.anterior, 0, `ano anterior de ${linha.label}`);
-  }
+  lista.forEach((linha) => {
+    assert.equal(linha.planejado, 0);
+    assert.equal(linha.realizado, 0);
+    assert.equal(linha.anterior, 0);
+  });
 });
 
-test("módulo com contas na visão produz valores", () => {
-  const resumo = totalDe(linhas());
-  assert.ok(resumo.planejado > 0);
-  assert.ok(resumo.realizado > 0);
-});
-
-test("módulo inexistente não quebra e devolve zeros", () => {
+test("módulo inexistente devolve zeros em vez de estourar", () => {
   assert.equal(totalDe(linhas({ moduloId: "nao-existe" })).planejado, 0);
 });
 
 test("visão ausente devolve zeros em vez de estourar", () => {
-  assert.equal(totalDe(linhas({ visao: null })).planejado, 0);
+  assert.equal(totalDe(linhas({ visao: null })).realizado, 0);
 });
 
-test("sem filial configurada o orçamento é zero, não erro", () => {
-  // Configurações é global; se estiver vazia não há filial para somar.
-  assert.equal(totalDe(linhas({ filiais: [] })).planejado, 0);
-  assert.equal(totalDe(linhas({ filiais: undefined })).planejado, 0);
+test("filial fora do cadastro do ERP devolve zeros", () => {
+  assert.equal(totalDe(linhas({ filialId: "999999" })).realizado, 0);
 });
 
-test("cada módulo configurado tem seu próprio valor", () => {
-  const visao = definirContasDoModulo(visaoConfigurada(), "despesas-pessoal", ["3.1.9.01.001"]);
-  const receita = total({ visao });
-  const pessoal = total({ visao, moduloId: "despesas-pessoal" });
-
-  assert.ok(receita > 0);
-  assert.ok(pessoal > 0);
-  assert.notEqual(receita, pessoal, "módulos diferentes não podem gerar o mesmo total");
-});
-
-// ---------------------------------------------------------------------------
-// Filiais (configuração global)
-// ---------------------------------------------------------------------------
-
-test("filial nova nasce zerada em planejado E em realizado", () => {
-  // Regressão: o planejado vinha de um dicionário vazio (0) enquanto o realizado
-  // era gerado por fórmula com fator default, então aparecia realizado contra
-  // planejado zero.
-  const nova = { id: "nova", nome: "Filial Nova", manual: true, fator: 0 };
-  const lista = linhas({ filiais: [...FILIAIS, nova], filialId: "nova" });
-
-  for (const linha of linhasDeMes(lista)) {
-    assert.equal(linha.planejado, 0, `planejado de ${linha.label}`);
-    assert.equal(linha.realizado, 0, `realizado de ${linha.label}`);
-    assert.equal(linha.anterior, 0, `ano anterior de ${linha.label}`);
-  }
-});
-
-test("filial inexistente na configuração devolve zero", () => {
-  assert.equal(totalDe(linhas({ filialId: "nao-existe" })).planejado, 0);
-});
-
-test("total das filiais é a soma das filiais individuais", () => {
-  const soma = FILIAIS.reduce(
-    (acumulado, filial) => acumulado + total({ filialId: filial.id }),
-    0
-  );
-  assert.equal(total(), soma);
-});
-
-test("excluir filial limpa as edições dela em TODOS os planos", () => {
-  // Filial é global: purgar só o plano aberto deixaria chaves órfãs nos outros,
-  // que ressuscitariam se a filial fosse recriada com o mesmo id.
-  const planos = [
-    {
-      ...criarPlano("p1", "Um", 2024, 2026, "v1"),
-      planejado: {
-        [chavePlanejado(MODULO, "akr", ANO, 1)]: 100,
-        [chavePlanejado(MODULO, "menhub", ANO, 1)]: 200,
-      },
-    },
-    {
-      ...criarPlano("p2", "Dois", 2024, 2026, "v1"),
-      planejado: {
-        [chavePlanejado("custos-variaveis", "akr", ANO, 5)]: 300,
-        [chavePlanejado("custos-variaveis", "loja", ANO, 5)]: 400,
-      },
-    },
-  ];
-
-  const [p1, p2] = purgarFilialDosPlanos(planos, "akr");
-  assert.deepEqual(Object.keys(p1.planejado), [chavePlanejado(MODULO, "menhub", ANO, 1)]);
-  assert.deepEqual(Object.keys(p2.planejado), [chavePlanejado("custos-variaveis", "loja", ANO, 5)]);
-});
-
-test("purgar filial sem edições devolve o mesmo objeto", () => {
-  // Evita recriar o plano (e disparar re-render) quando nada mudou.
-  const planos = [criarPlano("p1", "Um", 2024, 2026, "v1")];
-  const proximo = purgarFilialDosPlanos(planos, "akr");
-  assert.equal(proximo[0], planos[0]);
-});
-
-// ---------------------------------------------------------------------------
-// Edição e cálculo
-// ---------------------------------------------------------------------------
-
-test("edição manual entra no total do ano", () => {
-  const plano = planoBase();
-  const chave = chavePlanejado(MODULO, "akr", ANO, 3);
-
-  const semEdicao = totalDe(linhas({ filialId: "akr" })).planejado;
-  const original = linhasDeMes(linhas({ filialId: "akr" }))[2].planejado;
-
-  const editado = { ...plano, planejado: { ...plano.planejado, [chave]: 1234567 } };
-  const comEdicao = totalDe(linhas({ plano: editado, filialId: "akr" })).planejado;
-
-  assert.equal(comEdicao, semEdicao - original + 1234567);
-});
-
-test("edição de valor zero é respeitada e não cai de volta no gerador", () => {
-  // `?? gerador` e não `|| gerador`: zerar uma célula é decisão do usuário.
-  const chave = chavePlanejado(MODULO, "akr", ANO, 5);
-  const editado = { ...planoBase(), planejado: { [chave]: 0 } };
-
-  const linha = linhasDeMes(linhas({ plano: editado, filialId: "akr" }))[4];
-  assert.equal(linha.planejado, 0);
-});
-
-test("a edição vale só para o módulo, a filial e o ano da chave", () => {
-  const visao = definirContasDoModulo(visaoConfigurada(), "custos-variaveis", ["3.1.9.01.001"]);
-  const chave = chavePlanejado(MODULO, "akr", ANO, 1);
-  const plano = { ...planoBase(), planejado: { [chave]: 999999 } };
-
-  const outroModulo = linhasDeMes(
-    linhas({ plano, visao, moduloId: "custos-variaveis", filialId: "akr" })
-  )[0].planejado;
-  const outraFilial = linhasDeMes(linhas({ plano, visao, filialId: "menhub" }))[0].planejado;
-  const outroAno = linhasDeMes(linhas({ plano, visao, filialId: "akr", ano: 2025 }))[0].planejado;
-
-  assert.notEqual(outroModulo, 999999);
-  assert.notEqual(outraFilial, 999999);
-  assert.notEqual(outroAno, 999999);
+test("módulo de despesa lê o realizado invertido", () => {
+  const visaoDespesa = definirContasDoModulo(criarVisao("v1", "X"), "custos-variaveis", [
+    "3.1.1.1.02",
+  ]);
+  const lista = linhas({ visao: visaoDespesa, moduloId: "custos-variaveis" });
+  // Mesmos lançamentos, sinal contrário: crédito 1500 vira −1500 em despesa.
+  assert.equal(mes(lista, 1).realizado, -1500);
 });
 
 test("média divide pelos meses com dado, não por 12 fixo", () => {
   const lista = linhas();
-  const resumo = totalDe(lista);
+  const total = totalDe(lista);
   const media = mediaDe(lista);
-  const meses = mesesComRealizado(ANO);
+  const comDado = mesesComRealizado(ANO);
 
-  assert.equal(media.planejado, resumo.planejado / 12);
-  if (meses > 0 && meses < 12) {
-    assert.equal(media.realizado, resumo.realizado / meses);
-    assert.notEqual(media.realizado, resumo.realizado / 12);
+  assert.equal(media.planejado, total.planejado / 12);
+  if (comDado > 0 && comDado < 12) {
+    assert.equal(media.realizado, total.realizado / comDado);
   }
+});
+
+// ---------------------------------------------------------------------------
+// Filial removida do ERP
+// ---------------------------------------------------------------------------
+
+test("purgar filial limpa as edições dela em todos os planos", () => {
+  const planos = [
+    plano({
+      [chavePlanejado(MODULO, "000001", ANO, 1)]: 100,
+      [chavePlanejado(MODULO, "000008", ANO, 1)]: 200,
+    }),
+    { ...plano({ [chavePlanejado(MODULO, "000001", ANO, 5)]: 300 }), id: "p2" },
+  ];
+
+  const [p1, p2] = purgarFilialDosPlanos(planos, "000001");
+  assert.deepEqual(Object.keys(p1.planejado), [chavePlanejado(MODULO, "000008", ANO, 1)]);
+  assert.deepEqual(Object.keys(p2.planejado), []);
+});
+
+test("purgar filial sem edições devolve o mesmo objeto", () => {
+  // Evita recriar o plano (e disparar re-render) quando nada mudou.
+  const planos = [plano()];
+  assert.equal(purgarFilialDosPlanos(planos, "000001")[0], planos[0]);
 });

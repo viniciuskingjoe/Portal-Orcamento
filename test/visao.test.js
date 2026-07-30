@@ -2,7 +2,6 @@ import { strict as assert } from "node:assert";
 import { test } from "node:test";
 
 import { MODULOS } from "../src/dados/modulos.js";
-import { contasDoModulo as catalogoDoModulo } from "../src/dados/contas.js";
 import {
   contasDoModulo,
   criarVisao,
@@ -77,11 +76,6 @@ test("os oito módulos fixos existem e têm tipo", () => {
   );
   MODULOS.forEach((item) => {
     assert.ok(["receita", "despesa"].includes(item.tipo), `${item.id} sem tipo válido`);
-    assert.ok(catalogoDoModulo(item.id).length > 0, `${item.id} sem catálogo de contas`);
   });
 });
 
-test("módulo de receita oferece contas de receita; de despesa, de dedução", () => {
-  assert.ok(catalogoDoModulo("receita-vendas").every((c) => c.codigo.startsWith("3.1.1")));
-  assert.ok(catalogoDoModulo("deducoes-vendas").every((c) => c.codigo.startsWith("3.1.9")));
-});
