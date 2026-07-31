@@ -46,3 +46,22 @@ test("editar e confirmar preserva o valor exibido", () => {
     assert.equal(parseNumeroPtBr(formatarParaEdicao(valor)), valor);
   }
 });
+
+// Regressão: com três casas, 38,9595 virava 38,96 ao reabrir a célula e a
+// confirmação seguinte gravava o valor arredondado. Numa base de 133 milhões
+// isso é meio milhar de reais que aparece do nada.
+test("percentual não perde casas ao reabrir a célula", () => {
+  assert.equal(formatarParaEdicao(38.9595), "38,9595");
+  assert.equal(parseNumeroPtBr(formatarParaEdicao(38.9595)), 38.9595);
+
+  for (const taxa of [1.7, 38.9595, 0.0125, 2.505, 74.7125]) {
+    assert.equal(parseNumeroPtBr(formatarParaEdicao(taxa)), taxa);
+  }
+});
+
+// O toFixed existe para absorver o resíduo binário das somas; seis casas ainda
+// fazem isso.
+test("resíduo de ponto flutuante não vaza para o input", () => {
+  assert.equal(formatarParaEdicao(0.1 + 0.2), "0,3");
+  assert.equal(formatarParaEdicao(2257042.6400000002), "2257042,64");
+});

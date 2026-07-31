@@ -49,8 +49,14 @@ export function parseNumeroPtBr(texto) {
 
 // Valor que aparece dentro do input ao começar a editar: sem separador de
 // milhar (para não colidir com a leitura acima) e sem zeros decimais inúteis.
+//
+// Seis casas, não três: em módulo percentual o que está gravado é uma taxa, e
+// truncar 38,9595 para 38,96 ao reabrir a célula mudava o valor gravado na
+// próxima confirmação — meio milhar de reais numa base de 133 milhões. Seis
+// casas também absorvem o resíduo binário de somas em ponto flutuante, que é o
+// motivo de existir o toFixed aqui.
 export function formatarParaEdicao(valor) {
   if (!Number.isFinite(valor)) return "0";
-  const fixo = valor.toFixed(3).replace(/0+$/, "").replace(/\.$/, "");
+  const fixo = valor.toFixed(6).replace(/0+$/, "").replace(/\.$/, "");
   return fixo.replace(".", ",");
 }
