@@ -1275,6 +1275,15 @@ button {
   white-space: nowrap;
 }
 
+/* Nome de filial é longo e não tem código para encurtar ("KING&JOE FILIAL LOJA
+   CATUAI LDN"). Quebra em duas linhas e o item cresce; sem `min-width: 0` o
+   texto não encolhe dentro do flex e escapa do painel. */
+.selecao-item > span {
+  min-width: 0;
+  line-height: 1.3;
+  overflow-wrap: anywhere;
+}
+
 .check-filtro {
   position: relative;
   display: flex;

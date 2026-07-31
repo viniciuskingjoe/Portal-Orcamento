@@ -280,9 +280,13 @@ export default function TelaVisaoModulo({
       {erro ? <AvisoErro mensagem={erro} onTentarDeNovo={onRecarregar} /> : null}
 
       {!carregando && !erro ? (
-        <div className="orcamento-layout">
-          {/* Filial e centro viram painéis à esquerda, como na tela do plano:
-              a escolha fica sempre visível junto do que ela filtra. */}
+        <div className="orcamento-layout" data-paineis={usaCentro ? 2 : 1}>
+          {/* Filial e centro viram painéis à esquerda, como na tela do plano: a
+              escolha fica sempre visível junto do que ela filtra.
+
+              `data-paineis` é o que dá largura à coluna: sem ele os dois painéis
+              dividem os 268px do caso de um só e o nome da filial fica
+              ilegível. */}
           <aside className="orcamento-lateral">
             <section className="painel-selecao">
               <h3>Filiais</h3>
