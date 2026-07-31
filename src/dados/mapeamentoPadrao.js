@@ -87,6 +87,34 @@ export function correcaoDeSinal(visaoContabil, codigo) {
   return regra?.tipo ?? null;
 }
 
+// ============================================================================
+// A QUE RECEITA PERTENCE O REALIZADO
+//
+// O razão não diz de qual receita é uma devolução ou um custo — a conta contábil
+// é uma só. O Scoreplan resolve pelo CENTRO DE CUSTO:
+//
+//   case when CRI.CENTRO_CUSTO = '020' then '31101004'   -- e-commerce
+//        else '31101001' end                             -- coleção
+//
+// É grosseiro: devolução de bazar, saldo e mostruário entram como coleção, e as
+// outras receitas ficam sem realizado nenhum. Mas é a regra que produz os
+// números do Scoreplan, e é contra eles que este portal é conferido. Corrigir a
+// atribuição depende do ERP passar a marcar a receita no lançamento.
+// ============================================================================
+
+export const RECEITA_DO_REALIZADO = {
+  25: {
+    padrao: "3.1.1.01.001", // VENDAS DE PRODUTOS - COLEÇÃO
+    porCentro: { "020": "3.1.1.01.004" }, // VENDAS DE PRODUTOS - E-COMMERCE
+  },
+};
+
+export function receitaDoCentro(visaoContabil, centro) {
+  const regra = RECEITA_DO_REALIZADO[visaoContabil];
+  if (!regra) return null;
+  return regra.porCentro[String(centro ?? "").trim()] ?? regra.padrao;
+}
+
 export function temMapeamentoPadrao(visaoContabil) {
   return visaoContabil === VISAO_CONTABIL_PADRAO;
 }

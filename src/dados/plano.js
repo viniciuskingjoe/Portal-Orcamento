@@ -226,6 +226,9 @@ export function criarLinhasOrcamento({
 
   // O sinal é decidido conta a conta pelo grupo contábil dela, não pelo tipo do
   // módulo: "Outras despesas" contém contas de receita.
+  // `receitas` recorta o realizado do mesmo jeito que recorta o planejado: se a
+  // tela está numa receita, a coluna comparativa tem que ser da mesma receita,
+  // senão o planejado é de uma fatia e o realizado do bolo inteiro.
   const comum = {
     contas,
     filiais,
@@ -234,6 +237,7 @@ export function criarLinhasOrcamento({
     tipoPadrao: modulo.tipo,
     sinais,
     visaoContabil,
+    receitas: ehPercentual(moduloId) ? receitas : undefined,
   };
 
   // Mês que ainda não aconteceu não tem realizado, mesmo que o razão já tenha

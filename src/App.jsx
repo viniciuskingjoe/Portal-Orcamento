@@ -195,11 +195,14 @@ export default function PlanejamentoOrcamentario() {
 
   const contasDaTabela =
     filtros.conta === TODAS_AS_CONTAS ? contasDisponiveis : [filtros.conta];
-  const receitasDaTabela = !moduloDaTela?.percentual
-    ? undefined
-    : filtros.receita === TODAS_AS_CONTAS
-      ? receitasDisponiveis
-      : [filtros.receita];
+  // Só recorta quando há uma receita escolhida. Em "Todas as receitas" o
+  // planejado cai no fallback (todas as da filial) e o realizado fica com a
+  // conta contábil inteira — que é o mesmo número, sem risco de perder o
+  // movimento de um centro que a visão não tenha configurado.
+  const receitasDaTabela =
+    moduloDaTela?.percentual && filtros.receita !== TODAS_AS_CONTAS
+      ? [filtros.receita]
+      : undefined;
 
   const linhasOrcamento = useMemo(() => {
     if (!planoAtivo || !moduloDaTela) return [];

@@ -99,6 +99,22 @@ deducoes-vendas|000001||3.1.2.01.001|1|3.1.1.01.001
 O que fica gravado é o percentual. É isso que faz o plano acompanhar a receita:
 mudou a previsão de faturamento, a dedução recalcula sozinha.
 
+O **realizado** segue o mesmo recorte, senão o planejado seria de uma fatia e a
+coluna comparativa do bolo inteiro. Como o razão não diz de qual receita é uma
+devolução, a atribuição vem do centro de custo — a regra do Scoreplan:
+
+```sql
+case when CRI.CENTRO_CUSTO = '020' then '31101004'   -- e-commerce
+     else '31101001' end                             -- coleção
+```
+
+É grosseiro (devolução de bazar, saldo e mostruário entra como coleção, e as
+outras receitas ficam sem realizado), mas é o que produz os números do Scoreplan.
+Fica isolado em `RECEITA_DO_REALIZADO`, para sair daqui quando o ERP passar a
+marcar a receita no lançamento. Em "Todas as receitas" não há filtro: o realizado
+é o da conta contábil inteira, que dá o mesmo total sem risco de perder o
+movimento de um centro que a visão não tenha configurado.
+
 A conversão é **por filial e por conta de receita**, nunca sobre a base
 consolidada — aplicar uma base única daria o número errado justamente na tela
 "Total", que é onde ninguém confere linha a linha. Nas linhas de Total o

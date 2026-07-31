@@ -197,3 +197,70 @@ test("filiais fora do uso não quebra com índice ausente", () => {
   assert.deepEqual(filiaisForaDoUso(null, FILIAIS), []);
   assert.deepEqual(filiaisForaDoUso([null, undefined], FILIAIS), []);
 });
+
+// ---------------------------------------------------------------------------
+// Realizado recortado por conta de receita
+//
+// O razão não diz de qual receita é uma devolução: a atribuição vem do centro
+// de custo (020 é e-commerce, o resto é coleção). É a regra do Scoreplan, e é
+// contra ele que os números são conferidos.
+// ---------------------------------------------------------------------------
+
+const COLECAO = "3.1.1.01.001";
+const ECOMMERCE = "3.1.1.01.004";
+const DEDUCAO = "3.1.2.01.001";
+
+const comReceita = indexarRealizado(
+  [
+    { classificacao: DEDUCAO, filial: "000001", centro: "001", mes: 1, debito: 700, credito: 0 },
+    { classificacao: DEDUCAO, filial: "000001", centro: "017", mes: 1, debito: 100, credito: 0 },
+    { classificacao: DEDUCAO, filial: "000001", centro: "020", mes: 1, debito: 200, credito: 0 },
+  ],
+  "25"
+);
+
+const somarDeducao = (extra) =>
+  somarRealizado({
+    indice: comReceita,
+    contas: [DEDUCAO],
+    filiais: [{ id: "000001" }],
+    mes: 1,
+    tipoPadrao: "despesa",
+    visaoContabil: "25",
+    ...extra,
+  });
+
+test("centro 020 vai para e-commerce, o resto para coleção", () => {
+  assert.equal(somarDeducao({ receitas: [COLECAO] }), 800);
+  assert.equal(somarDeducao({ receitas: [ECOMMERCE] }), 200);
+});
+
+test("as receitas somadas dão a conta contábil inteira", () => {
+  assert.equal(somarDeducao({ receitas: [COLECAO, ECOMMERCE] }), 1000);
+  assert.equal(somarDeducao({}), 1000);
+});
+
+test("sem receita escolhida o realizado é da conta inteira", () => {
+  // Vazio e ausente valem o mesmo: "todas".
+  assert.equal(somarDeducao({ receitas: [] }), 1000);
+  assert.equal(somarDeducao({ receitas: undefined }), 1000);
+});
+
+test("receita sem movimento atribuído fica zerada", () => {
+  assert.equal(somarDeducao({ receitas: ["3.1.1.01.002"] }), 0);
+});
+
+test("com centro escolhido a receita já está determinada", () => {
+  // O centro 001 é coleção: pedir e-commerce junto não pode inventar valor.
+  assert.equal(somarDeducao({ centroId: "001", receitas: [COLECAO] }), 700);
+  assert.equal(somarDeducao({ centroId: "001", receitas: [ECOMMERCE] }), 0);
+  assert.equal(somarDeducao({ centroId: "020", receitas: [ECOMMERCE] }), 200);
+});
+
+test("sem visão contábil conhecida não há índice por receita", () => {
+  const semRegra = indexarRealizado(
+    [{ classificacao: DEDUCAO, filial: "000001", centro: "001", mes: 1, debito: 700, credito: 0 }],
+    "99"
+  );
+  assert.equal(semRegra.porReceita.size, 0);
+});

@@ -1,5 +1,5 @@
 import { SEM_CENTRO } from "./visao.js";
-import { correcaoDeSinal } from "./mapeamentoPadrao.js";
+import { correcaoDeSinal, receitaDoCentro } from "./mapeamentoPadrao.js";
 
 // ============================================================================
 // REALIZADO
@@ -12,6 +12,7 @@ import { correcaoDeSinal } from "./mapeamentoPadrao.js";
 export const REALIZADO_VAZIO = {
   porChave: new Map(),
   porContaFilialMes: new Map(),
+  porReceita: new Map(),
   filiais: new Set(),
 };
 
@@ -23,11 +24,20 @@ function acumular(mapa, chave, linha) {
   });
 }
 
-// Dois índices: um com centro de custo e outro somando todos os centros. O
-// segundo evita varrer a lista de centros quando o módulo não usa essa dimensão.
-export function indexarRealizado(bruto) {
+// Três índices sobre as mesmas linhas:
+//
+//   porChave           conta | filial | centro | mês
+//   porContaFilialMes  conta | filial | mês      — evita varrer os centros nos
+//                                                  módulos que não usam a dimensão
+//   porReceita         conta | filial | receita | mês
+//
+// O terceiro existe porque o razão não diz de qual receita é uma devolução: a
+// atribuição vem do centro de custo (ver dados/mapeamentoPadrao.js). Resolver
+// isso na indexação, e não na soma, evita reabrir o mapa a cada célula.
+export function indexarRealizado(bruto, visaoContabil = null) {
   const porChave = new Map();
   const porContaFilialMes = new Map();
+  const porReceita = new Map();
   // Filiais que têm movimento no período. Serve para avisar quando alguma delas
   // está fora das filiais em uso — o total da tela sairia menor sem explicação.
   const filiais = new Set();
@@ -36,10 +46,15 @@ export function indexarRealizado(bruto) {
     const centro = linha.centro ?? SEM_CENTRO;
     acumular(porChave, `${linha.classificacao}|${linha.filial}|${centro}|${linha.mes}`, linha);
     acumular(porContaFilialMes, `${linha.classificacao}|${linha.filial}|${linha.mes}`, linha);
+
+    const receita = receitaDoCentro(visaoContabil, centro);
+    if (receita) {
+      acumular(porReceita, `${linha.classificacao}|${linha.filial}|${receita}|${linha.mes}`, linha);
+    }
     filiais.add(linha.filial);
   });
 
-  return { porChave, porContaFilialMes, filiais };
+  return { porChave, porContaFilialMes, porReceita, filiais };
 }
 
 // Filiais com movimento que estão fora da lista em uso.
@@ -88,6 +103,10 @@ function valor({ debito, credito }, tipo) {
   return tipo === "receita" ? credito - debito : debito - credito;
 }
 
+// `receitas` recorta o realizado pelas contas de receita selecionadas. Vazio ou
+// ausente = a conta contábil inteira, que é o que "Todas as receitas" deve
+// mostrar — a soma das receitas mapeadas dá exatamente o mesmo, e não filtrar
+// evita perder movimento de um centro que a visão não tenha configurado.
 export function somarRealizado({
   indice,
   catalogo,
@@ -98,20 +117,38 @@ export function somarRealizado({
   tipoPadrao,
   sinais,
   visaoContabil,
+  receitas,
 }) {
   if (!indice) return 0;
   const semCentro = !centroId || centroId === SEM_CENTRO;
-  const mapa = semCentro ? indice.porContaFilialMes : indice.porChave;
+  const filtraReceita = Array.isArray(receitas) && receitas.length > 0;
+
+  // Com um centro escolhido a receita já está determinada — o mapa é
+  // centro → receita. Filtrar pelos dois seria redundante: ou o centro é
+  // daquela receita, ou não há o que somar.
+  if (!semCentro && filtraReceita && !receitas.includes(receitaDoCentro(visaoContabil, centroId))) {
+    return 0;
+  }
+
+  const porReceita = semCentro && filtraReceita;
+  const mapa = porReceita
+    ? indice.porReceita
+    : semCentro
+      ? indice.porContaFilialMes
+      : indice.porChave;
 
   let total = 0;
   (contas ?? []).forEach((conta) => {
     const tipo = tipoDaConta(catalogo, conta, tipoPadrao, { sinais, visaoContabil });
     (filiais ?? []).forEach((filial) => {
-      const chave = semCentro
-        ? `${conta}|${filial.id}|${mes}`
-        : `${conta}|${filial.id}|${centroId}|${mes}`;
-      const linha = mapa.get(chave);
-      if (linha) total += valor(linha, tipo);
+      const chaves = porReceita
+        ? receitas.map((receita) => `${conta}|${filial.id}|${receita}|${mes}`)
+        : [semCentro ? `${conta}|${filial.id}|${mes}` : `${conta}|${filial.id}|${centroId}|${mes}`];
+
+      chaves.forEach((chave) => {
+        const linha = mapa.get(chave);
+        if (linha) total += valor(linha, tipo);
+      });
     });
   });
   return total;

@@ -111,7 +111,9 @@ export function useContas(visaoContabil) {
 export function useRealizado(ano, visaoContabil) {
   const buscar = useCallback(async (chave) => {
     const [visao, valor] = chave.split("|");
-    return indexarRealizado(await api.realizado(Number(valor), visao));
+    // A visão contábil vai junto: é ela que diz de qual receita é cada centro de
+    // custo, e o índice já sai com esse recorte pronto.
+    return indexarRealizado(await api.realizado(Number(valor), visao), visao);
   }, []);
   const cache = useCachePorChave(buscar, REALIZADO_VAZIO);
 

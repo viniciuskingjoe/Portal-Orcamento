@@ -84,6 +84,15 @@ export default function TelaOrcamento({
   const totalDaTabela = linhas.find((linha) => linha.id === "total");
   const semBase = percentual && !totalDaTabela?.base;
 
+  // Receita escolhida que não recebe realizado nenhum. Sem explicar, a coluna
+  // zerada ao lado de um planejado cheio parece cálculo errado — e não é: o ERP
+  // não marca a receita no lançamento.
+  const receitaSemRealizado =
+    percentual &&
+    filtros.receita !== TODAS_AS_CONTAS &&
+    !totalDaTabela?.realizado &&
+    !totalDaTabela?.anterior;
+
   const receitas = percentual ? (receitasDisponiveis ?? []) : [];
 
   // Editar só faz sentido em uma célula única: uma filial e uma conta — e, no
@@ -238,6 +247,18 @@ export default function TelaOrcamento({
                 receita planejada para {filtros.filial === "total" ? "estas filiais" : "esta filial"}{" "}
                 em {plano.ano}. Enquanto isso, a coluna em reais fica zerada. Lance Receita de vendas
                 primeiro.
+              </span>
+            </p>
+          ) : null}
+
+          {receitaSemRealizado ? (
+            <p className="modulo-aviso">
+              <Icone nome="info" tamanho={16} />
+              <span>
+                Sem realizado nesta receita. O ERP não marca a receita no lançamento — a atribuição
+                vem do centro de custo, como no Scoreplan: <strong>020</strong> é e-commerce e todo o
+                resto é coleção. As demais receitas ficam sem realizado até o ERP passar a
+                identificá-las.
               </span>
             </p>
           ) : null}
