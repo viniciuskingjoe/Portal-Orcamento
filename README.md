@@ -51,13 +51,21 @@ Visão "DRE 2026"  →  visão contábil 25 (DRE GERENCIAL)
 │   ├── MEN HUB    → 3.1.1.01.001, 3.1.1.01.002
 │   └── KING&JOE   → 3.1.1.01.001
 └── Despesas operacionais            (usa centro de custo)
-    └── KING&JOE   → 4.4.1.01, 4.4.1.02       contas da filial
-        ├── 002 ADMINISTRAÇÃO → 4.4.1.01      subconjunto por centro
+    └── KING&JOE                              filial → centros → contas
+        ├── 002 ADMINISTRAÇÃO → 4.4.1.01
         └── 008 T.I           → 4.4.1.02
+        ═ contas da filial    → 4.4.1.01, 4.4.1.02    união, derivada
 
 Plano "Orçamento 2026"  →  ano 2026 · visão DRE 2026
 └── módulo → escolhe filial, centro e CONTA → lança o planejado mês a mês
 ```
+
+Sem centro de custo, a filial escolhe as contas direto. **Com** centro a ordem é
+filial → centros → contas de cada centro: marca-se quais centros a filial usa e
+depois o que cada um orça. A lista da filial deixa de ser escolha e passa a ser
+o consolidado — quem lança é o centro. Guardar a união em `contas`, em vez de
+recalculá-la, mantém tela do plano, DRE e base do percentual lendo a filial sem
+precisar saber que o módulo usa centro.
 
 O planejado é gravado por `modulo | filial | centro | conta | mes`. Só contas
 analíticas (`CLASSIFICACAO_ANALITICA = 0`) recebem lançamento, então são as

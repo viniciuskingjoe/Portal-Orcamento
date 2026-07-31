@@ -12,6 +12,8 @@ import {
   definirContasDaFilial,
   definirContasDoCentro,
   definirUsaCentroDeCusto,
+  definirUsoDoCentro,
+  centroEmUso,
   filiaisDoModulo,
   moduloConfigurado,
   modulosDaVisao,
@@ -65,13 +67,43 @@ test("centro de custo é opcional por módulo", () => {
   assert.equal(usaCentroDeCusto(definirUsaCentroDeCusto(visao, DESPESA, true), DESPESA), true);
 });
 
-test("conta do centro precisa estar entre as da filial", () => {
-  // A regra fica no modelo, não só na tela: o centro é subconjunto da filial.
+test("com centro, as contas da filial são a união dos centros", () => {
+  // A ordem de uso é filial -> centros -> contas de cada centro. A lista da
+  // filial deixa de ser escolha e vira o consolidado, que é o que a tela do
+  // plano e o DRE leem.
   let visao = definirUsaCentroDeCusto(nova(), DESPESA, true);
-  visao = definirContasDaFilial(visao, DESPESA, FILIAL, ["4.4.1.01", "4.4.1.02"]);
-  visao = definirContasDoCentro(visao, DESPESA, FILIAL, "002", ["4.4.1.01", "9.9.9"]);
+  visao = definirContasDoCentro(visao, DESPESA, FILIAL, "002", ["4.4.1.01", "4.4.1.02"]);
+  visao = definirContasDoCentro(visao, DESPESA, FILIAL, "008", ["4.4.1.02", "4.4.1.09"]);
 
+  assert.deepEqual(contasDaFilial(visao, DESPESA, FILIAL), ["4.4.1.01", "4.4.1.02", "4.4.1.09"]);
+  assert.deepEqual(contasDoCentro(visao, DESPESA, FILIAL, "008"), ["4.4.1.02", "4.4.1.09"]);
+});
+
+test("o centro não é mais recortado pela filial", () => {
+  // Antes o centro escolhia entre as contas da filial; agora é ele quem define.
+  let visao = definirUsaCentroDeCusto(nova(), DESPESA, true);
+  visao = definirContasDoCentro(visao, DESPESA, FILIAL, "002", ["4.4.1.01"]);
   assert.deepEqual(contasDoCentro(visao, DESPESA, FILIAL, "002"), ["4.4.1.01"]);
+});
+
+test("marcar o centro coloca ele em uso ainda sem conta", () => {
+  let visao = definirUsaCentroDeCusto(nova(), DESPESA, true);
+  visao = definirUsoDoCentro(visao, DESPESA, FILIAL, "002", true);
+
+  assert.equal(centroEmUso(visao, DESPESA, FILIAL, "002"), true);
+  assert.deepEqual(centrosDaFilial(visao, DESPESA, FILIAL), ["002"]);
+  assert.deepEqual(contasDoCentro(visao, DESPESA, FILIAL, "002"), []);
+  assert.deepEqual(contasDaFilial(visao, DESPESA, FILIAL), []);
+});
+
+test("desmarcar o centro leva as contas dele embora", () => {
+  let visao = definirUsaCentroDeCusto(nova(), DESPESA, true);
+  visao = definirContasDoCentro(visao, DESPESA, FILIAL, "002", ["4.4.1.01"]);
+  visao = definirContasDoCentro(visao, DESPESA, FILIAL, "008", ["4.4.1.02"]);
+
+  visao = definirUsoDoCentro(visao, DESPESA, FILIAL, "002", false);
+  assert.deepEqual(centrosDaFilial(visao, DESPESA, FILIAL), ["008"]);
+  assert.deepEqual(contasDaFilial(visao, DESPESA, FILIAL), ["4.4.1.02"]);
 });
 
 test("tirar conta da filial tira dos centros dela", () => {
@@ -84,20 +116,21 @@ test("tirar conta da filial tira dos centros dela", () => {
   assert.deepEqual(contasDoCentro(visao, DESPESA, FILIAL, "002"), ["4.4.1.02"]);
 });
 
-test("centro que fica sem conta some da lista", () => {
+test("centro esvaziado continua em uso", () => {
+  // Vazio é um estado legítimo: o centro foi marcado e as contas ainda não.
+  // Quem tira o centro do ar é a caixa de uso, não a falta de conta.
   let visao = definirUsaCentroDeCusto(nova(), DESPESA, true);
-  visao = definirContasDaFilial(visao, DESPESA, FILIAL, ["4.4.1.01"]);
   visao = definirContasDoCentro(visao, DESPESA, FILIAL, "002", ["4.4.1.01"]);
-  assert.deepEqual(centrosDaFilial(visao, DESPESA, FILIAL), ["002"]);
+  visao = definirContasDoCentro(visao, DESPESA, FILIAL, "002", []);
 
-  visao = definirContasDaFilial(visao, DESPESA, FILIAL, ["4.4.1.09"]);
-  assert.deepEqual(centrosDaFilial(visao, DESPESA, FILIAL), []);
+  assert.deepEqual(centrosDaFilial(visao, DESPESA, FILIAL), ["002"]);
+  assert.deepEqual(contasDaFilial(visao, DESPESA, FILIAL), []);
 });
 
-test("contas efetivas: sem centro usa as da filial, com centro usa o subconjunto", () => {
+test("contas efetivas: sem centro é o consolidado, com centro é o do centro", () => {
   let visao = definirUsaCentroDeCusto(nova(), DESPESA, true);
-  visao = definirContasDaFilial(visao, DESPESA, FILIAL, ["4.4.1.01", "4.4.1.02"]);
   visao = definirContasDoCentro(visao, DESPESA, FILIAL, "002", ["4.4.1.01"]);
+  visao = definirContasDoCentro(visao, DESPESA, FILIAL, "008", ["4.4.1.02"]);
 
   assert.deepEqual(contasEfetivasDoModulo(visao, DESPESA, FILIAL), ["4.4.1.01", "4.4.1.02"]);
   assert.deepEqual(contasEfetivasDoModulo(visao, DESPESA, FILIAL, SEM_CENTRO), [

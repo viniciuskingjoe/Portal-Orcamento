@@ -35,6 +35,7 @@ import {
   definirContasDaFilial,
   definirContasDoCentro,
   definirUsaCentroDeCusto,
+  definirUsoDoCentro,
   usaCentroDeCusto,
 } from "./dados/visao.js";
 import { montarDre } from "./dados/dre.js";
@@ -628,6 +629,11 @@ export default function PlanejamentoOrcamentario() {
           onDefinirContasDoCentro={(moduloId, filialId, centroId, lista) =>
             atualizarVisaoAberta((visao) =>
               definirContasDoCentro(visao, moduloId, filialId, centroId, lista)
+            )
+          }
+          onDefinirUsoDoCentro={(moduloId, filialId, centroId, usa) =>
+            atualizarVisaoAberta((visao) =>
+              definirUsoDoCentro(visao, moduloId, filialId, centroId, usa)
             )
           }
           onAlternarUsaCentro={(moduloId, usa) =>

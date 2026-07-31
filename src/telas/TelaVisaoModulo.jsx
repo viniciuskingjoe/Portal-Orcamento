@@ -10,13 +10,13 @@ import {
   filtrarPorGrupo,
   linhasDaArvore,
   marcarEmCascata,
-  recortarPara,
   resumirSelecao,
 } from "../dados/contas.js";
 import { GRUPOS } from "../dados/modulos.js";
 import { tipoDaConta } from "../dados/realizado.js";
 import {
   SEM_CENTRO,
+  centroEmUso,
   centrosDaFilial,
   sinaisDoModulo,
   contasDaFilial,
@@ -135,6 +135,7 @@ export default function TelaVisaoModulo({
   onRecarregar,
   onDefinirContasDaFilial,
   onDefinirContasDoCentro,
+  onDefinirUsoDoCentro,
   onAlternarUsaCentro,
   onDefinirSinal,
   onVoltar,
@@ -154,15 +155,23 @@ export default function TelaVisaoModulo({
     if (!usaCentro) setCentroId(SEM_CENTRO);
   }, [usaCentro]);
 
+  // Centro escolhido que a filial atual não usa não pode continuar em edição —
+  // acontece ao trocar de filial com um centro selecionado.
+  useEffect(() => {
+    if (!usaCentro || centroId === SEM_CENTRO || !filialId) return;
+    if (!centroEmUso(visao, modulo.id, filialId, centroId)) setCentroId(SEM_CENTRO);
+  }, [usaCentro, centroId, filialId, visao, modulo.id]);
+
   const daFilial = filialId ? contasDaFilial(visao, modulo.id, filialId) : [];
   const editandoCentro = usaCentro && centroId !== SEM_CENTRO;
+  // Com centro, marcar conta só faz sentido dentro de um centro: a lista da
+  // filial é o consolidado deles, não uma escolha.
+  const podeMarcar = !!filialId && (!usaCentro || editandoCentro);
 
-  // Sem centro escolhido a árvore é o plano de contas do grupo. Com centro, é só
-  // o que a filial orça — o centro é subconjunto dela.
-  const catalogo = useMemo(() => {
-    const doGrupo = filtrarPorGrupo(catalogoCompleto, modulo.grupo);
-    return editandoCentro ? recortarPara(doGrupo, daFilial) : doGrupo;
-  }, [catalogoCompleto, modulo.grupo, editandoCentro, daFilial]);
+  const catalogo = useMemo(
+    () => filtrarPorGrupo(catalogoCompleto, modulo.grupo),
+    [catalogoCompleto, modulo.grupo]
+  );
 
   const selecionadas = editandoCentro
     ? contasDoCentro(visao, modulo.id, filialId, centroId)
@@ -324,29 +333,17 @@ export default function TelaVisaoModulo({
             {usaCentro ? (
               <section className="painel-selecao">
                 <h3>Centros de custo</h3>
-                {/* Sem contas na filial não há o que distribuir, e as caixas
-                    ficam bloqueadas. Dizer isso aqui evita a leitura de que a
-                    filial não aceita centro — o motivo estava só no title. */}
                 <p className="painel-selecao__descricao">
-                  {daFilial.length
-                    ? "Marque os centros que esta filial usa; clique no nome para recortar as contas dele."
-                    : "Escolha primeiro as contas desta filial — o centro seleciona entre elas."}
+                  {filialId
+                    ? "Marque os que esta filial usa; clique no nome para escolher as contas dele."
+                    : "Escolha uma filial na lista ao lado."}
                 </p>
-                <button
-                  type="button"
-                  className={`selecao-item ${centroId === SEM_CENTRO ? "is-active" : ""}`}
-                  aria-pressed={centroId === SEM_CENTRO}
-                  onClick={() => setCentroId(SEM_CENTRO)}
-                >
-                  <span>Contas da filial</span>
-                  {daFilial.length ? <b>{daFilial.length}</b> : null}
-                </button>
+
                 {centros.map((centro) => {
                   const quantas = filialId
                     ? contasDoCentro(visao, modulo.id, filialId, centro.id).length
                     : 0;
-                  const emUso = quantas > 0;
-                  const bloqueado = !daFilial.length;
+                  const emUso = filialId ? centroEmUso(visao, modulo.id, filialId, centro.id) : false;
 
                   return (
                     <div
@@ -354,36 +351,30 @@ export default function TelaVisaoModulo({
                       className={[
                         "selecao-item selecao-item--centro",
                         centro.id === centroId ? "is-active" : "",
-                        bloqueado ? "is-bloqueado" : "",
+                        !filialId ? "is-bloqueado" : "",
                       ]
                         .filter(Boolean)
                         .join(" ")}
                     >
-                      {/* Marcar o centro é dizer "esta filial usa este centro":
-                          ele nasce com as contas da filial e depois se recorta.
-                          Desmarcar limpa — centro sem conta não entra na visão. */}
+                      {/* A caixa diz se a filial usa o centro. Ligado nasce
+                          vazio: escolher as contas é o passo seguinte, e é o
+                          que a árvore à direita faz. */}
                       <label
                         className="centro-uso"
                         title={
-                          bloqueado
-                            ? "Escolha primeiro as contas da filial"
-                            : emUso
-                              ? "Deixar de usar este centro nesta filial"
-                              : `Usar este centro com ${daFilial.length === 1 ? "a conta" : `as ${daFilial.length} contas`} da filial`
+                          emUso
+                            ? "Deixar de usar este centro nesta filial (perde as contas dele)"
+                            : "Usar este centro nesta filial"
                         }
                       >
                         <input
                           type="checkbox"
                           checked={emUso}
-                          disabled={bloqueado}
-                          onChange={() =>
-                            onDefinirContasDoCentro(
-                              modulo.id,
-                              filialId,
-                              centro.id,
-                              emUso ? [] : daFilial
-                            )
-                          }
+                          disabled={!filialId}
+                          onChange={() => {
+                            onDefinirUsoDoCentro(modulo.id, filialId, centro.id, !emUso);
+                            setCentroId(emUso ? SEM_CENTRO : centro.id);
+                          }}
                         />
                         <span className="checkbox-visual">
                           <Icone nome="check" tamanho={13} />
@@ -395,8 +386,8 @@ export default function TelaVisaoModulo({
                         className="centro-nome"
                         aria-pressed={centro.id === centroId}
                         onClick={() => setCentroId(centro.id)}
-                        disabled={bloqueado}
-                        title={bloqueado ? "Escolha primeiro as contas da filial" : centro.nome}
+                        disabled={!emUso}
+                        title={emUso ? centro.nome : "Marque o centro para escolher as contas dele"}
                       >
                         <code>{centro.id}</code>
                         <span>{centro.nome}</span>
@@ -411,15 +402,13 @@ export default function TelaVisaoModulo({
           </aside>
 
           <section className="orcamento-dados">
-            {filialId ? (
+            {podeMarcar ? (
               <div className="contas-seletor">
                 <div className="contas-seletor__topo">
                   <span>
                     {editandoCentro ? `Contas do centro ${centroId}` : "Contas da filial"}
                     <small className="contas-seletor__origem">
-                      {editandoCentro
-                        ? `escolhidas entre as ${daFilial.length} da filial`
-                        : `plano de contas do grupo ${modulo.grupo}`}
+                      plano de contas do grupo {modulo.grupo}
                     </small>
                   </span>
                   <span className="contas-seletor__acoes">
@@ -466,25 +455,24 @@ export default function TelaVisaoModulo({
                       />
                     ))
                   ) : (
-                    <p className="sem-contas">
-                      {editandoCentro && !daFilial.length
-                        ? "Escolha primeiro as contas da filial: o centro seleciona entre elas."
-                        : "Nenhuma conta corresponde ao filtro."}
-                    </p>
+                    <p className="sem-contas">Nenhuma conta corresponde ao filtro.</p>
                   )}
                 </div>
               </div>
             ) : (
               <p className="modulo-aviso">
                 <Icone nome="info" tamanho={16} />
-                Escolha uma filial na lateral para configurar as contas dela.
+                {!filialId
+                  ? "Escolha uma filial na lateral para configurar as contas dela."
+                  : "Este módulo é orçado por centro de custo: marque os centros que esta filial usa e escolha um para lançar as contas dele."}
               </p>
             )}
 
             {usaCentro && centrosComContas.length ? (
               <p className="modulo-aviso">
                 <Icone nome="info" tamanho={16} />
-                Centros com contas nesta filial: {centrosComContas.join(", ")}.
+                Centros em uso nesta filial: {centrosComContas.join(", ")} · {daFilial.length}{" "}
+                {daFilial.length === 1 ? "conta no total" : "contas no total"}.
               </p>
             ) : null}
           </section>

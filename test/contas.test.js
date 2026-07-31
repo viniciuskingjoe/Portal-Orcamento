@@ -13,7 +13,6 @@ import {
   linhasDaArvore,
   marcarEmCascata,
   paiDaClassificacao,
-  recortarPara,
   resumirSelecao,
 } from "../src/dados/contas.js";
 
@@ -254,86 +253,4 @@ test("o que a tela mostra bate com o que a soma inclui", () => {
         assert.equal(cheiaNaTela, naSoma.has(item.codigo), `divergência em ${item.codigo}`);
       }
     });
-});
-
-// ---------------------------------------------------------------------------
-// Recorte para o centro de custo
-//
-// O centro escolhe entre as contas que a filial já orça. O recorte precisa
-// reconstruir a árvore: reaproveitar `filhos` e `raizes` do catálogo de origem
-// deixava ponteiros para nós que saíram, a descida parava neles e a subárvore
-// inteira sumia da tela.
-// ---------------------------------------------------------------------------
-
-const paraRecorte = indexarContas([
-  // Raiz que é conta selecionável, como na visão 25 (4.2 LUCRO BRUTO).
-  { codigo: "4.2", descricao: "LUCRO BRUTO OPERACIONAL", totalizaEm: null, sintetica: true, grupo: "DF" },
-  { codigo: "4.2.1", descricao: "CUSTOS DIRETOS", totalizaEm: null, sintetica: true, grupo: "DF" },
-  { codigo: "4.2.1.01.001", descricao: "SETOR PRODUÇÃO", totalizaEm: null, sintetica: false, grupo: "DF" },
-  { codigo: "4.2.1.01.002", descricao: "SETOR CORTE", totalizaEm: null, sintetica: false, grupo: "DF" },
-  { codigo: "4.4", descricao: "DESPESAS OPERACIONAIS", totalizaEm: null, sintetica: true, grupo: "DF" },
-  { codigo: "4.4.1.01.001", descricao: "ALUGUEL", totalizaEm: null, sintetica: false, grupo: "DF" },
-]);
-
-test("recorte mantém o caminho até a conta, mesmo quando a raiz é conta", () => {
-  const recorte = recortarPara(paraRecorte, ["4.2.1.01.001"]);
-
-  // Sem os ancestrais a conta ficaria órfã e a árvore não a alcançaria.
-  assert.deepEqual(
-    recorte.lista.map((item) => item.codigo),
-    ["4.2", "4.2.1", "4.2.1.01.001"]
-  );
-  assert.deepEqual(recorte.raizes, ["4.2"]);
-  assert.deepEqual(recorte.filhos.get("4.2"), ["4.2.1"]);
-  assert.deepEqual(recorte.filhos.get("4.2.1"), ["4.2.1.01.001"]);
-});
-
-test("no recorte só as contas pedidas são selecionáveis", () => {
-  const recorte = recortarPara(paraRecorte, ["4.2.1.01.001"]);
-  const selecionavel = (codigo) => recorte.porCodigo.get(codigo).selecionavel;
-
-  assert.equal(selecionavel("4.2.1.01.001"), true);
-  assert.equal(selecionavel("4.2"), false, "ancestral entra como estrutura");
-  assert.equal(selecionavel("4.2.1"), false);
-});
-
-test("a árvore do recorte é percorrível inteira", () => {
-  const recorte = recortarPara(paraRecorte, ["4.2.1.01.001", "4.2.1.01.002", "4.4.1.01.001"]);
-  const abertos = new Set(recorte.lista.map((item) => item.codigo));
-
-  assert.deepEqual(
-    linhasDaArvore(recorte, abertos).map((linha) => linha.codigo),
-    ["4.2", "4.2.1", "4.2.1.01.001", "4.2.1.01.002", "4.4", "4.4.1.01.001"]
-  );
-});
-
-test("recorte vazio devolve catálogo vazio, não a árvore inteira", () => {
-  const recorte = recortarPara(paraRecorte, []);
-  assert.deepEqual(recorte.lista, []);
-  assert.deepEqual(recorte.raizes, []);
-  assert.deepEqual(linhasDaArvore(recorte, new Set()), []);
-});
-
-test("marcar um ancestral do recorte puxa só as contas, não ele mesmo", () => {
-  // É o que a caixa do nó de estrutura faz na tela do centro de custo.
-  const recorte = recortarPara(paraRecorte, ["4.2.1.01.001", "4.2.1.01.002"]);
-  const marcadas = marcarEmCascata(recorte, new Set(), "4.2.1");
-
-  assert.deepEqual([...marcadas].sort(), ["4.2.1.01.001", "4.2.1.01.002"]);
-  assert.equal(marcadas.has("4.2.1"), false, "o nó de estrutura não vira conta");
-  assert.equal(marcadas.has("4.2"), false);
-});
-
-test("com todas as contas marcadas o ancestral fica total, não parcial", () => {
-  const recorte = recortarPara(paraRecorte, ["4.2.1.01.001", "4.2.1.01.002"]);
-  const marcadas = marcarEmCascata(recorte, new Set(), "4.2.1");
-  const resumo = resumirSelecao(recorte, marcadas);
-
-  // Se o ancestral contasse como conta, ele mesmo faltaria e o estado nunca
-  // fecharia — a caixa ficaria em "parcial" para sempre.
-  assert.equal(estadoDaSelecao(resumo, "4.2.1"), "total");
-  assert.equal(estadoDaSelecao(resumo, "4.2"), "total");
-
-  const parcial = resumirSelecao(recorte, new Set(["4.2.1.01.001"]));
-  assert.equal(estadoDaSelecao(parcial, "4.2.1"), "parcial");
 });

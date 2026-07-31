@@ -21,16 +21,20 @@ import { MODULOS } from "./modulos.js";
 //         usaCentro: true,
 //         filiais: {
 //           "000001": {
-//             contas: ["4.4.1.01.003", "4.4.1.01.004"],   // contas da filial
-//             centros: { "002": ["4.4.1.01.003"] }        // subconjunto por centro
+//             centros: {                                  // quem manda
+//               "002": ["4.4.1.01.003"],
+//               "008": ["4.4.1.01.004"]
+//             },
+//             contas: ["4.4.1.01.003", "4.4.1.01.004"]    // união, derivada
 //           }
 //         }
 //       }
 //     }
 //   }
 //
-// As contas do centro são sempre um SUBCONJUNTO das contas da filial: primeiro
-// se define o que a filial orça, depois se distribui entre os centros.
+// Sem centro, `contas` é o que a filial orça. Com centro, quem manda são os
+// centros e `contas` é o consolidado deles — a ordem de uso é filial → centros
+// → contas de cada centro.
 // ============================================================================
 
 export const SEM_CENTRO = "";
@@ -69,19 +73,13 @@ export function contasDaFilial(visao, moduloId, filialId) {
   return Array.isArray(contas) ? contas : [];
 }
 
-export function definirContasDaFilial(visao, moduloId, filialId, contas) {
+// Grava a filial mantendo a regra do consolidado: com centro, `contas` é sempre
+// a união dos centros, venha a alteração de onde vier.
+function gravarFilial(visao, moduloId, filialId, centros, contas) {
   const modulo = moduloDaVisao(visao, moduloId);
-  const atual = modulo.filiais?.[filialId] ?? { contas: [], centros: {} };
-  const permitidas = new Set(contas);
-
-  // Conta que sai da filial sai também dos centros dela — o centro é
-  // subconjunto, e deixar sobra faria a soma do centro incluir o que a filial
-  // não orça mais.
-  const centros = {};
-  Object.entries(atual.centros ?? {}).forEach(([centroId, doCentro]) => {
-    const restante = (doCentro ?? []).filter((codigo) => permitidas.has(codigo));
-    if (restante.length) centros[centroId] = restante;
-  });
+  const consolidado = usaCentroDeCusto(visao, moduloId)
+    ? [...new Set(Object.values(centros).flat())].sort()
+    : contas;
 
   return {
     ...visao,
@@ -89,19 +87,46 @@ export function definirContasDaFilial(visao, moduloId, filialId, contas) {
       ...visao.modulos,
       [moduloId]: {
         ...modulo,
-        filiais: { ...modulo.filiais, [filialId]: { contas: [...contas], centros } },
+        filiais: { ...modulo.filiais, [filialId]: { contas: consolidado, centros } },
       },
     },
   };
 }
 
+export function definirContasDaFilial(visao, moduloId, filialId, contas) {
+  const atual = moduloDaVisao(visao, moduloId).filiais?.[filialId] ?? { centros: {} };
+  const permitidas = new Set(contas);
+
+  // Conta que sai da filial sai também dos centros dela. O centro continua em
+  // uso mesmo ficando vazio — quem tira um centro do ar é `definirUsoDoCentro`.
+  const centros = {};
+  Object.entries(atual.centros ?? {}).forEach(([centroId, doCentro]) => {
+    centros[centroId] = (doCentro ?? []).filter((codigo) => permitidas.has(codigo));
+  });
+
+  return gravarFilial(visao, moduloId, filialId, centros, [...contas]);
+}
+
 // --------------------------------------------------------------------------
-// Contas por centro de custo (subconjunto das da filial)
+// Contas por centro de custo
+//
+// Em módulo com centro a ordem é filial → centros → contas: escolhe-se quais
+// centros a filial usa e depois o que cada um orça. O centro é a origem das
+// contas, e `contas` da filial passa a ser o CONSOLIDADO — a união dos centros.
+//
+// Guardar a união, em vez de calculá-la a cada leitura, mantém tudo que lê
+// `contasDaFilial` funcionando sem saber que o módulo usa centro: tela do plano,
+// DRE, base do percentual.
 // --------------------------------------------------------------------------
 
+// Centros que a filial usa. Um centro pode estar em uso e ainda sem contas —
+// marcá-lo é o primeiro passo, escolher as contas dele é o segundo.
 export function centrosDaFilial(visao, moduloId, filialId) {
-  const centros = moduloDaVisao(visao, moduloId).filiais?.[filialId]?.centros ?? {};
-  return Object.keys(centros).filter((id) => (centros[id] ?? []).length > 0);
+  return Object.keys(moduloDaVisao(visao, moduloId).filiais?.[filialId]?.centros ?? {});
+}
+
+export function centroEmUso(visao, moduloId, filialId, centroId) {
+  return centrosDaFilial(visao, moduloId, filialId).includes(centroId);
 }
 
 export function contasDoCentro(visao, moduloId, filialId, centroId) {
@@ -109,27 +134,23 @@ export function contasDoCentro(visao, moduloId, filialId, centroId) {
   return Array.isArray(contas) ? contas : [];
 }
 
+// Liga ou desliga um centro na filial. Ligado começa vazio: quem escolhe as
+// contas é o passo seguinte.
+export function definirUsoDoCentro(visao, moduloId, filialId, centroId, usa) {
+  const atual = moduloDaVisao(visao, moduloId).filiais?.[filialId] ?? { contas: [], centros: {} };
+  const centros = { ...(atual.centros ?? {}) };
+
+  if (usa) centros[centroId] = centros[centroId] ?? [];
+  else delete centros[centroId];
+
+  return gravarFilial(visao, moduloId, filialId, centros, atual.contas ?? []);
+}
+
 export function definirContasDoCentro(visao, moduloId, filialId, centroId, contas) {
-  const modulo = moduloDaVisao(visao, moduloId);
-  const atual = modulo.filiais?.[filialId] ?? { contas: [], centros: {} };
-  const daFilial = new Set(atual.contas ?? []);
+  const atual = moduloDaVisao(visao, moduloId).filiais?.[filialId] ?? { contas: [], centros: {} };
+  const centros = { ...(atual.centros ?? {}), [centroId]: [...contas] };
 
-  // Guarda a regra do subconjunto no modelo, não só na tela.
-  const validas = contas.filter((codigo) => daFilial.has(codigo));
-
-  return {
-    ...visao,
-    modulos: {
-      ...visao.modulos,
-      [moduloId]: {
-        ...modulo,
-        filiais: {
-          ...modulo.filiais,
-          [filialId]: { ...atual, centros: { ...atual.centros, [centroId]: validas } },
-        },
-      },
-    },
-  };
+  return gravarFilial(visao, moduloId, filialId, centros, atual.contas ?? []);
 }
 
 // Contas que valem para uma combinação filial × centro. Sem centro (ou módulo
