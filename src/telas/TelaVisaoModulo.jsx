@@ -324,6 +324,14 @@ export default function TelaVisaoModulo({
             {usaCentro ? (
               <section className="painel-selecao">
                 <h3>Centros de custo</h3>
+                {/* Sem contas na filial não há o que distribuir, e as caixas
+                    ficam bloqueadas. Dizer isso aqui evita a leitura de que a
+                    filial não aceita centro — o motivo estava só no title. */}
+                <p className="painel-selecao__descricao">
+                  {daFilial.length
+                    ? "Marque os centros que esta filial usa; clique no nome para recortar as contas dele."
+                    : "Escolha primeiro as contas desta filial — o centro seleciona entre elas."}
+                </p>
                 <button
                   type="button"
                   className={`selecao-item ${centroId === SEM_CENTRO ? "is-active" : ""}`}
