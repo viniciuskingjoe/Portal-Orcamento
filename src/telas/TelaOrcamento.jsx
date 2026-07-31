@@ -224,12 +224,38 @@ export default function TelaOrcamento({
         </p>
       ) : null}
 
+      {/* Dica e avisos ficam ACIMA do layout de duas colunas, não dentro da
+          coluna da direita: dentro dela empurravam a tabela para baixo e o
+          cabeçalho não nascia na mesma linha que os painéis. */}
+      <DicaEdicao pronta={podeEditar}>{motivo}</DicaEdicao>
+
+      {semBase ? (
+        <p className="modulo-aviso modulo-aviso--atencao">
+          <Icone nome="info" tamanho={16} />
+          <span>
+            Este módulo é lançado em percentual sobre a receita de vendas planejada, e não há receita
+            planejada para {filtros.filial === "total" ? "estas filiais" : "esta filial"} em{" "}
+            {plano.ano}. Enquanto isso, a coluna em reais fica zerada. Lance Receita de vendas
+            primeiro.
+          </span>
+        </p>
+      ) : null}
+
+      {receitaSemRealizado ? (
+        <p className="modulo-aviso">
+          <Icone nome="info" tamanho={16} />
+          <span>
+            Sem realizado nesta receita. O ERP não marca a receita no lançamento — a atribuição vem
+            do centro de custo, como no Scoreplan: <strong>020</strong> é e-commerce e todo o resto é
+            coleção. As demais receitas ficam sem realizado até o ERP passar a identificá-las.
+          </span>
+        </p>
+      ) : null}
+
       <div className="orcamento-layout" data-paineis={paineis.length}>
-        {/* Lista de contas à esquerda, como no ERP: escolhe-se a conta e lança-se
-            o planejado dela. Só contas analíticas — as sintéticas não recebem
-            lançamento. */}
         {/* Painéis lado a lado, como no Scoreplan: as dimensões que compõem a
-            célula ficam visíveis de uma vez, sem rolar de uma para a outra. */}
+            célula ficam visíveis de uma vez, sem rolar de uma para a outra. Só
+            contas analíticas — as sintéticas não recebem lançamento. */}
         <aside className="orcamento-lateral">
           {paineis.map((painel) => (
             <PainelSelecao key={painel.titulo} {...painel} />
@@ -237,32 +263,6 @@ export default function TelaOrcamento({
         </aside>
 
         <section className="orcamento-dados">
-          <DicaEdicao pronta={podeEditar}>{motivo}</DicaEdicao>
-
-          {semBase ? (
-            <p className="modulo-aviso modulo-aviso--atencao">
-              <Icone nome="info" tamanho={16} />
-              <span>
-                Este módulo é lançado em percentual sobre a receita de vendas planejada, e não há
-                receita planejada para {filtros.filial === "total" ? "estas filiais" : "esta filial"}{" "}
-                em {plano.ano}. Enquanto isso, a coluna em reais fica zerada. Lance Receita de vendas
-                primeiro.
-              </span>
-            </p>
-          ) : null}
-
-          {receitaSemRealizado ? (
-            <p className="modulo-aviso">
-              <Icone nome="info" tamanho={16} />
-              <span>
-                Sem realizado nesta receita. O ERP não marca a receita no lançamento — a atribuição
-                vem do centro de custo, como no Scoreplan: <strong>020</strong> é e-commerce e todo o
-                resto é coleção. As demais receitas ficam sem realizado até o ERP passar a
-                identificá-las.
-              </span>
-            </p>
-          ) : null}
-
           <TabelaOrcamento
             linhas={linhas}
             percentual={percentual}
