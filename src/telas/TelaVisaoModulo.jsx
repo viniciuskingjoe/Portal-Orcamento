@@ -33,8 +33,21 @@ function useIndeterminado(parcial) {
   return referencia;
 }
 
-function Linha({ item, estado, marcadosAbaixo, sinal, onInverter, onAlternar, onAlternarNo }) {
+function Linha({
+  item,
+  estado,
+  marcadosAbaixo,
+  // Nó de estrutura com contas marcáveis abaixo: ganha caixa mesmo não sendo
+  // conta do módulo. `codigosDaSubarvore` não coleta o próprio nó, então marcar
+  // aqui só puxa as contas de verdade — é a alça da cascata.
+  cascateavel,
+  sinal,
+  onInverter,
+  onAlternar,
+  onAlternarNo,
+}) {
   const referencia = useIndeterminado(estado === "parcial");
+  const marcavel = item.selecionavel !== false || cascateavel;
 
   const classes = [
     "arvore-conta",
@@ -65,13 +78,7 @@ function Linha({ item, estado, marcadosAbaixo, sinal, onInverter, onAlternar, on
         <span className="arvore-toggle arvore-toggle--vazio" aria-hidden="true" />
       )}
 
-      {item.selecionavel === false ? (
-        <span className="arvore-conta__rotulo arvore-conta__rotulo--estrutura">
-          <span className="arvore-conta__vazio" aria-hidden="true" />
-          <code>{item.codigo}</code>
-          <span>{item.descricao}</span>
-        </span>
-      ) : (
+      {marcavel ? (
         <label className="arvore-conta__rotulo">
           <input
             ref={referencia}
@@ -85,6 +92,12 @@ function Linha({ item, estado, marcadosAbaixo, sinal, onInverter, onAlternar, on
           <code>{item.codigo}</code>
           <span>{item.descricao}</span>
         </label>
+      ) : (
+        <span className="arvore-conta__rotulo arvore-conta__rotulo--estrutura">
+          <span className="arvore-conta__vazio" aria-hidden="true" />
+          <code>{item.codigo}</code>
+          <span>{item.descricao}</span>
+        </span>
       )}
 
       {/* Folha marcada mostra como o valor dela é lido. O grupo contábil decide,
@@ -389,6 +402,7 @@ export default function TelaVisaoModulo({
                               (marcadas.has(item.codigo) ? 1 : 0)
                             : 0
                         }
+                        cascateavel={(resumo.get(item.codigo)?.total ?? 0) > 0}
                         sinal={sinalDaConta(item)}
                         onInverter={(codigo, sinal) =>
                           onDefinirSinal(

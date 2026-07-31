@@ -313,3 +313,27 @@ test("recorte vazio devolve catálogo vazio, não a árvore inteira", () => {
   assert.deepEqual(recorte.raizes, []);
   assert.deepEqual(linhasDaArvore(recorte, new Set()), []);
 });
+
+test("marcar um ancestral do recorte puxa só as contas, não ele mesmo", () => {
+  // É o que a caixa do nó de estrutura faz na tela do centro de custo.
+  const recorte = recortarPara(paraRecorte, ["4.2.1.01.001", "4.2.1.01.002"]);
+  const marcadas = marcarEmCascata(recorte, new Set(), "4.2.1");
+
+  assert.deepEqual([...marcadas].sort(), ["4.2.1.01.001", "4.2.1.01.002"]);
+  assert.equal(marcadas.has("4.2.1"), false, "o nó de estrutura não vira conta");
+  assert.equal(marcadas.has("4.2"), false);
+});
+
+test("com todas as contas marcadas o ancestral fica total, não parcial", () => {
+  const recorte = recortarPara(paraRecorte, ["4.2.1.01.001", "4.2.1.01.002"]);
+  const marcadas = marcarEmCascata(recorte, new Set(), "4.2.1");
+  const resumo = resumirSelecao(recorte, marcadas);
+
+  // Se o ancestral contasse como conta, ele mesmo faltaria e o estado nunca
+  // fecharia — a caixa ficaria em "parcial" para sempre.
+  assert.equal(estadoDaSelecao(resumo, "4.2.1"), "total");
+  assert.equal(estadoDaSelecao(resumo, "4.2"), "total");
+
+  const parcial = resumirSelecao(recorte, new Set(["4.2.1.01.001"]));
+  assert.equal(estadoDaSelecao(parcial, "4.2.1"), "parcial");
+});
