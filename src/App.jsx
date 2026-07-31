@@ -461,14 +461,25 @@ export default function PlanejamentoOrcamentario() {
     );
   }
 
+  // Receita planejada de cada mês, para converter valor digitado em reais no
+  // percentual que fica gravado.
+  const basePorMes = useMemo(() => {
+    const mapa = new Map();
+    linhasOrcamento.forEach((linha) => {
+      if (typeof linha.id === "number") mapa.set(linha.id, linha.base ?? 0);
+    });
+    return mapa;
+  }, [linhasOrcamento]);
+
   const edicao = {
     editingCell,
     // `valor` em texto entra cru: é o dígito que abriu a edição, e formatá-lo
     // como número o transformaria em outra coisa.
-    onIniciarEdicao: (id, valor, mes) =>
+    onIniciarEdicao: (id, valor, mes, emReais = false) =>
       setEditingCell({
         id,
         mes,
+        emReais,
         valor: typeof valor === "string" ? valor : formatarParaEdicao(valor),
       }),
     onAlterarEdicao: (valor) => setEditingCell((atual) => (atual ? { ...atual, valor } : atual)),
@@ -481,12 +492,21 @@ export default function PlanejamentoOrcamentario() {
       if (id && id !== editingCell.id) return;
       if (!podeGravar()) return;
 
-      const valor = Math.max(0, parseNumeroPtBr(editingCell.valor));
+      const digitado = Math.max(0, parseNumeroPtBr(editingCell.valor));
       const meses = replicar ? MESES.filter((mes) => mes >= editingCell.mes) : [editingCell.mes];
 
+      // Digitar em reais é lançar pelo outro lado: o que fica gravado continua
+      // sendo o percentual, para o plano seguir acompanhando a receita. A
+      // conversão é por mês — replicar um valor em reais sobre bases diferentes
+      // dá um percentual diferente em cada mês, que é o que se espera.
       const alteracoes = {};
       meses.forEach((mes) => {
-        alteracoes[chaveDoFiltro(mes)] = valor;
+        const base = editingCell.emReais ? basePorMes.get(mes) : 0;
+        alteracoes[chaveDoFiltro(mes)] = editingCell.emReais
+          ? base
+            ? (digitado / base) * 100
+            : 0
+          : digitado;
       });
       gravarPlanejado(alteracoes);
       setEditingCell(null);

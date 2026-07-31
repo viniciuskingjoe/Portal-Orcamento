@@ -85,10 +85,15 @@ dedução:
 └──────────────────────────────┘ └──────────────────────────────┘
 ```
 
-A tabela mostra as duas leituras lado a lado — `Planejado %` (editável) e
-`Planejado R$` (calculado). Gravar exige receita **e** conta escolhidas: 2% de
-devolução sobre coleção não é 2% sobre e-commerce, e um percentual único sobre a
-receita inteira não saberia diferenciar.
+A tabela mostra as duas leituras lado a lado, e **as duas aceitam digitação**:
+`Planejado %` e `Planejado R$`. Digitar em reais é lançar pelo outro lado — o que
+fica gravado continua sendo o percentual (`valor ÷ base × 100`), para o plano
+seguir acompanhando a receita. É o que o Scoreplan faz com as abas PERCENTUAL e
+TOTAL, sem precisar trocar de aba.
+
+Gravar exige receita **e** conta escolhidas: 2% de devolução sobre coleção não é
+2% sobre e-commerce, e um percentual único sobre a receita inteira não saberia
+diferenciar.
 
 A chave ganha um sexto segmento com a receita:
 

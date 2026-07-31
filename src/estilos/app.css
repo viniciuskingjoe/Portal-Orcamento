@@ -1504,11 +1504,6 @@ button {
   box-shadow: inset 0 0 0 2px var(--accent);
 }
 
-/* Coluna calculada (percentual × receita planejada): não recebe digitação, e o
-   tom mais fraco evita que alguém tente clicar nela. */
-.celula-calculada {
-  color: var(--text-soft);
-}
 
 .input-inline {
   width: 100%;

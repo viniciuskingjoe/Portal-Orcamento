@@ -117,7 +117,7 @@ export default function TelaOrcamento({
             ? "Escolha uma conta na lista à esquerda para lançar o planejado."
             : percentual && filtros.receita === TODAS_AS_CONTAS
               ? "Escolha também a receita sobre a qual o percentual incide."
-              : `Digite na coluna Planejado${percentual ? " %" : ""} — Enter grava e desce · arraste o canto da célula (ou Ctrl+Enter) para repetir nos outros meses · Ctrl+D copia o mês de cima · Esc cancela.`;
+              : `${percentual ? "Digite o percentual ou o valor em reais — as duas colunas aceitam" : "Digite na coluna Planejado"} — Enter grava e desce · arraste o canto da célula (ou Ctrl+Enter) para repetir nos outros meses · Ctrl+D copia o mês de cima · Esc cancela.`;
 
   // As dimensões que compõem a célula, na ordem em que se escolhe: onde (centro),
   // sobre o quê (receita) e o quê (conta do módulo).
