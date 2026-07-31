@@ -6,8 +6,68 @@ import { DicaEdicao } from "../componentes/FiltrosOrcamento.jsx";
 import { conta as buscarConta } from "../dados/contas.js";
 import { GRUPOS } from "../dados/modulos.js";
 import { SEM_CENTRO, usaCentroDeCusto } from "../dados/visao.js";
+import { formatarMoeda } from "../lib/formato.js";
 
 export const TODAS_AS_CONTAS = "__todas";
+
+// Lista de contas selecionáveis à esquerda. Serve tanto para as contas do
+// módulo quanto para as receitas que servem de base ao percentual — são a mesma
+// interação, com rótulos diferentes.
+function PainelDeContas({
+  titulo,
+  descricao,
+  rotuloTotal,
+  codigos,
+  catalogo,
+  selecionado,
+  aoSelecionar,
+  valores,
+  vazio,
+}) {
+  return (
+    <section className="painel-selecao">
+      <h3>{titulo}</h3>
+      {descricao ? <p className="painel-selecao__descricao">{descricao}</p> : null}
+
+      <button
+        type="button"
+        className={`selecao-item ${selecionado === TODAS_AS_CONTAS ? "is-active" : ""}`}
+        aria-pressed={selecionado === TODAS_AS_CONTAS}
+        onClick={() => aoSelecionar(TODAS_AS_CONTAS)}
+      >
+        <span>{rotuloTotal}</span>
+        <b>{codigos.length}</b>
+      </button>
+
+      {codigos.map((codigo) => {
+        const item = buscarConta(catalogo, codigo);
+        const ativo = selecionado === codigo;
+        return (
+          <button
+            type="button"
+            key={codigo}
+            className={`selecao-item selecao-item--conta ${ativo ? "is-active" : ""}`}
+            aria-pressed={ativo}
+            onClick={() => aoSelecionar(codigo)}
+            title={item?.descricao ?? codigo}
+          >
+            <code>{codigo}</code>
+            <span>{item?.descricao ?? "conta fora da visão contábil"}</span>
+            {/* O planejado da receita é a base da conta: mostrá-lo aqui evita ter
+                que sair da tela para descobrir sobre quanto o percentual incide. */}
+            {valores ? (
+              <em className={valores.get(codigo) ? "" : "is-zerado"}>
+                {formatarMoeda(valores.get(codigo) ?? 0)}
+              </em>
+            ) : null}
+          </button>
+        );
+      })}
+
+      {!codigos.length ? <p className="sem-contas">{vazio}</p> : null}
+    </section>
+  );
+}
 
 export default function TelaOrcamento({
   plano,
@@ -17,6 +77,8 @@ export default function TelaOrcamento({
   filiais,
   centros,
   contasDisponiveis,
+  receitasDisponiveis,
+  totaisDasReceitas,
   filiaisIgnoradas,
   filtros,
   onAlterarFiltro,
@@ -35,23 +97,31 @@ export default function TelaOrcamento({
   const totalDaTabela = linhas.find((linha) => linha.id === "total");
   const semBase = percentual && !totalDaTabela?.base;
 
-  // Editar só faz sentido em uma célula única: uma filial e uma conta. Em
-  // "Total" o valor é soma de várias chaves e não há onde gravar.
+  const receitas = percentual ? (receitasDisponiveis ?? []) : [];
+
+  // Editar só faz sentido em uma célula única: uma filial e uma conta — e, no
+  // módulo percentual, também uma receita: o mesmo percentual vale valores
+  // diferentes conforme a receita sobre a qual incide.
   const podeEditar =
     filtros.filial !== "total" &&
     filtros.conta !== TODAS_AS_CONTAS &&
     contasDisponiveis.length > 0 &&
-    (!usaCentro || filtros.centro !== SEM_CENTRO);
+    (!usaCentro || filtros.centro !== SEM_CENTRO) &&
+    (!percentual || (filtros.receita !== TODAS_AS_CONTAS && receitas.length > 0));
 
   const motivo = !contasDisponiveis.length
     ? "Nenhuma conta configurada para esta combinação. Ajuste a visão."
-    : filtros.filial === "total"
-      ? "Para lançar, escolha uma filial específica."
-      : usaCentro && filtros.centro === SEM_CENTRO
-        ? "Este módulo usa centro de custo: escolha um para lançar."
-        : filtros.conta === TODAS_AS_CONTAS
-          ? "Escolha uma conta na lista à esquerda para lançar o planejado."
-          : `Digite na coluna Planejado${percentual ? " %" : ""} — Enter grava e desce · arraste o canto da célula (ou Ctrl+Enter) para repetir nos outros meses · Ctrl+D copia o mês de cima · Esc cancela.`;
+    : percentual && !receitas.length
+      ? "Nenhuma conta de receita configurada nesta filial. Ajuste Receita de vendas na visão."
+      : filtros.filial === "total"
+        ? "Para lançar, escolha uma filial específica."
+        : usaCentro && filtros.centro === SEM_CENTRO
+          ? "Este módulo usa centro de custo: escolha um para lançar."
+          : filtros.conta === TODAS_AS_CONTAS
+            ? "Escolha uma conta na lista à esquerda para lançar o planejado."
+            : percentual && filtros.receita === TODAS_AS_CONTAS
+              ? "Escolha também a receita sobre a qual o percentual incide."
+              : `Digite na coluna Planejado${percentual ? " %" : ""} — Enter grava e desce · arraste o canto da célula (ou Ctrl+Enter) para repetir nos outros meses · Ctrl+D copia o mês de cima · Esc cancela.`;
 
   return (
     <main className="conteudo conteudo--orcamento">
@@ -133,42 +203,31 @@ export default function TelaOrcamento({
             o planejado dela. Só contas analíticas — as sintéticas não recebem
             lançamento. */}
         <aside className="orcamento-lateral">
-          <section className="painel-selecao">
-            <h3>Contas do módulo</h3>
-            <button
-              type="button"
-              className={`selecao-item ${filtros.conta === TODAS_AS_CONTAS ? "is-active" : ""}`}
-              aria-pressed={filtros.conta === TODAS_AS_CONTAS}
-              onClick={() => onAlterarFiltro({ conta: TODAS_AS_CONTAS })}
-            >
-              <span>Total do módulo</span>
-              <b>{contasDisponiveis.length}</b>
-            </button>
+          {/* Módulo percentual precisa das duas dimensões, como no Scoreplan:
+              sobre QUAL receita e para QUAL conta do módulo. */}
+          {percentual ? (
+            <PainelDeContas
+              titulo="Receita (base do %)"
+              descricao={`Planejado de ${plano.ano} — é sobre este valor que o percentual incide.`}
+              rotuloTotal="Todas as receitas"
+              codigos={receitas}
+              catalogo={catalogo}
+              selecionado={filtros.receita}
+              aoSelecionar={(codigo) => onAlterarFiltro({ receita: codigo })}
+              valores={totaisDasReceitas}
+              vazio="Nenhuma receita configurada para esta filial na visão."
+            />
+          ) : null}
 
-            {contasDisponiveis.map((codigo) => {
-              const item = buscarConta(catalogo, codigo);
-              const ativo = filtros.conta === codigo;
-              return (
-                <button
-                  type="button"
-                  key={codigo}
-                  className={`selecao-item selecao-item--conta ${ativo ? "is-active" : ""}`}
-                  aria-pressed={ativo}
-                  onClick={() => onAlterarFiltro({ conta: codigo })}
-                  title={item?.descricao ?? codigo}
-                >
-                  <code>{codigo}</code>
-                  <span>{item?.descricao ?? "conta fora da visão contábil"}</span>
-                </button>
-              );
-            })}
-
-            {!contasDisponiveis.length ? (
-              <p className="sem-contas">
-                Nenhuma conta para esta filial{usaCentro ? " e centro" : ""}.
-              </p>
-            ) : null}
-          </section>
+          <PainelDeContas
+            titulo="Contas do módulo"
+            rotuloTotal="Total do módulo"
+            codigos={contasDisponiveis}
+            catalogo={catalogo}
+            selecionado={filtros.conta}
+            aoSelecionar={(codigo) => onAlterarFiltro({ conta: codigo })}
+            vazio={`Nenhuma conta para esta filial${usaCentro ? " e centro" : ""}.`}
+          />
         </aside>
 
         <section className="orcamento-dados">
@@ -190,7 +249,7 @@ export default function TelaOrcamento({
             linhas={linhas}
             percentual={percentual}
             podeEditar={podeEditar}
-            prefixoCelula={`${modulo.id}|${filtros.filial}|${filtros.centro}|${filtros.conta}`}
+            prefixoCelula={`${modulo.id}|${filtros.filial}|${filtros.centro}|${filtros.conta}|${filtros.receita}`}
             {...edicao}
           />
         </section>

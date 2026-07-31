@@ -6,6 +6,7 @@ import {
   criarLinhasOrcamento,
   criarPlano,
   purgarFilialDosPlanos,
+  receitasDaBase,
   totalPlanejadoNoAno,
 } from "../src/dados/plano.js";
 import { indexarRealizado } from "../src/dados/realizado.js";
@@ -281,63 +282,99 @@ test("purgar filial sem edições devolve o mesmo objeto", () => {
 // Módulo percentual
 //
 // Em Deduções de vendas e Custos variáveis o que se digita é o percentual sobre
-// a receita de vendas planejada. O que fica gravado é o percentual; o valor em
-// reais é derivado.
+// uma CONTA DE RECEITA específica — o mesmo recorte do Scoreplan, que pede
+// produto/serviço e dedução antes de aceitar o número. A chave ganha a receita
+// no fim; o valor em reais é derivado.
 // ---------------------------------------------------------------------------
 
 const PERCENTUAL = "deducoes-vendas";
 const CONTA_DEDUCAO = "3.1.2.01.001";
+const OUTRA_DEDUCAO = "3.1.2.01.002";
 
-// Receita planejada: 1.000 na 000001 e 4.000 na 000025, tudo em janeiro.
+// Receita planejada em janeiro: 1.000 em CONTA e 4.000 em OUTRA_CONTA, ambas na
+// filial 000001.
 function visaoComReceita() {
-  let visao = definirContasDaFilial(criarVisao("v1", "X", "25"), MODULO, "000001", [CONTA]);
-  visao = definirContasDaFilial(visao, MODULO, "000025", [CONTA]);
-  return definirContasDaFilial(visao, PERCENTUAL, "000001", [CONTA_DEDUCAO]);
+  let visao = definirContasDaFilial(criarVisao("v1", "X", "25"), MODULO, "000001", [
+    CONTA,
+    OUTRA_CONTA,
+  ]);
+  return definirContasDaFilial(visao, PERCENTUAL, "000001", [CONTA_DEDUCAO, OUTRA_DEDUCAO]);
 }
 
 const RECEITA = {
   [chavePlanejado(MODULO, "000001", SEM_CENTRO, CONTA, 1)]: 1000,
-  [chavePlanejado(MODULO, "000025", SEM_CENTRO, CONTA, 1)]: 4000,
+  [chavePlanejado(MODULO, "000001", SEM_CENTRO, OUTRA_CONTA, 1)]: 4000,
 };
 
-const linhasPercentuais = (planejado, filiais = FILIAIS) =>
+const linhasPercentuais = (planejado, extra) =>
   criarLinhasOrcamento({
     plano: plano({ ...RECEITA, ...planejado }),
     visao: visaoComReceita(),
     moduloId: PERCENTUAL,
-    filiais,
+    filiais: [FILIAIS[0]],
     centroId: SEM_CENTRO,
     contas: [CONTA_DEDUCAO],
     realizado: indexarRealizado([]),
     realizadoAnterior: indexarRealizado([]),
+    ...extra,
   });
 
-test("módulo percentual guarda o percentual e deriva o valor em reais", () => {
-  const lista = linhasPercentuais({
-    [chavePlanejado(PERCENTUAL, "000001", SEM_CENTRO, CONTA_DEDUCAO, 1)]: 10,
-  });
-
-  const janeiro = mes(lista, 1);
-  assert.equal(janeiro.planejadoPercentual, 10);
-  assert.equal(janeiro.planejado, 100); // 10% de 1.000
-  assert.equal(janeiro.base, 5000); // receita das duas filiais
+test("a chave do módulo percentual carrega a conta de receita", () => {
+  assert.equal(
+    chavePlanejado(PERCENTUAL, "000001", SEM_CENTRO, CONTA_DEDUCAO, 1, CONTA),
+    `${PERCENTUAL}|000001||${CONTA_DEDUCAO}|1|${CONTA}`
+  );
+  // Sem receita, a chave continua com cinco segmentos — módulo em reais.
+  assert.equal(
+    chavePlanejado(MODULO, "000001", SEM_CENTRO, CONTA, 1),
+    `${MODULO}|000001||${CONTA}|1`
+  );
 });
 
-test("o percentual de cada filial incide sobre a receita daquela filial", () => {
-  // Mesmos 10% nas duas filiais, bases diferentes: 10% de 1.000 + 10% de 4.000.
-  // Somar os percentuais (20%) e aplicar na base total (5.000) daria 1.000.
+test("receitasDaBase lista as contas de receita da filial", () => {
+  assert.deepEqual(receitasDaBase(visaoComReceita(), "000001"), [CONTA, OUTRA_CONTA]);
+  assert.deepEqual(receitasDaBase(visaoComReceita(), "000025"), []);
+});
+
+test("o percentual incide sobre a receita contra a qual foi lançado", () => {
+  // 10% sobre a receita de 1.000 e 5% sobre a de 4.000: 100 + 200.
   const lista = linhasPercentuais({
-    [chavePlanejado(PERCENTUAL, "000001", SEM_CENTRO, CONTA_DEDUCAO, 1)]: 10,
-    [chavePlanejado(PERCENTUAL, "000025", SEM_CENTRO, CONTA_DEDUCAO, 1)]: 10,
+    [chavePlanejado(PERCENTUAL, "000001", SEM_CENTRO, CONTA_DEDUCAO, 1, CONTA)]: 10,
+    [chavePlanejado(PERCENTUAL, "000001", SEM_CENTRO, CONTA_DEDUCAO, 1, OUTRA_CONTA)]: 5,
   });
 
-  assert.equal(mes(lista, 1).planejado, 500);
-  assert.equal(mes(lista, 1).planejadoPercentual, 20);
+  assert.equal(mes(lista, 1).planejado, 300);
+  assert.equal(mes(lista, 1).planejadoPercentual, 15);
+  assert.equal(mes(lista, 1).base, 5000);
+});
+
+test("filtrar uma receita restringe a base e o valor", () => {
+  const digitado = {
+    [chavePlanejado(PERCENTUAL, "000001", SEM_CENTRO, CONTA_DEDUCAO, 1, CONTA)]: 10,
+    [chavePlanejado(PERCENTUAL, "000001", SEM_CENTRO, CONTA_DEDUCAO, 1, OUTRA_CONTA)]: 5,
+  };
+
+  const soAPrimeira = linhasPercentuais(digitado, { receitas: [CONTA] });
+  assert.equal(mes(soAPrimeira, 1).planejado, 100);
+  assert.equal(mes(soAPrimeira, 1).base, 1000);
+
+  const soASegunda = linhasPercentuais(digitado, { receitas: [OUTRA_CONTA] });
+  assert.equal(mes(soASegunda, 1).planejado, 200);
+  assert.equal(mes(soASegunda, 1).base, 4000);
+});
+
+test("percentual lançado contra outra receita não entra na conta filtrada", () => {
+  const lista = linhasPercentuais(
+    { [chavePlanejado(PERCENTUAL, "000001", SEM_CENTRO, CONTA_DEDUCAO, 1, OUTRA_CONTA)]: 5 },
+    { receitas: [CONTA] }
+  );
+  assert.equal(mes(lista, 1).planejado, 0);
+  assert.equal(mes(lista, 1).planejadoPercentual, 0);
 });
 
 test("percentual do total é valor ÷ base, não a soma dos meses", () => {
   const lista = linhasPercentuais({
-    [chavePlanejado(PERCENTUAL, "000001", SEM_CENTRO, CONTA_DEDUCAO, 1)]: 10,
+    [chavePlanejado(PERCENTUAL, "000001", SEM_CENTRO, CONTA_DEDUCAO, 1, CONTA)]: 10,
   });
 
   const total = totalDe(lista);
@@ -349,10 +386,12 @@ test("percentual do total é valor ÷ base, não a soma dos meses", () => {
 
 test("sem receita planejada o percentual não vira valor", () => {
   const lista = criarLinhasOrcamento({
-    plano: plano({ [chavePlanejado(PERCENTUAL, "000001", SEM_CENTRO, CONTA_DEDUCAO, 1)]: 10 }),
+    plano: plano({
+      [chavePlanejado(PERCENTUAL, "000001", SEM_CENTRO, CONTA_DEDUCAO, 1, CONTA)]: 10,
+    }),
     visao: visaoComReceita(),
     moduloId: PERCENTUAL,
-    filiais: FILIAIS,
+    filiais: [FILIAIS[0]],
     contas: [CONTA_DEDUCAO],
     realizado: indexarRealizado([]),
     realizadoAnterior: indexarRealizado([]),
@@ -371,7 +410,7 @@ test("o total do ano de um módulo percentual sai em reais", () => {
   const total = totalPlanejadoNoAno({
     plano: plano({
       ...RECEITA,
-      [chavePlanejado(PERCENTUAL, "000001", SEM_CENTRO, CONTA_DEDUCAO, 1)]: 10,
+      [chavePlanejado(PERCENTUAL, "000001", SEM_CENTRO, CONTA_DEDUCAO, 1, CONTA)]: 10,
     }),
     visao: visaoComReceita(),
     moduloId: PERCENTUAL,

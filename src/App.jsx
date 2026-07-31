@@ -17,7 +17,14 @@ import TelaOrcamento, { TODAS_AS_CONTAS } from "./telas/TelaOrcamento.jsx";
 
 import { EMPRESA, MESES } from "./dados/seeds.js";
 import { ehModulo, modulo as definicaoDoModulo } from "./dados/modulos.js";
-import { chavePlanejado, criarLinhasOrcamento, criarPlano, gerarId } from "./dados/plano.js";
+import {
+  baseDoPercentual,
+  chavePlanejado,
+  criarLinhasOrcamento,
+  criarPlano,
+  gerarId,
+  receitasDaBase,
+} from "./dados/plano.js";
 import {
   SEM_CENTRO,
   contasEfetivasDoModulo,
@@ -38,7 +45,13 @@ import { formatarParaEdicao, parseNumeroPtBr } from "./lib/formato.js";
 import { aplicarTema, temaInicial } from "./lib/tema.js";
 import { useCadastrosDoErp, useContas, useRealizado } from "./lib/useErp.js";
 
-const FILTROS_PADRAO = { filial: "total", centro: SEM_CENTRO, conta: TODAS_AS_CONTAS };
+const FILTROS_PADRAO = {
+  filial: "total",
+  centro: SEM_CENTRO,
+  conta: TODAS_AS_CONTAS,
+  // Conta de receita que serve de base — só usada nos módulos percentuais.
+  receita: TODAS_AS_CONTAS,
+};
 const TELAS_ERP = new Set(["filiais", "centros"]);
 
 export default function PlanejamentoOrcamentario() {
@@ -139,6 +152,38 @@ export default function PlanejamentoOrcamentario() {
       .sort();
   }, [visaoDoPlano, moduloDaTela, filiaisDoFiltro, filtros.centro, contas.catalogo]);
 
+  // Contas de receita que servem de base ao percentual. Só valem as analíticas,
+  // pelo mesmo motivo das contas do módulo: sintética não recebe lançamento,
+  // então também não tem valor planejado para servir de base.
+  const receitasDisponiveis = useMemo(() => {
+    if (!visaoDoPlano || !moduloDaTela?.percentual) return [];
+    const codigos = new Set();
+    filiaisDoFiltro.forEach((filial) => {
+      receitasDaBase(visaoDoPlano, filial.id).forEach((codigo) => codigos.add(codigo));
+    });
+    return [...codigos]
+      .filter((codigo) => buscarConta(contas.catalogo, codigo)?.sintetica === false)
+      .sort();
+  }, [visaoDoPlano, moduloDaTela, filiaisDoFiltro, contas.catalogo]);
+
+  // Planejado do ano de cada conta de receita, para a lista da esquerda mostrar
+  // sobre quanto o percentual incide sem precisar sair da tela.
+  const totaisDasReceitas = useMemo(() => {
+    const mapa = new Map();
+    if (!planoAtivo || !visaoDoPlano) return mapa;
+
+    receitasDisponiveis.forEach((codigo) => {
+      let total = 0;
+      filiaisDoFiltro.forEach((filial) => {
+        MESES.forEach((mes) => {
+          total += baseDoPercentual(planoAtivo, visaoDoPlano, filial.id, mes, [codigo]);
+        });
+      });
+      mapa.set(codigo, total);
+    });
+    return mapa;
+  }, [planoAtivo, visaoDoPlano, receitasDisponiveis, filiaisDoFiltro]);
+
   // Filiais com movimento que ficaram de fora da configuração, no ano do plano OU
   // no anterior. Sem avisar, o total sai menor que o do ERP e parece erro de
   // cálculo — e a filial que só tem movimento no ano anterior mexe só na coluna
@@ -150,6 +195,11 @@ export default function PlanejamentoOrcamentario() {
 
   const contasDaTabela =
     filtros.conta === TODAS_AS_CONTAS ? contasDisponiveis : [filtros.conta];
+  const receitasDaTabela = !moduloDaTela?.percentual
+    ? undefined
+    : filtros.receita === TODAS_AS_CONTAS
+      ? receitasDisponiveis
+      : [filtros.receita];
 
   const linhasOrcamento = useMemo(() => {
     if (!planoAtivo || !moduloDaTela) return [];
@@ -160,13 +210,14 @@ export default function PlanejamentoOrcamentario() {
       filiais: filiaisDoFiltro,
       centroId: filtros.centro,
       contas: contasDaTabela,
+      receitas: receitasDaTabela,
       catalogo: contas.catalogo,
       sinais: sinaisDoModulo(visaoDoPlano, moduloDaTela.id),
       visaoContabil: visaoDoPlano?.visaoContabil,
       realizado: realizado.doAno,
       realizadoAnterior: realizado.doAnoAnterior,
     });
-  }, [planoAtivo, visaoDoPlano, moduloDaTela, filiaisDoFiltro, filtros.centro, contasDaTabela, contas.catalogo, realizado]);
+  }, [planoAtivo, visaoDoPlano, moduloDaTela, filiaisDoFiltro, filtros.centro, contasDaTabela, receitasDaTabela, contas.catalogo, realizado]);
 
   // --------------------------------------------------------------------------
   // Navegação
@@ -180,9 +231,10 @@ export default function PlanejamentoOrcamentario() {
     setEditingCell(null);
     setFiltros((atuais) => {
       const proximos = { ...atuais, ...alteracoes };
-      // Trocar filial ou centro pode invalidar a conta escolhida.
+      // Trocar filial ou centro pode invalidar a conta e a receita escolhidas.
       if (alteracoes.filial !== undefined || alteracoes.centro !== undefined) {
         proximos.conta = TODAS_AS_CONTAS;
+        proximos.receita = TODAS_AS_CONTAS;
       }
       return proximos;
     });
@@ -373,8 +425,17 @@ export default function PlanejamentoOrcamentario() {
 
   // Célula do filtro em tela. Só existe quando há uma filial e uma conta
   // escolhidas — em "Total" o valor é soma de várias chaves e não há onde gravar.
+  // Em módulo percentual a receita-base também precisa estar escolhida: o mesmo
+  // percentual dá valores diferentes conforme a receita sobre a qual incide.
   function chaveDoFiltro(mes) {
-    return chavePlanejado(moduloDaTela.id, filtros.filial, filtros.centro, filtros.conta, mes);
+    return chavePlanejado(
+      moduloDaTela.id,
+      filtros.filial,
+      filtros.centro,
+      filtros.conta,
+      mes,
+      moduloDaTela.percentual ? filtros.receita : null
+    );
   }
 
   function podeGravar() {
@@ -382,7 +443,8 @@ export default function PlanejamentoOrcamentario() {
       planoAtivo &&
       moduloDaTela &&
       filtros.filial !== "total" &&
-      filtros.conta !== TODAS_AS_CONTAS
+      filtros.conta !== TODAS_AS_CONTAS &&
+      (!moduloDaTela.percentual || filtros.receita !== TODAS_AS_CONTAS)
     );
   }
 
@@ -587,6 +649,8 @@ export default function PlanejamentoOrcamentario() {
           filiais={filiaisAtivas}
           centros={erp.centros}
           contasDisponiveis={contasDisponiveis}
+          receitasDisponiveis={receitasDisponiveis}
+          totaisDasReceitas={totaisDasReceitas}
           filiaisIgnoradas={filiaisIgnoradas}
           filtros={filtros}
           onAlterarFiltro={alterarFiltro}

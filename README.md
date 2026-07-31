@@ -70,17 +70,39 @@ custos e despesas variáveis, `DF` nas despesas fixas.
 ### Módulos em percentual
 
 **Deduções de vendas** e **Custos variáveis** têm `percentual: true`: não se
-digita o valor, digita-se o **percentual sobre a receita de vendas planejada** do
-mesmo mês e da mesma filial. A tabela mostra as duas colunas lado a lado —
-`Planejado %` (editável) e `Planejado R$` (calculado).
+digita o valor, digita-se o **percentual sobre uma conta de receita**. A tela
+pede as duas dimensões à esquerda, como o Scoreplan pede produto/serviço e
+dedução:
+
+```
+RECEITA (BASE DO %)              CONTAS DO MÓDULO
+  Todas as receitas       11       Total do módulo        33
+  3.1.1.01.001                     3.1.2.01.001
+  VENDAS DE PRODUTOS - COLEÇÃO     (-) DEVOLUÇÃO DE VENDAS PRODUTOS
+  1.850.000,00  ← planejado        3.1.2.01.010
+  3.1.1.01.002                     ICMS S/ DEVOLUÇÃO DE VENDAS
+  VENDAS DE PRODUTOS - SALDO       …
+```
+
+A tabela mostra as duas leituras lado a lado — `Planejado %` (editável) e
+`Planejado R$` (calculado). Gravar exige receita **e** conta escolhidas: 2% de
+devolução sobre coleção não é 2% sobre e-commerce, e um percentual único sobre a
+receita inteira não saberia diferenciar.
+
+A chave ganha um sexto segmento com a receita:
+
+```
+deducoes-vendas|000001||3.1.2.01.001|1|3.1.1.01.001
+```
 
 O que fica gravado é o percentual. É isso que faz o plano acompanhar a receita:
 mudou a previsão de faturamento, a dedução recalcula sozinha.
 
-A conversão é **por filial**, nunca sobre a base consolidada — cada filial tem a
-sua receita, e somar os percentuais de várias para aplicar numa base única daria
-outro número justamente na tela "Total". Nas linhas de Total o percentual exibido
-é `valor ÷ base`, não a soma dos meses: somar taxas mensais não dá taxa de nada.
+A conversão é **por filial e por conta de receita**, nunca sobre a base
+consolidada — aplicar uma base única daria o número errado justamente na tela
+"Total", que é onde ninguém confere linha a linha. Nas linhas de Total o
+percentual exibido é `valor ÷ base`, não a soma dos meses: somar taxas mensais
+não dá taxa de nada.
 
 ### Digitação
 

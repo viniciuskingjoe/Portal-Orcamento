@@ -2006,6 +2006,38 @@ dialog::backdrop {
   overflow-y: auto;
 }
 
+/* Com dois painéis empilhados (receita-base + contas do módulo), 70vh cada faria
+   o segundo nascer fora da tela. */
+.orcamento-lateral:has(.painel-selecao + .painel-selecao) .painel-selecao {
+  max-height: min(38vh, 340px);
+}
+
+.painel-selecao__descricao {
+  margin: -4px 0 6px;
+  padding: 0 10px;
+  color: var(--muted);
+  font-size: 11.5px;
+  line-height: 1.35;
+}
+
+/* Planejado da conta de receita — a base sobre a qual o percentual incide. */
+.selecao-item--conta em {
+  font-size: 11.5px;
+  font-style: normal;
+  font-variant-numeric: tabular-nums;
+  font-weight: 650;
+  color: var(--text-soft);
+}
+
+.selecao-item--conta em.is-zerado {
+  color: var(--muted);
+  font-weight: 500;
+}
+
+.selecao-item--conta.is-active em {
+  color: inherit;
+}
+
 /* --- lista do ERP com seleção ------------------------------------------- */
 
 .lista-crud__topo--filiais,

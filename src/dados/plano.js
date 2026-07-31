@@ -7,6 +7,7 @@ import {
 import {
   SEM_CENTRO,
   centrosDaFilial,
+  contasDaFilial,
   contasEfetivasDoModulo,
   moduloConfigurado,
   usaCentroDeCusto,
@@ -29,6 +30,18 @@ import { CATALOGO_VAZIO } from "./contas.js";
 // já convertido, é o que faz o plano acompanhar a receita: mudou a previsão de
 // faturamento, a dedução recalcula sozinha.
 //
+// Nos módulos percentuais a chave ganha um SEXTO segmento, a conta de receita
+// que serve de base:
+//
+//   deducoes-vendas|000001||3.1.2.01.001|1|3.1.1.01.001
+//                                            └ ICMS s/ devolução  └ vendas de
+//                                                                   produtos
+//                                                                   coleção
+//
+// É o mesmo recorte do Scoreplan, que pede produto/serviço E dedução antes de
+// aceitar o percentual: 2% de devolução sobre coleção não é 2% sobre e-commerce,
+// e um percentual único sobre a receita inteira não saberia diferenciar.
+//
 // Célula sem valor digitado é ZERO — não existe planejamento que ninguém fez.
 // ============================================================================
 
@@ -36,8 +49,11 @@ export function gerarId(prefixo) {
   return `${prefixo}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
 }
 
-export function chavePlanejado(moduloId, filialId, centroId, conta, mes) {
-  return `${moduloId}|${filialId}|${centroId ?? SEM_CENTRO}|${conta}|${mes}`;
+// `receita` só existe nos módulos percentuais. Vai no fim para não mexer na
+// posição da filial, que `purgarFilialDosPlanos` lê por índice.
+export function chavePlanejado(moduloId, filialId, centroId, conta, mes, receita = null) {
+  const chave = `${moduloId}|${filialId}|${centroId ?? SEM_CENTRO}|${conta}|${mes}`;
+  return receita ? `${chave}|${receita}` : chave;
 }
 
 export function criarPlano(id, nome, ano, visaoId) {
@@ -56,12 +72,17 @@ function digitadoDoMes(plano, moduloId, filialId, centroId, contas, mes) {
   return total;
 }
 
-// Base do percentual: a receita de vendas planejada da MESMA filial no mês.
+// Contas de receita que servem de base numa filial — a lista que a tela do
+// módulo percentual mostra à esquerda, ao lado das contas do próprio módulo.
+export function receitasDaBase(visao, filialId) {
+  return contasDaFilial(visao, MODULO_BASE_DO_PERCENTUAL, filialId);
+}
+
+// Receita planejada de UMA conta de receita, na filial e no mês.
 //
-// Soma todos os centros quando o módulo de receita usa centro de custo — a base
-// é a receita da filial inteira, independente de como ela foi distribuída.
-export function baseDoPercentual(plano, visao, filialId, mes) {
-  if (!plano || !visao) return 0;
+// Soma todos os centros quando o módulo de receita usa centro de custo: a base
+// é a receita da filial, independente de como ela foi distribuída entre centros.
+function baseDaReceita(plano, visao, filialId, receita, mes) {
   const base = MODULO_BASE_DO_PERCENTUAL;
   const centros = usaCentroDeCusto(visao, base)
     ? centrosDaFilial(visao, base, filialId)
@@ -69,42 +90,54 @@ export function baseDoPercentual(plano, visao, filialId, mes) {
 
   let total = 0;
   centros.forEach((centroId) => {
-    total += digitadoDoMes(
-      plano,
-      base,
-      filialId,
-      centroId,
-      contasEfetivasDoModulo(visao, base, filialId, centroId),
-      mes
-    );
+    total += plano.planejado[chavePlanejado(base, filialId, centroId, receita, mes)] ?? 0;
   });
   return total;
+}
+
+// Base do percentual na filial: soma das receitas consideradas. `receitas` vem
+// da tela — todas, ou só a que o usuário selecionou.
+export function baseDoPercentual(plano, visao, filialId, mes, receitas = null) {
+  if (!plano || !visao) return 0;
+  return (receitas ?? receitasDaBase(visao, filialId)).reduce(
+    (total, receita) => total + baseDaReceita(plano, visao, filialId, receita, mes),
+    0
+  );
 }
 
 // Planejado do mês nas duas leituras: o digitado (reais ou percentual) e o valor
 // em reais.
 //
-// Em módulo percentual a conversão é POR FILIAL: o percentual de cada filial
-// incide sobre a receita daquela filial. Somar os percentuais de várias filiais
-// e aplicar uma base única daria outro número — e é justamente a tela "Total"
-// que mostraria esse número errado.
-function planejadoDoMes(plano, visao, moduloId, filiais, centroId, contas, mes) {
+// Em módulo percentual a conversão é por filial E por conta de receita: o
+// percentual lançado contra "vendas de produtos - coleção" incide sobre a
+// receita daquela conta, não sobre a receita total. Aplicar uma base única
+// aqui daria o número errado justamente na tela "Total", que é onde ninguém
+// confere linha a linha.
+function planejadoDoMes(plano, visao, moduloId, filiais, centroId, contas, mes, receitas) {
   const percentual = ehPercentual(moduloId);
   let digitado = 0;
   let reais = 0;
   let base = 0;
 
   filiais.forEach((filial) => {
-    const daFilial = digitadoDoMes(plano, moduloId, filial.id, centroId, contas, mes);
-    digitado += daFilial;
-
     if (!percentual) {
+      const daFilial = digitadoDoMes(plano, moduloId, filial.id, centroId, contas, mes);
+      digitado += daFilial;
       reais += daFilial;
       return;
     }
-    const baseDaFilial = baseDoPercentual(plano, visao, filial.id, mes);
-    base += baseDaFilial;
-    reais += (daFilial / 100) * baseDaFilial;
+
+    (receitas ?? receitasDaBase(visao, filial.id)).forEach((receita) => {
+      const baseDaConta = baseDaReceita(plano, visao, filial.id, receita, mes);
+      base += baseDaConta;
+
+      contas.forEach((conta) => {
+        const chave = chavePlanejado(moduloId, filial.id, centroId, conta, mes, receita);
+        const lancado = plano.planejado[chave] ?? 0;
+        digitado += lancado;
+        reais += (lancado / 100) * baseDaConta;
+      });
+    });
   });
 
   return { digitado, reais, base };
@@ -179,6 +212,8 @@ export function criarLinhasOrcamento({
   filiais,
   centroId = SEM_CENTRO,
   contas,
+  // Contas de receita que entram na base. `undefined` = todas as da filial.
+  receitas,
   catalogo = CATALOGO_VAZIO,
   sinais,
   visaoContabil,
@@ -209,7 +244,16 @@ export function criarLinhasOrcamento({
   const percentual = ehPercentual(moduloId);
 
   const meses = MESES.map((mes) => {
-    const planejado = planejadoDoMes(plano, visao, moduloId, filiais, centroId, contas, mes);
+    const planejado = planejadoDoMes(
+      plano,
+      visao,
+      moduloId,
+      filiais,
+      centroId,
+      contas,
+      mes,
+      receitas
+    );
     const linha = {
       id: mes,
       label: `${String(mes).padStart(2, "0")}/${ano}`,
