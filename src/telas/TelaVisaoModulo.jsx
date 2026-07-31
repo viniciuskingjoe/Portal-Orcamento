@@ -337,24 +337,65 @@ export default function TelaVisaoModulo({
                   const quantas = filialId
                     ? contasDoCentro(visao, modulo.id, filialId, centro.id).length
                     : 0;
+                  const emUso = quantas > 0;
+                  const bloqueado = !daFilial.length;
+
                   return (
-                    <button
-                      type="button"
+                    <div
                       key={centro.id}
-                      className={`selecao-item selecao-item--conta ${
-                        centro.id === centroId ? "is-active" : ""
-                      }`}
-                      aria-pressed={centro.id === centroId}
-                      onClick={() => setCentroId(centro.id)}
-                      disabled={!daFilial.length}
-                      title={daFilial.length ? undefined : "Escolha primeiro as contas da filial"}
+                      className={[
+                        "selecao-item selecao-item--centro",
+                        centro.id === centroId ? "is-active" : "",
+                        bloqueado ? "is-bloqueado" : "",
+                      ]
+                        .filter(Boolean)
+                        .join(" ")}
                     >
-                      <code>{centro.id}</code>
-                      <span>
-                        {centro.nome}
-                        {quantas ? ` · ${quantas}` : ""}
-                      </span>
-                    </button>
+                      {/* Marcar o centro é dizer "esta filial usa este centro":
+                          ele nasce com as contas da filial e depois se recorta.
+                          Desmarcar limpa — centro sem conta não entra na visão. */}
+                      <label
+                        className="centro-uso"
+                        title={
+                          bloqueado
+                            ? "Escolha primeiro as contas da filial"
+                            : emUso
+                              ? "Deixar de usar este centro nesta filial"
+                              : `Usar este centro com ${daFilial.length === 1 ? "a conta" : `as ${daFilial.length} contas`} da filial`
+                        }
+                      >
+                        <input
+                          type="checkbox"
+                          checked={emUso}
+                          disabled={bloqueado}
+                          onChange={() =>
+                            onDefinirContasDoCentro(
+                              modulo.id,
+                              filialId,
+                              centro.id,
+                              emUso ? [] : daFilial
+                            )
+                          }
+                        />
+                        <span className="checkbox-visual">
+                          <Icone nome="check" tamanho={13} />
+                        </span>
+                      </label>
+
+                      <button
+                        type="button"
+                        className="centro-nome"
+                        aria-pressed={centro.id === centroId}
+                        onClick={() => setCentroId(centro.id)}
+                        disabled={bloqueado}
+                        title={bloqueado ? "Escolha primeiro as contas da filial" : centro.nome}
+                      >
+                        <code>{centro.id}</code>
+                        <span>{centro.nome}</span>
+                      </button>
+
+                      {quantas ? <b>{quantas}</b> : null}
+                    </div>
                   );
                 })}
               </section>
