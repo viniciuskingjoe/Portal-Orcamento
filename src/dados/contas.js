@@ -117,6 +117,33 @@ export function filtrarPorGrupo(catalogo, grupo) {
   return { ...indexarContas(lista), grupo };
 }
 
+// Recorta o catálogo para um conjunto de códigos, mantendo os ancestrais deles
+// como estrutura. É o que a seleção por centro de custo precisa: o centro
+// escolhe entre as contas que a filial já orça.
+//
+// Os ancestrais entram mesmo quando são contas selecionáveis do grupo — na visão
+// 25 as raízes são justamente contas (`4.2 LUCRO BRUTO OPERACIONAL`), e derrubá-las
+// por não estarem na lista levaria junto tudo que está pendurado nelas.
+export function recortarPara(catalogo, codigos) {
+  const permitidas = new Set(codigos ?? []);
+  const manter = new Set();
+
+  catalogo.lista.forEach((item) => {
+    if (!permitidas.has(item.codigo)) return;
+    manter.add(item.codigo);
+    ancestrais(catalogo, item.codigo).forEach((pai) => manter.add(pai));
+  });
+
+  // `indexarContas` de novo, e não um spread do catálogo de origem: `filhos` e
+  // `raizes` descrevem a árvore inteira e apontariam para nós que saíram, o que
+  // interrompe a descida e some com a subárvore.
+  const lista = catalogo.lista
+    .filter((item) => manter.has(item.codigo))
+    .map((item) => ({ ...item, selecionavel: permitidas.has(item.codigo) }));
+
+  return { ...indexarContas(lista), grupo: catalogo.grupo };
+}
+
 // ============================================================================
 // SELEÇÃO EM CASCATA
 //

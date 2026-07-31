@@ -10,6 +10,7 @@ import {
   filtrarPorGrupo,
   linhasDaArvore,
   marcarEmCascata,
+  recortarPara,
   resumirSelecao,
 } from "../dados/contas.js";
 import { GRUPOS } from "../dados/modulos.js";
@@ -147,13 +148,7 @@ export default function TelaVisaoModulo({
   // o que a filial orça — o centro é subconjunto dela.
   const catalogo = useMemo(() => {
     const doGrupo = filtrarPorGrupo(catalogoCompleto, modulo.grupo);
-    if (!editandoCentro) return doGrupo;
-
-    const permitidas = new Set(daFilial);
-    const lista = doGrupo.lista.filter(
-      (item) => permitidas.has(item.codigo) || item.selecionavel === false
-    );
-    return filtrarPorGrupo({ ...doGrupo, lista, porCodigo: new Map(lista.map((i) => [i.codigo, i])) }, null);
+    return editandoCentro ? recortarPara(doGrupo, daFilial) : doGrupo;
   }, [catalogoCompleto, modulo.grupo, editandoCentro, daFilial]);
 
   const selecionadas = editandoCentro
