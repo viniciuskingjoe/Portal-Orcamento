@@ -1615,6 +1615,19 @@ button {
   font-weight: 650;
 }
 
+/* Dentro da tabela é preciso repetir com o elemento junto: `.tabela-orcamento td`
+   já define cor e tem especificidade maior que `.positivo` sozinho, então a
+   variação saía com a cor do texto comum. Vem depois das linhas de resumo e do
+   destaque do DRE de propósito — a variação é a informação da célula, e some se
+   qualquer uma delas ganhar. */
+.tabela-orcamento td.positivo {
+  color: var(--success);
+}
+
+.tabela-orcamento td.negativo {
+  color: var(--danger);
+}
+
 /* ==========================================================================
    Diálogos — <dialog> nativo, layout flex-column (PADRAO §4)
    ========================================================================== */
