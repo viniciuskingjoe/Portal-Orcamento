@@ -119,9 +119,10 @@ export default function TelaDre({
           </select>
         </label>
 
+        {/* O ano é o do plano — não há o que escolher. */}
         <label>
-          <span>Período</span>
-          <output className="campo-fixo">Janeiro a Dezembro de {plano.ano}</output>
+          <span>Ano</span>
+          <output className="campo-fixo">{plano.ano}</output>
         </label>
       </div>
 

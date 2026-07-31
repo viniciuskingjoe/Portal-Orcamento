@@ -195,11 +195,11 @@ export default function TelaOrcamento({
           </select>
         </label>
 
-        {/* O período é o ano do plano — não há o que escolher. */}
+        {/* O ano é o do plano — não há o que escolher. */}
         <label>
-          <span>Período</span>
+          <span>Ano</span>
           <output className="campo-fixo">
-            Janeiro a Dezembro de {plano.ano}
+            {plano.ano}
             <span className={`chip chip--${grupo?.chip ?? "receita"}`}>{modulo.grupo}</span>
           </output>
         </label>
