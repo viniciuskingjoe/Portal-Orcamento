@@ -13,6 +13,7 @@ import TelaListaErp from "./telas/TelaListaErp.jsx";
 import TelaVisoes from "./telas/TelaVisoes.jsx";
 import TelaVisao from "./telas/TelaVisao.jsx";
 import TelaVisaoModulo from "./telas/TelaVisaoModulo.jsx";
+import TelaDre from "./telas/TelaDre.jsx";
 import TelaOrcamento, { TODAS_AS_CONTAS } from "./telas/TelaOrcamento.jsx";
 
 import { EMPRESA, MESES } from "./dados/seeds.js";
@@ -700,16 +701,29 @@ export default function PlanejamentoOrcamentario() {
       );
     }
 
+    if (tela === "dre") {
+      return exigirErp(
+        <TelaDre
+          plano={planoAtivo}
+          visao={visaoDoPlano}
+          dre={dre}
+          filiais={filiaisAtivas}
+          filtroFilial={filtros.filial}
+          onAlterarFiltroFilial={(filial) => alterarFiltro({ filial })}
+          filiaisIgnoradas={filiaisIgnoradas}
+          carregandoRealizado={realizado.carregando || contas.carregando}
+          onAbrirModulo={abrirModulo}
+          onVoltar={voltar}
+        />
+      );
+    }
+
     return (
       <TelaHome
         plano={planoAtivo}
         visao={visaoDoPlano}
-        dre={dre}
-        filiais={filiaisAtivas}
-        filtroFilial={filtros.filial}
-        onAlterarFiltroFilial={(filial) => alterarFiltro({ filial })}
-        carregandoRealizado={realizado.carregando}
         onAbrirModulo={abrirModulo}
+        onAbrirDre={() => abrirModulo("dre")}
         onVoltar={voltar}
       />
     );

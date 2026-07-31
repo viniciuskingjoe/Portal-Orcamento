@@ -85,6 +85,15 @@ export default function Sidebar({
                 ativo={tela === "home"}
                 onNavegar={onNavegar}
               />
+              {/* O DRE fecha os módulos, então vive ao lado deles e não dentro
+                  da lista — não é um módulo que se orça. */}
+              <ItemNav
+                id="dre"
+                titulo="DRE"
+                icone="chart"
+                ativo={tela === "dre"}
+                onNavegar={onNavegar}
+              />
             </div>
 
             <div className="nav-grupo">

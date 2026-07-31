@@ -131,12 +131,15 @@ consolidada — aplicar uma base única daria o número errado justamente na tel
 percentual exibido é `valor ÷ base`, não a soma dos meses: somar taxas mensais
 não dá taxa de nada.
 
-### Visão geral: o DRE consolidado
+### DRE
 
-A tela do plano é o resultado fechado, com os 8 módulos na ordem em que compõem
-o exercício. Cada módulo entra **uma vez**, com o sinal declarado, e cada
-subtotal é a soma acumulada de tudo acima dele — mexer na ordem não exige
-manter lista de parcelas em dia.
+Tela própria, ao lado da Visão geral (que segue sendo o lançador dos módulos).
+O DRE não é um módulo que se orça — é onde os outros fecham —, então fica fora
+da lista de módulos, na barra lateral e como último cartão da Visão geral.
+
+Traz os 8 módulos na ordem em que compõem o exercício. Cada módulo entra **uma
+vez**, com o sinal declarado, e cada subtotal é a soma acumulada de tudo acima
+dele — mexer na ordem não exige manter lista de parcelas em dia.
 
 ```
 (+) Receita de vendas
@@ -154,10 +157,11 @@ manter lista de parcelas em dia.
   = Resultado líquido
 ```
 
-A estrutura fica em [src/dados/dre.js](src/dados/dre.js). A coluna `% RL` é a
-participação na **receita líquida** — não na bruta, porque é sobre a líquida que
-margem e despesa se medem. Clicar numa linha abre o módulo; módulo sem contas na
-visão aparece na estrutura, zerado e sem clique.
+A estrutura fica em [src/dados/dre.js](src/dados/dre.js), separada da tela em
+[src/telas/TelaDre.jsx](src/telas/TelaDre.jsx). A coluna `% RL` é a participação
+na **receita líquida** — não na bruta, porque é sobre a líquida que margem e
+despesa se medem. Clicar numa linha abre o módulo; módulo sem contas na visão
+aparece na estrutura, zerado e sem clique.
 
 ### Dimensões da tela do módulo
 
