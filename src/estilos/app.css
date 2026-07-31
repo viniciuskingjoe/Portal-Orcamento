@@ -1187,11 +1187,15 @@ button {
 /* A coluna da esquerda cresce com o número de dimensões do módulo: conta,
    conta + receita, conta + centro, ou as três. A largura vem do próprio layout
    para a tabela nunca ficar espremida além do necessário. */
+/* `stretch`, não `start`: as duas colunas ficam com a altura da mais alta e a
+   tabela acompanha o painel de contas em vez de terminar no meio dele. Como a
+   altura da linha é a do conteúdo mais alto, a tabela nunca encolhe abaixo do
+   natural — só cresce quando há painel embaixo dela para acompanhar. */
 .orcamento-layout {
   display: grid;
   grid-template-columns: 268px minmax(0, 1fr);
   gap: 18px;
-  align-items: start;
+  align-items: stretch;
 }
 
 .orcamento-layout[data-paineis="2"] {
@@ -1324,6 +1328,16 @@ button {
   flex-direction: column;
   gap: 12px;
   min-width: 0;
+}
+
+/* A tabela ocupa a altura toda da coluna, e as linhas dividem a sobra entre si
+   — encher o vão com uma linha de 200px seria pior que não encher. */
+.orcamento-dados .tabela-wrap {
+  flex: 1 1 auto;
+}
+
+.orcamento-dados .tabela-orcamento {
+  height: 100%;
 }
 
 .abas {
