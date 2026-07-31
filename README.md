@@ -75,13 +75,14 @@ pede as duas dimensões à esquerda, como o Scoreplan pede produto/serviço e
 dedução:
 
 ```
-RECEITA (BASE DO %)              CONTAS DO MÓDULO
-  Todas as receitas       11       Total do módulo        33
-  3.1.1.01.001                     3.1.2.01.001
-  VENDAS DE PRODUTOS - COLEÇÃO     (-) DEVOLUÇÃO DE VENDAS PRODUTOS
-  1.850.000,00  ← planejado        3.1.2.01.010
-  3.1.1.01.002                     ICMS S/ DEVOLUÇÃO DE VENDAS
-  VENDAS DE PRODUTOS - SALDO       …
+┌─ RECEITA (BASE DO %) ────────┐ ┌─ CONTAS DO MÓDULO ───────────┐
+│ Todas as receitas         11 │ │ Total do módulo           33 │
+│ 3.1.1.01.001                 │ │ 3.1.2.01.001                 │
+│ VENDAS DE PRODUTOS - COLEÇÃO │ │ (-) DEVOLUÇÃO DE VENDAS      │
+│ 1.850.000,00   ← planejado   │ │ 3.1.2.01.010                 │
+│ 3.1.1.01.002                 │ │ ICMS S/ DEVOLUÇÃO DE VENDAS  │
+│ VENDAS DE PRODUTOS - SALDO   │ │ …                            │
+└──────────────────────────────┘ └──────────────────────────────┘
 ```
 
 A tabela mostra as duas leituras lado a lado — `Planejado %` (editável) e
@@ -103,6 +104,26 @@ consolidada — aplicar uma base única daria o número errado justamente na tel
 "Total", que é onde ninguém confere linha a linha. Nas linhas de Total o
 percentual exibido é `valor ÷ base`, não a soma dos meses: somar taxas mensais
 não dá taxa de nada.
+
+### Dimensões da tela do módulo
+
+À esquerda ficam os painéis das dimensões que compõem a célula, **lado a lado**,
+na ordem em que se escolhe:
+
+| Painel | Quando aparece |
+|---|---|
+| Centro de custo | módulo com `usaCentro` na visão |
+| Receita (base do %) | módulo `percentual` |
+| Contas do módulo | sempre |
+
+Filial e período seguem no topo — filial é da tela inteira e o período é o ano do
+plano. O centro de custo saiu do topo para a lateral: ele é uma dimensão da
+célula, como a conta, e ficava escondido num `select` enquanto valia tanto quanto
+ela. A coluna da esquerda cresce com o número de painéis (`data-paineis` no
+layout), então a tabela só cede a largura de que os painéis precisam.
+
+Gravar exige uma escolha em cada painel: em "Total" o valor é soma de várias
+chaves e não há onde gravar.
 
 ### Digitação
 

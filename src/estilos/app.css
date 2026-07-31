@@ -1166,6 +1166,9 @@ button {
   border-color: var(--accent);
 }
 
+/* A coluna da esquerda cresce com o número de dimensões do módulo: conta,
+   conta + receita, conta + centro, ou as três. A largura vem do próprio layout
+   para a tabela nunca ficar espremida além do necessário. */
 .orcamento-layout {
   display: grid;
   grid-template-columns: 268px minmax(0, 1fr);
@@ -1173,12 +1176,26 @@ button {
   align-items: start;
 }
 
+.orcamento-layout[data-paineis="2"] {
+  grid-template-columns: 500px minmax(0, 1fr);
+}
+
+.orcamento-layout[data-paineis="3"] {
+  grid-template-columns: 720px minmax(0, 1fr);
+}
+
 .orcamento-lateral {
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
   gap: 12px;
+  align-items: start;
   position: sticky;
   top: 18px;
+}
+
+.orcamento-lateral > .painel-selecao {
+  flex: 1 1 0;
+  min-width: 0;
 }
 
 .painel-selecao {
@@ -2006,12 +2023,6 @@ dialog::backdrop {
   overflow-y: auto;
 }
 
-/* Com dois painéis empilhados (receita-base + contas do módulo), 70vh cada faria
-   o segundo nascer fora da tela. */
-.orcamento-lateral:has(.painel-selecao + .painel-selecao) .painel-selecao {
-  max-height: min(38vh, 340px);
-}
-
 .painel-selecao__descricao {
   margin: -4px 0 6px;
   padding: 0 10px;
@@ -2338,6 +2349,14 @@ dialog::backdrop {
   .orcamento-layout {
     grid-template-columns: 240px minmax(0, 1fr);
   }
+
+  .orcamento-layout[data-paineis="2"] {
+    grid-template-columns: 420px minmax(0, 1fr);
+  }
+
+  .orcamento-layout[data-paineis="3"] {
+    grid-template-columns: 570px minmax(0, 1fr);
+  }
 }
 
 @media (max-width: 900px) {
@@ -2399,6 +2418,11 @@ dialog::backdrop {
   .orcamento-lateral {
     position: static;
     margin-bottom: 16px;
+    flex-wrap: wrap;
+  }
+
+  .orcamento-lateral > .painel-selecao {
+    flex: 1 1 220px;
   }
 }
 

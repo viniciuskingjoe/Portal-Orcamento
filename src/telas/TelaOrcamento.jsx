@@ -10,20 +10,10 @@ import { formatarMoeda } from "../lib/formato.js";
 
 export const TODAS_AS_CONTAS = "__todas";
 
-// Lista de contas selecionáveis à esquerda. Serve tanto para as contas do
-// módulo quanto para as receitas que servem de base ao percentual — são a mesma
-// interação, com rótulos diferentes.
-function PainelDeContas({
-  titulo,
-  descricao,
-  rotuloTotal,
-  codigos,
-  catalogo,
-  selecionado,
-  aoSelecionar,
-  valores,
-  vazio,
-}) {
+// Painel de seleção da lateral. Serve às contas do módulo, às receitas que dão
+// base ao percentual e aos centros de custo — é a mesma interação, com rótulos
+// diferentes, e ficar lado a lado é o que deixa as dimensões visíveis de uma vez.
+function PainelSelecao({ titulo, descricao, rotuloTotal, valorTotal, itens, selecionado, aoSelecionar, vazio }) {
   return (
     <section className="painel-selecao">
       <h3>{titulo}</h3>
@@ -31,40 +21,37 @@ function PainelDeContas({
 
       <button
         type="button"
-        className={`selecao-item ${selecionado === TODAS_AS_CONTAS ? "is-active" : ""}`}
-        aria-pressed={selecionado === TODAS_AS_CONTAS}
-        onClick={() => aoSelecionar(TODAS_AS_CONTAS)}
+        className={`selecao-item ${selecionado === valorTotal ? "is-active" : ""}`}
+        aria-pressed={selecionado === valorTotal}
+        onClick={() => aoSelecionar(valorTotal)}
       >
         <span>{rotuloTotal}</span>
-        <b>{codigos.length}</b>
+        <b>{itens.length}</b>
       </button>
 
-      {codigos.map((codigo) => {
-        const item = buscarConta(catalogo, codigo);
-        const ativo = selecionado === codigo;
+      {itens.map((item) => {
+        const ativo = selecionado === item.codigo;
         return (
           <button
             type="button"
-            key={codigo}
+            key={item.codigo}
             className={`selecao-item selecao-item--conta ${ativo ? "is-active" : ""}`}
             aria-pressed={ativo}
-            onClick={() => aoSelecionar(codigo)}
-            title={item?.descricao ?? codigo}
+            onClick={() => aoSelecionar(item.codigo)}
+            title={item.descricao ?? item.codigo}
           >
-            <code>{codigo}</code>
-            <span>{item?.descricao ?? "conta fora da visão contábil"}</span>
-            {/* O planejado da receita é a base da conta: mostrá-lo aqui evita ter
-                que sair da tela para descobrir sobre quanto o percentual incide. */}
-            {valores ? (
-              <em className={valores.get(codigo) ? "" : "is-zerado"}>
-                {formatarMoeda(valores.get(codigo) ?? 0)}
-              </em>
+            <code>{item.codigo}</code>
+            <span>{item.descricao}</span>
+            {/* O planejado da receita é a base do percentual: mostrá-lo aqui
+                evita sair da tela para descobrir sobre quanto ele incide. */}
+            {item.valor != null ? (
+              <em className={item.valor ? "" : "is-zerado"}>{formatarMoeda(item.valor)}</em>
             ) : null}
           </button>
         );
       })}
 
-      {!codigos.length ? <p className="sem-contas">{vazio}</p> : null}
+      {!itens.length ? <p className="sem-contas">{vazio}</p> : null}
     </section>
   );
 }
@@ -123,6 +110,53 @@ export default function TelaOrcamento({
               ? "Escolha também a receita sobre a qual o percentual incide."
               : `Digite na coluna Planejado${percentual ? " %" : ""} — Enter grava e desce · arraste o canto da célula (ou Ctrl+Enter) para repetir nos outros meses · Ctrl+D copia o mês de cima · Esc cancela.`;
 
+  // As dimensões que compõem a célula, na ordem em que se escolhe: onde (centro),
+  // sobre o quê (receita) e o quê (conta do módulo).
+  const paineis = [];
+
+  if (usaCentro) {
+    paineis.push({
+      titulo: "Centro de custo",
+      descricao: "Este módulo é orçado por centro; escolha um para lançar.",
+      rotuloTotal: "Total — todos os centros",
+      valorTotal: SEM_CENTRO,
+      itens: centros.map((centro) => ({ codigo: centro.id, descricao: centro.nome })),
+      selecionado: filtros.centro,
+      aoSelecionar: (codigo) => onAlterarFiltro({ centro: codigo }),
+      vazio: "Nenhum centro de custo ativo no ERP.",
+    });
+  }
+
+  if (percentual) {
+    paineis.push({
+      titulo: "Receita (base do %)",
+      descricao: `Planejado de ${plano.ano} — é sobre este valor que o percentual incide.`,
+      rotuloTotal: "Todas as receitas",
+      valorTotal: TODAS_AS_CONTAS,
+      itens: receitas.map((codigo) => ({
+        codigo,
+        descricao: buscarConta(catalogo, codigo)?.descricao ?? "conta fora da visão contábil",
+        valor: totaisDasReceitas?.get(codigo) ?? 0,
+      })),
+      selecionado: filtros.receita,
+      aoSelecionar: (codigo) => onAlterarFiltro({ receita: codigo }),
+      vazio: "Nenhuma receita configurada para esta filial na visão.",
+    });
+  }
+
+  paineis.push({
+    titulo: "Contas do módulo",
+    rotuloTotal: "Total do módulo",
+    valorTotal: TODAS_AS_CONTAS,
+    itens: contasDisponiveis.map((codigo) => ({
+      codigo,
+      descricao: buscarConta(catalogo, codigo)?.descricao ?? "conta fora da visão contábil",
+    })),
+    selecionado: filtros.conta,
+    aoSelecionar: (codigo) => onAlterarFiltro({ conta: codigo }),
+    vazio: `Nenhuma conta para esta filial${usaCentro ? " e centro" : ""}.`,
+  });
+
   return (
     <main className="conteudo conteudo--orcamento">
       <Cabecalho
@@ -151,23 +185,6 @@ export default function TelaOrcamento({
             ))}
           </select>
         </label>
-
-        {usaCentro ? (
-          <label>
-            <span>Centro de custo</span>
-            <select
-              value={filtros.centro}
-              onChange={(evento) => onAlterarFiltro({ centro: evento.target.value })}
-            >
-              <option value={SEM_CENTRO}>Total — todos os centros</option>
-              {centros.map((centro) => (
-                <option value={centro.id} key={centro.id}>
-                  {centro.id} — {centro.nome}
-                </option>
-              ))}
-            </select>
-          </label>
-        ) : null}
 
         {/* O período é o ano do plano — não há o que escolher. */}
         <label>
@@ -198,36 +215,16 @@ export default function TelaOrcamento({
         </p>
       ) : null}
 
-      <div className="orcamento-layout">
+      <div className="orcamento-layout" data-paineis={paineis.length}>
         {/* Lista de contas à esquerda, como no ERP: escolhe-se a conta e lança-se
             o planejado dela. Só contas analíticas — as sintéticas não recebem
             lançamento. */}
+        {/* Painéis lado a lado, como no Scoreplan: as dimensões que compõem a
+            célula ficam visíveis de uma vez, sem rolar de uma para a outra. */}
         <aside className="orcamento-lateral">
-          {/* Módulo percentual precisa das duas dimensões, como no Scoreplan:
-              sobre QUAL receita e para QUAL conta do módulo. */}
-          {percentual ? (
-            <PainelDeContas
-              titulo="Receita (base do %)"
-              descricao={`Planejado de ${plano.ano} — é sobre este valor que o percentual incide.`}
-              rotuloTotal="Todas as receitas"
-              codigos={receitas}
-              catalogo={catalogo}
-              selecionado={filtros.receita}
-              aoSelecionar={(codigo) => onAlterarFiltro({ receita: codigo })}
-              valores={totaisDasReceitas}
-              vazio="Nenhuma receita configurada para esta filial na visão."
-            />
-          ) : null}
-
-          <PainelDeContas
-            titulo="Contas do módulo"
-            rotuloTotal="Total do módulo"
-            codigos={contasDisponiveis}
-            catalogo={catalogo}
-            selecionado={filtros.conta}
-            aoSelecionar={(codigo) => onAlterarFiltro({ conta: codigo })}
-            vazio={`Nenhuma conta para esta filial${usaCentro ? " e centro" : ""}.`}
-          />
+          {paineis.map((painel) => (
+            <PainelSelecao key={painel.titulo} {...painel} />
+          ))}
         </aside>
 
         <section className="orcamento-dados">
