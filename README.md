@@ -131,6 +131,34 @@ consolidada — aplicar uma base única daria o número errado justamente na tel
 percentual exibido é `valor ÷ base`, não a soma dos meses: somar taxas mensais
 não dá taxa de nada.
 
+### Visão geral: o DRE consolidado
+
+A tela do plano é o resultado fechado, com os 8 módulos na ordem em que compõem
+o exercício. Cada módulo entra **uma vez**, com o sinal declarado, e cada
+subtotal é a soma acumulada de tudo acima dele — mexer na ordem não exige
+manter lista de parcelas em dia.
+
+```
+(+) Receita de vendas
+(-) Deduções de vendas
+  = Receita líquida            ← base da análise vertical
+(-) Custos variáveis
+  = Margem bruta
+(-) Despesas variáveis
+  = Margem de contribuição
+(-) Despesas operacionais
+(-) Despesas com pessoal
+  = Resultado operacional
+(+) Receitas não operacionais
+(-) Outras despesas
+  = Resultado líquido
+```
+
+A estrutura fica em [src/dados/dre.js](src/dados/dre.js). A coluna `% RL` é a
+participação na **receita líquida** — não na bruta, porque é sobre a líquida que
+margem e despesa se medem. Clicar numa linha abre o módulo; módulo sem contas na
+visão aparece na estrutura, zerado e sem clique.
+
 ### Dimensões da tela do módulo
 
 À esquerda ficam os painéis das dimensões que compõem a célula, **lado a lado**,

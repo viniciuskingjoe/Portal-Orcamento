@@ -36,6 +36,7 @@ import {
   definirUsaCentroDeCusto,
   usaCentroDeCusto,
 } from "./dados/visao.js";
+import { montarDre } from "./dados/dre.js";
 import { conta as buscarConta } from "./dados/contas.js";
 import { filiaisForaDoUso } from "./dados/realizado.js";
 import { contasDoMapeamento, temMapeamentoPadrao } from "./dados/mapeamentoPadrao.js";
@@ -203,6 +204,20 @@ export default function PlanejamentoOrcamentario() {
     moduloDaTela?.percentual && filtros.receita !== TODAS_AS_CONTAS
       ? [filtros.receita]
       : undefined;
+
+  // DRE consolidado da visão geral. Fica aqui porque depende do mesmo recorte de
+  // filial das telas de módulo — trocar a filial vale para as duas.
+  const dre = useMemo(() => {
+    if (!planoAtivo || !visaoDoPlano) return [];
+    return montarDre({
+      plano: planoAtivo,
+      visao: visaoDoPlano,
+      filiais: filiaisDoFiltro,
+      catalogo: contas.catalogo,
+      realizado: realizado.doAno,
+      realizadoAnterior: realizado.doAnoAnterior,
+    });
+  }, [planoAtivo, visaoDoPlano, filiaisDoFiltro, contas.catalogo, realizado]);
 
   const linhasOrcamento = useMemo(() => {
     if (!planoAtivo || !moduloDaTela) return [];
@@ -689,6 +704,11 @@ export default function PlanejamentoOrcamentario() {
       <TelaHome
         plano={planoAtivo}
         visao={visaoDoPlano}
+        dre={dre}
+        filiais={filiaisAtivas}
+        filtroFilial={filtros.filial}
+        onAlterarFiltroFilial={(filial) => alterarFiltro({ filial })}
+        carregandoRealizado={realizado.carregando}
         onAbrirModulo={abrirModulo}
         onVoltar={voltar}
       />

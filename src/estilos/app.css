@@ -1523,6 +1523,56 @@ button {
   color: var(--text-soft);
 }
 
+/* --- DRE consolidado ----------------------------------------------------- */
+
+.tabela-dre tbody th {
+  min-width: 240px;
+}
+
+/* O subtotal fecha um bloco: a linha acima dele é a última parcela, e a régua
+   marca onde a conta virou resultado. */
+.tabela-dre .linha-dre--subtotal th,
+.tabela-dre .linha-dre--subtotal td {
+  background: var(--surface-soft);
+  font-weight: 700;
+  border-top: 1px solid var(--border-strong);
+}
+
+.tabela-dre .linha-dre--destaque th,
+.tabela-dre .linha-dre--destaque td {
+  background: var(--surface-accent);
+  color: var(--accent);
+  border-top: 2px solid var(--accent);
+  font-size: 13.5px;
+}
+
+/* Módulo sem contas na visão: aparece na estrutura, mas não convida ao clique. */
+.tabela-dre .linha-dre--vazia th,
+.tabela-dre .linha-dre--vazia td {
+  color: var(--muted);
+}
+
+.link-modulo {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  border-bottom: 1px solid transparent;
+}
+
+.link-modulo:hover:not(:disabled) {
+  color: var(--accent);
+  border-bottom-color: var(--accent);
+}
+
+.link-modulo:disabled {
+  cursor: not-allowed;
+  opacity: 0.75;
+}
+
 .positivo {
   color: var(--success);
   font-weight: 650;

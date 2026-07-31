@@ -10,6 +10,7 @@ import {
   contasDaFilial,
   contasEfetivasDoModulo,
   moduloConfigurado,
+  sinaisDoModulo,
   usaCentroDeCusto,
 } from "./visao.js";
 import { somarRealizado } from "./realizado.js";
@@ -330,20 +331,76 @@ export function criarLinhasOrcamento({
   return [...meses, total, linhaMedia(meses, ano)];
 }
 
-// Total planejado do módulo no ano, em REAIS — usado nos cartões da visão geral.
-// Módulo percentual entra convertido; somar percentuais num cartão de valor não
-// significaria nada.
-export function totalPlanejadoNoAno({ plano, visao, moduloId, filiais }) {
-  if (!definicaoDoModulo(moduloId) || !moduloConfigurado(visao, moduloId)) return 0;
+// Totais do ano de um módulo inteiro, em REAIS — a linha que a visão
+// consolidada precisa. Módulo percentual entra convertido; somar percentuais
+// numa linha de DRE não significaria nada.
+//
+// Percorre filial a filial porque as contas são por filial: aplicar a união
+// delas em todas somaria realizado de conta que a visão não deu àquela filial.
+// Nos módulos com centro de custo o planejado ainda desce por centro, que é onde
+// o valor está gravado; o realizado não precisa, porque somar todos os centros
+// de uma filial é o mesmo que não filtrar.
+export function totaisDoModuloNoAno({
+  plano,
+  visao,
+  moduloId,
+  filiais,
+  catalogo = CATALOGO_VAZIO,
+  realizado,
+  realizadoAnterior,
+}) {
+  const modulo = definicaoDoModulo(moduloId);
+  const totais = { planejado: 0, realizado: 0, anterior: 0 };
+  if (!modulo || !moduloConfigurado(visao, moduloId)) return totais;
 
-  let total = 0;
+  const ano = plano?.ano;
+  const usaCentro = usaCentroDeCusto(visao, moduloId);
+  const sinais = sinaisDoModulo(visao, moduloId);
+
   (filiais ?? []).forEach((filial) => {
-    const contas = contasEfetivasDoModulo(visao, moduloId, filial.id);
+    const daFilial = contasEfetivasDoModulo(visao, moduloId, filial.id);
+    if (!daFilial.length) return;
+
+    const centros = usaCentro ? centrosDaFilial(visao, moduloId, filial.id) : [SEM_CENTRO];
+    const comum = {
+      contas: daFilial,
+      filiais: [filial],
+      centroId: SEM_CENTRO,
+      catalogo,
+      tipoPadrao: modulo.tipo,
+      sinais,
+      visaoContabil: visao?.visaoContabil,
+    };
+
     MESES.forEach((mes) => {
-      total += planejadoDoMes(plano, visao, moduloId, [filial], SEM_CENTRO, contas, mes).reais;
+      centros.forEach((centroId) => {
+        const contas = contasEfetivasDoModulo(visao, moduloId, filial.id, centroId);
+        totais.planejado += planejadoDoMes(
+          plano,
+          visao,
+          moduloId,
+          [filial],
+          centroId,
+          contas,
+          mes
+        ).reais;
+      });
+
+      if (mesTemRealizado(ano, mes)) {
+        totais.realizado += somarRealizado({ ...comum, indice: realizado, mes });
+      }
+      if (mesTemRealizado(ano - 1, mes)) {
+        totais.anterior += somarRealizado({ ...comum, indice: realizadoAnterior, mes });
+      }
     });
   });
-  return total;
+
+  return totais;
+}
+
+// Só o planejado — usado onde não há realizado carregado.
+export function totalPlanejadoNoAno(argumentos) {
+  return totaisDoModuloNoAno(argumentos).planejado;
 }
 
 // Filial vem do ERP; se sair de lá, as edições ligadas a ela ficariam órfãs em

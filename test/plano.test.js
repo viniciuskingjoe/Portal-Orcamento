@@ -240,16 +240,24 @@ test("totalPlanejadoNoAno é zero em módulo não configurado", () => {
   assert.equal(total, 0);
 });
 
-test("módulo com centro usa as contas da filial no total do ano", () => {
-  // O total do ano é consolidado: soma a filial inteira, não centro a centro.
+test("módulo com centro soma o planejado de cada centro", () => {
+  // Em módulo com centro a tela só grava com um centro escolhido — não existe
+  // valor sob SEM_CENTRO. Descer por centro é o que faz a linha do DRE fechar
+  // com o que está na tela do módulo.
   let visao = definirUsaCentroDeCusto(criarVisao("v1", "X", "25"), DESPESA, true);
   visao = definirContasDaFilial(visao, DESPESA, "000001", ["4.4.1.01"]);
   visao = definirContasDoCentro(visao, DESPESA, "000001", "002", ["4.4.1.01"]);
+  visao = definirContasDoCentro(visao, DESPESA, "000001", "008", ["4.4.1.01"]);
 
-  const digitado = { [chavePlanejado(DESPESA, "000001", SEM_CENTRO, "4.4.1.01", 1)]: 42 };
+  const digitado = {
+    [chavePlanejado(DESPESA, "000001", "002", "4.4.1.01", 1)]: 42,
+    [chavePlanejado(DESPESA, "000001", "008", "4.4.1.01", 1)]: 8,
+    // Chave sem centro não é alcançável pela tela; se aparecer, é lixo.
+    [chavePlanejado(DESPESA, "000001", SEM_CENTRO, "4.4.1.01", 1)]: 999,
+  };
   assert.equal(
     totalPlanejadoNoAno({ plano: plano(digitado), visao, moduloId: DESPESA, filiais: FILIAIS }),
-    42
+    50
   );
 });
 
