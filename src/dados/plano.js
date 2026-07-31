@@ -78,6 +78,16 @@ export function receitasDaBase(visao, filialId) {
   return contasDaFilial(visao, MODULO_BASE_DO_PERCENTUAL, filialId);
 }
 
+// As contas de receita em tela: as escolhidas, ou a união das das filiais.
+function receitasEmTela(visao, filiais, receitas) {
+  if (Array.isArray(receitas)) return receitas;
+  const todas = new Set();
+  (filiais ?? []).forEach((filial) =>
+    receitasDaBase(visao, filial.id).forEach((codigo) => todas.add(codigo))
+  );
+  return [...todas];
+}
+
 // Receita planejada de UMA conta de receita, na filial e no mês.
 //
 // Soma todos os centros quando o módulo de receita usa centro de custo: a base
@@ -173,7 +183,9 @@ function linhaMedia(meses, ano) {
     // mensais. Repetir o mesmo número em duas linhas confundiria mais do que
     // ajudaria, então a média não mostra percentual.
     planejadoPercentual: null,
+    realizadoPercentual: null,
     base: somar("base") / 12,
+    baseRealizada: comRealizado ? somar("baseRealizada") / comRealizado : 0,
     realizado: comRealizado ? somar("realizado") / comRealizado : 0,
     anterior: comAnterior ? somar("anterior") / comAnterior : 0,
     nota: `Planejado ÷ 12 · Realizado ÷ ${comRealizado || 0} · Ano anterior ÷ ${comAnterior || 0} (meses com dado)`,
@@ -188,6 +200,8 @@ function linhasVazias(ano) {
     planejadoPercentual: null,
     base: 0,
     realizado: 0,
+    realizadoPercentual: null,
+    baseRealizada: 0,
     anterior: 0,
     variacao: 0,
     variacaoPercentual: 0,
@@ -240,12 +254,26 @@ export function criarLinhasOrcamento({
     receitas: ehPercentual(moduloId) ? receitas : undefined,
   };
 
-  // Mês que ainda não aconteceu não tem realizado, mesmo que o razão já tenha
-  // lançamento com data futura — e tem: juros de financiamento, pró-labore,
-  // aluguel e depreciação são lançados com meses de antecedência. Somá-los aqui
-  // punha em "Realizado" um valor de mês que nem começou, e ainda brigava com a
-  // média, que já divide só pelos meses com dado.
   const percentual = ehPercentual(moduloId);
+
+  // Base do realizado: a receita que de fato aconteceu, não a planejada. É o que
+  // torna "Realizado %" comparável com "Planejado %" — os dois passam a ser a
+  // fatia da receita do próprio período. Conta de receita o ERP identifica
+  // direto, sem precisar do mapa de centro de custo.
+  const contasDeReceita = percentual ? receitasEmTela(visao, filiais, receitas) : null;
+  const receitaRealizada = (indice, mes) =>
+    contasDeReceita?.length
+      ? somarRealizado({
+          indice,
+          catalogo,
+          contas: contasDeReceita,
+          filiais,
+          centroId: SEM_CENTRO,
+          mes,
+          tipoPadrao: "receita",
+          visaoContabil,
+        })
+      : 0;
 
   const meses = MESES.map((mes) => {
     const planejado = planejadoDoMes(
@@ -258,6 +286,12 @@ export function criarLinhasOrcamento({
       mes,
       receitas
     );
+    // Mês que ainda não aconteceu não tem realizado, mesmo que o razão já tenha
+    // lançamento com data futura — e tem: juros de financiamento, pró-labore,
+    // aluguel e depreciação são lançados com meses de antecedência. Somá-los
+    // aqui punha em "Realizado" um valor de mês que nem começou, e ainda brigava
+    // com a média, que já divide só pelos meses com dado.
+    const houve = mesTemRealizado(ano, mes);
     const linha = {
       id: mes,
       label: `${String(mes).padStart(2, "0")}/${ano}`,
@@ -266,14 +300,17 @@ export function criarLinhasOrcamento({
       // tabela saber que não há coluna a mostrar.
       planejadoPercentual: percentual ? planejado.digitado : null,
       base: planejado.base,
-      realizado: mesTemRealizado(ano, mes)
-        ? somarRealizado({ ...comum, indice: realizado, mes })
-        : 0,
+      realizado: houve ? somarRealizado({ ...comum, indice: realizado, mes }) : 0,
+      baseRealizada: houve ? receitaRealizada(realizado, mes) : 0,
       anterior: mesTemRealizado(ano - 1, mes)
         ? somarRealizado({ ...comum, indice: realizadoAnterior, mes })
         : 0,
     };
-    return { ...linha, ...calcularVariacao(linha.realizado, linha.anterior) };
+    return {
+      ...linha,
+      realizadoPercentual: percentual ? taxa(linha.realizado, linha.baseRealizada) : null,
+      ...calcularVariacao(linha.realizado, linha.anterior),
+    };
   });
 
   const somarColuna = (campo) => meses.reduce((total, linha) => total + linha[campo], 0);
@@ -283,9 +320,11 @@ export function criarLinhasOrcamento({
     planejado: somarColuna("planejado"),
     base: somarColuna("base"),
     realizado: somarColuna("realizado"),
+    baseRealizada: somarColuna("baseRealizada"),
     anterior: somarColuna("anterior"),
   };
   total.planejadoPercentual = percentual ? taxa(total.planejado, total.base) : null;
+  total.realizadoPercentual = percentual ? taxa(total.realizado, total.baseRealizada) : null;
   Object.assign(total, calcularVariacao(total.realizado, total.anterior));
 
   return [...meses, total, linhaMedia(meses, ano)];

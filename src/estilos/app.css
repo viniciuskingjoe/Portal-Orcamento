@@ -1517,6 +1517,12 @@ button {
   text-align: right;
 }
 
+/* Coluna calculada que não recebe digitação — o tom mais fraco evita que alguém
+   tente clicar nela esperando editar. */
+.tabela-orcamento td.celula-derivada {
+  color: var(--text-soft);
+}
+
 .positivo {
   color: var(--success);
   font-weight: 650;

@@ -95,6 +95,11 @@ Gravar exige receita **e** conta escolhidas: 2% de devolução sobre coleção n
 2% sobre e-commerce, e um percentual único sobre a receita inteira não saberia
 diferenciar.
 
+Há ainda a coluna **Realizado %**, que é `realizado ÷ receita REALIZADA do mês` —
+não a planejada. É o que torna a coluna comparável com `Planejado %`: as duas
+passam a ser fatia da receita do próprio período, e a diferença entre elas é
+desvio de margem, não efeito de a receita ter vindo diferente do previsto.
+
 A chave ganha um sexto segmento com a receita:
 
 ```

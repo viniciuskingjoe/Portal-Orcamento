@@ -18,6 +18,7 @@ import {
   definirUsaCentroDeCusto,
 } from "../src/dados/visao.js";
 import { mesesComRealizado } from "../src/dados/calendario.js";
+import { indexarContas } from "../src/dados/contas.js";
 
 const ANO = 2025;
 const MODULO = "receita-vendas";
@@ -287,6 +288,13 @@ test("purgar filial sem edições devolve o mesmo objeto", () => {
 // no fim; o valor em reais é derivado.
 // ---------------------------------------------------------------------------
 
+const catalogoDeContas = indexarContas([
+  { codigo: CONTA, descricao: "COLEÇÃO", totalizaEm: null, sintetica: false, grupo: "R" },
+  { codigo: OUTRA_CONTA, descricao: "SALDO", totalizaEm: null, sintetica: false, grupo: "R" },
+  { codigo: "3.1.2.01.001", descricao: "DEVOLUÇÃO", totalizaEm: null, sintetica: false, grupo: "DV" },
+  { codigo: "3.1.2.01.002", descricao: "ICMS S/ DEV.", totalizaEm: null, sintetica: false, grupo: "DV" },
+]);
+
 const PERCENTUAL = "deducoes-vendas";
 const CONTA_DEDUCAO = "3.1.2.01.001";
 const OUTRA_DEDUCAO = "3.1.2.01.002";
@@ -417,4 +425,67 @@ test("o total do ano de um módulo percentual sai em reais", () => {
     filiais: FILIAIS,
   });
   assert.equal(total, 100);
+});
+
+// ---------------------------------------------------------------------------
+// Realizado %
+//
+// A base é a receita REALIZADA do mês, não a planejada: é o que torna a coluna
+// comparável com Planejado %, já que as duas passam a ser fatia da receita do
+// próprio período.
+// ---------------------------------------------------------------------------
+
+test("realizado % é o realizado sobre a receita realizada do mês", () => {
+  const realizadoDoAno = indexarRealizado(
+    [
+      // Receita: 1.000 em janeiro (cresce a crédito).
+      { classificacao: CONTA, filial: "000001", centro: "001", mes: 1, debito: 0, credito: 1000 },
+      // Dedução: 170 no mesmo mês (cresce a débito).
+      { classificacao: CONTA_DEDUCAO, filial: "000001", centro: "001", mes: 1, debito: 170, credito: 0 },
+    ],
+    "25"
+  );
+
+  const lista = criarLinhasOrcamento({
+    plano: plano(RECEITA),
+    visao: visaoComReceita(),
+    moduloId: PERCENTUAL,
+    filiais: [FILIAIS[0]],
+    contas: [CONTA_DEDUCAO],
+    receitas: [CONTA],
+    catalogo: catalogoDeContas,
+    realizado: realizadoDoAno,
+    realizadoAnterior: indexarRealizado([], "25"),
+  });
+
+  assert.equal(mes(lista, 1).baseRealizada, 1000);
+  assert.equal(mes(lista, 1).realizadoPercentual, 17);
+  assert.equal(totalDe(lista).realizadoPercentual, 17);
+  assert.equal(mediaDe(lista).realizadoPercentual, null);
+});
+
+test("sem receita realizada o percentual é zero, não infinito", () => {
+  const soDeducao = indexarRealizado(
+    [{ classificacao: CONTA_DEDUCAO, filial: "000001", centro: "001", mes: 1, debito: 170, credito: 0 }],
+    "25"
+  );
+  const lista = criarLinhasOrcamento({
+    plano: plano(RECEITA),
+    visao: visaoComReceita(),
+    moduloId: PERCENTUAL,
+    filiais: [FILIAIS[0]],
+    contas: [CONTA_DEDUCAO],
+    receitas: [CONTA],
+    catalogo: catalogoDeContas,
+    realizado: soDeducao,
+    realizadoAnterior: indexarRealizado([], "25"),
+  });
+
+  assert.equal(mes(lista, 1).realizado, 170);
+  assert.equal(mes(lista, 1).baseRealizada, 0);
+  assert.equal(mes(lista, 1).realizadoPercentual, 0);
+});
+
+test("módulo em reais não tem realizado %", () => {
+  assert.equal(mes(linhas(), 1).realizadoPercentual, null);
 });

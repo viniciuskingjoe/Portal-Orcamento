@@ -245,6 +245,13 @@ export default function TabelaOrcamento({
             <th scope="col">Mês</th>
             {percentual ? <th scope="col">Planejado %</th> : null}
             <th scope="col">Planejado{percentual ? " R$" : ""}</th>
+            {/* Realizado sobre a receita REALIZADA do mês, não sobre a planejada:
+                é o que deixa a coluna comparável com Planejado %. */}
+            {percentual ? (
+              <th scope="col" title="Realizado ÷ receita realizada do mês">
+                Realizado %
+              </th>
+            ) : null}
             <th scope="col">Realizado</th>
             <th scope="col">Ano anterior</th>
             <th scope="col">Variação {ehPercentual ? "p.p." : "$"}</th>
@@ -280,6 +287,14 @@ export default function TabelaOrcamento({
                 ) : (
                   celulaDigitavel(linha, indice, "reais", !percentual)
                 )}
+
+                {percentual ? (
+                  <td className="celula-derivada">
+                    {linha.realizadoPercentual == null
+                      ? "—"
+                      : formatarPercentual(linha.realizadoPercentual)}
+                  </td>
+                ) : null}
 
                 <td>{formatar(linha.realizado)}</td>
                 <td>{formatar(linha.anterior)}</td>
