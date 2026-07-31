@@ -195,14 +195,18 @@ export default function TelaOrcamento({
           </select>
         </label>
 
-        {/* O ano é o do plano — não há o que escolher. */}
-        <label>
+        {/* O ano é o do plano — não há o que escolher, então o campo ocupa só o
+            que precisa em vez da largura de um select. */}
+        <label className="filtro-ano">
           <span>Ano</span>
           <output className="campo-fixo">
             {plano.ano}
             <span className={`chip chip--${grupo?.chip ?? "receita"}`}>{modulo.grupo}</span>
           </output>
         </label>
+
+        {/* A dica fecha a linha dos filtros: é sobre o que falta escolher neles. */}
+        <DicaEdicao pronta={podeEditar}>{motivo}</DicaEdicao>
       </div>
 
       {carregandoRealizado ? <Carregando texto="Carregando realizado do ERP…" /> : null}
@@ -224,11 +228,9 @@ export default function TelaOrcamento({
         </p>
       ) : null}
 
-      {/* Dica e avisos ficam ACIMA do layout de duas colunas, não dentro da
-          coluna da direita: dentro dela empurravam a tabela para baixo e o
-          cabeçalho não nascia na mesma linha que os painéis. */}
-      <DicaEdicao pronta={podeEditar}>{motivo}</DicaEdicao>
-
+      {/* Os avisos ficam ACIMA do layout de duas colunas, não dentro da coluna
+          da direita: dentro dela empurravam a tabela para baixo e o cabeçalho
+          não nascia na mesma linha que os painéis. */}
       {semBase ? (
         <p className="modulo-aviso modulo-aviso--atencao">
           <Icone nome="info" tamanho={16} />

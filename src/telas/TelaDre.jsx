@@ -119,8 +119,9 @@ export default function TelaDre({
           </select>
         </label>
 
-        {/* O ano é o do plano — não há o que escolher. */}
-        <label>
+        {/* O ano é o do plano — não há o que escolher, então o campo ocupa só o
+            que precisa em vez da largura de um select. */}
+        <label className="filtro-ano">
           <span>Ano</span>
           <output className="campo-fixo">{plano.ano}</output>
         </label>
