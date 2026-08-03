@@ -28,6 +28,7 @@ import {
   criarPlano,
   gerarId,
   receitasDaBase,
+  valorParaGravar,
 } from "./dados/plano.js";
 import {
   SEM_CENTRO,
@@ -653,12 +654,12 @@ function PlanejamentoOrcamentario({ sessao, onSair }) {
       // dá um percentual diferente em cada mês, que é o que se espera.
       const alteracoes = {};
       meses.forEach((mes) => {
-        const base = editingCell.emReais ? basePorMes.get(mes) : 0;
-        alteracoes[chaveDoFiltro(mes)] = editingCell.emReais
-          ? base
-            ? (digitado / base) * 100
-            : 0
-          : digitado;
+        alteracoes[chaveDoFiltro(mes)] = valorParaGravar({
+          digitado,
+          emReais: editingCell.emReais,
+          percentual: moduloDaTela.percentual,
+          base: basePorMes.get(mes),
+        });
       });
       gravarPlanejado(alteracoes);
       setEditingCell(null);

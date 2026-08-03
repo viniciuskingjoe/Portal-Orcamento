@@ -50,6 +50,19 @@ export function gerarId(prefixo) {
   return `${prefixo}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
 }
 
+// O que fica GRAVADO a partir do que a pessoa digitou.
+//
+// Só o módulo percentual tem duas colunas digitáveis, e só nele digitar em reais
+// significa "converta para percentual". Num módulo em reais a única coluna
+// também se chama `reais`, e essa coincidência de nome já custou caro: a
+// conversão rodava lá também, a base valia 0, e todo valor digitado virava
+// zero — que o servidor então apagava. Quem decide converter é o MÓDULO, não o
+// nome da coluna.
+export function valorParaGravar({ digitado, emReais, percentual, base }) {
+  if (!percentual || !emReais) return digitado;
+  return base ? (digitado / base) * 100 : 0;
+}
+
 // `receita` só existe nos módulos percentuais. Vai no fim para não mexer na
 // posição da filial, que `purgarFilialDosPlanos` lê por índice.
 export function chavePlanejado(moduloId, filialId, centroId, conta, mes, receita = null) {

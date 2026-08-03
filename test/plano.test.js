@@ -4,6 +4,7 @@ import { test } from "node:test";
 import {
   chavePlanejado,
   criarLinhasOrcamento,
+  valorParaGravar,
   criarPlano,
   purgarFilialDosPlanos,
   receitasDaBase,
@@ -496,4 +497,59 @@ test("sem receita realizada o percentual é zero, não infinito", () => {
 
 test("módulo em reais não tem realizado %", () => {
   assert.equal(mes(linhas(), 1).realizadoPercentual, null);
+});
+
+// --------------------------------------------------------------------------
+// O que fica gravado a partir do que foi digitado
+//
+// A regressão que motivou estes testes: em módulo NÃO percentual a única coluna
+// também se chama `reais`, e a conversão para percentual rodava lá. A base valia
+// zero, todo valor digitado virava 0, e o servidor apagava a linha — digitar não
+// gravava nada, em quatro dos oito módulos.
+// --------------------------------------------------------------------------
+
+test("módulo em reais grava o que foi digitado, não uma conversão", () => {
+  assert.equal(
+    valorParaGravar({ digitado: 123456.78, emReais: true, percentual: false, base: 0 }),
+    123456.78
+  );
+});
+
+test("a base do módulo percentual não interfere no módulo em reais", () => {
+  // Mesmo com base disponível, módulo em reais não converte.
+  assert.equal(
+    valorParaGravar({ digitado: 5000, emReais: true, percentual: false, base: 200000 }),
+    5000
+  );
+});
+
+test("módulo percentual: digitar o percentual grava o percentual", () => {
+  assert.equal(
+    valorParaGravar({ digitado: 38.959531, emReais: false, percentual: true, base: 200000 }),
+    38.959531
+  );
+});
+
+test("módulo percentual: digitar em reais grava o percentual equivalente", () => {
+  assert.equal(
+    valorParaGravar({ digitado: 50000, emReais: true, percentual: true, base: 200000 }),
+    25
+  );
+});
+
+test("módulo percentual sem base não inventa percentual", () => {
+  assert.equal(
+    valorParaGravar({ digitado: 50000, emReais: true, percentual: true, base: 0 }),
+    0
+  );
+});
+
+test("zero continua zero em qualquer caminho — é o que apaga a célula", () => {
+  for (const caso of [
+    { digitado: 0, emReais: true, percentual: false, base: 0 },
+    { digitado: 0, emReais: false, percentual: true, base: 200000 },
+    { digitado: 0, emReais: true, percentual: true, base: 200000 },
+  ]) {
+    assert.equal(valorParaGravar(caso), 0, JSON.stringify(caso));
+  }
 });
