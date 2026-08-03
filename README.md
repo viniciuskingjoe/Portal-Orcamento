@@ -472,13 +472,24 @@ Roda na VM de portais AKR (Ubuntu, usuário `king`), como serviço systemd em
 Fica público por rota no Cloudflare Tunnel; app Node não usa Apache nem
 certificado próprio.
 
-```bash
-# primeira vez
-REPO=<url do repo> sudo -E bash deploy/setup.sh
-# o script para e pede o .env; preencha e rode de novo
+O script vive dentro do repositório, então na primeira vez o clone vem antes:
 
-# atualizar
-sudo bash deploy/setup.sh          # git pull + build + testes + restart
+```bash
+sudo mkdir -p /opt/portal-orcamento
+sudo chown king:king /opt/portal-orcamento
+git clone <url do repo> /opt/portal-orcamento
+sudo bash /opt/portal-orcamento/deploy/setup.sh
+```
+
+O script para e pede o `.env`; preencha (incluindo `API_PORT=3004` e
+`API_HOST=127.0.0.1`) e rode de novo.
+
+```bash
+# atualizar, daí em diante
+sudo bash /opt/portal-orcamento/deploy/setup.sh   # pull + build + testes + restart
+
+# implantar outra branch que não a main
+BRANCH=login-sistema sudo -E bash /opt/portal-orcamento/deploy/setup.sh
 ```
 
 O script é idempotente e **nunca cria nem sobrescreve o `.env`** — credencial não

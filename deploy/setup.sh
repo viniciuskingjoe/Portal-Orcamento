@@ -2,7 +2,17 @@
 # ============================================================================
 # Deploy do Portal Orcamento na VM de portais (Ubuntu, usuario `king`).
 #
-#   sudo bash deploy/setup.sh
+# PRIMEIRA VEZ -- este script vive dentro do repositorio, entao precisa do clone
+# antes de existir para ser chamado:
+#
+#   sudo mkdir -p /opt/portal-orcamento
+#   sudo chown king:king /opt/portal-orcamento
+#   git clone <url do repo> /opt/portal-orcamento
+#   sudo bash /opt/portal-orcamento/deploy/setup.sh
+#
+# DEPOIS, para atualizar:
+#
+#   sudo bash /opt/portal-orcamento/deploy/setup.sh
 #
 # Idempotente: roda de novo para atualizar. Nao cria nem sobrescreve o `.env` —
 # credencial nao vem do repositorio, e sobrescrever derrubaria o portal.
