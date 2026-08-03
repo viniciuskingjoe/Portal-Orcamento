@@ -43,7 +43,7 @@ import {
   concederAcessos,
   darAcesso,
   listarUsuarios,
-  redefinirSenha,
+  limparSenha,
   removerAcesso,
   revogarAcesso,
 } from "./usuarios.js";
@@ -338,10 +338,8 @@ app.post(
   "/api/usuarios",
   exigirAdmin,
   rota(async (req, res) => {
-    // A senha volta em texto UMA vez, para o administrador repassar. Não fica
-    // recuperável: o banco guarda só o hash.
-    const { login, senha } = await darAcesso(req.body ?? {}, req.sessao.login);
-    res.json({ ok: true, login, senha });
+    const { login } = await darAcesso(req.body ?? {}, req.sessao.login);
+    res.json({ ok: true, login });
   })
 );
 
@@ -350,8 +348,10 @@ app.post(
   exigirSessao,
   exigirAdmin,
   rota(async (req, res) => {
-    const senha = await redefinirSenha(req.params.login, req.sessao.login);
-    res.json({ ok: true, senha });
+    // Apaga a senha do portal: a pessoa volta a entrar pela do Windows e define
+    // outra. Nenhuma senha nova é inventada nem precisa ser repassada.
+    await limparSenha(req.params.login, req.sessao.login);
+    res.json({ ok: true });
   })
 );
 

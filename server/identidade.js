@@ -1,7 +1,7 @@
 import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 
 import { query, queryOne } from "./sqlserver.js";
-import { normalizarLogin } from "./ldap.js";
+import { autenticar, normalizarLogin } from "./ldap.js";
 import { criarLimite } from "./limite.js";
 import { conferir, criticarSenha, gerarHash } from "./senha.js";
 
@@ -17,8 +17,16 @@ const HASH_FANTASMA = await gerarHash(randomBytes(32).toString("hex"));
 // Cadastro compartilhado entre os portais AKR (KING_IDENTIDADE_*) e as
 // permissões deste portal (KING_PORTAL_ORC_ACESSO).
 //
-// A senha não passa por aqui: quem valida é o AD, por bind. Este módulo só
-// resolve "quem é" e "o que pode".
+// A autenticação tem duas portas, e qual vale depende de a pessoa já ter senha
+// no portal:
+//
+//   SEM senha  →  entra com a do Windows (bind no AD) e define a do portal na
+//                 hora. É o primeiro acesso, e é o que dispensa alguém ter que
+//                 distribuir senha inicial.
+//   COM senha  →  o AD não é mais consultado para esta conta.
+//
+// A senha do portal nunca é guardada em texto: o que fica é scrypt com sal
+// (server/senha.js).
 // ============================================================================
 
 const APP = "orcamento";
@@ -113,7 +121,8 @@ export async function sessaoDoCookie(id) {
   const hash = hashDoId(id);
 
   const linha = await queryOne(
-    `SELECT s.LOGIN, s.EXPIRA_EM, u.NOME, u.SITUACAO, u.TROCAR_SENHA
+    `SELECT s.LOGIN, s.EXPIRA_EM, u.NOME, u.SITUACAO, u.TROCAR_SENHA,
+            CASE WHEN u.SENHA_HASH IS NULL THEN 1 ELSE 0 END AS SEM_SENHA
        FROM dbo.KING_IDENTIDADE_SESSAO AS s
        INNER JOIN dbo.KING_IDENTIDADE_USUARIO AS u ON u.LOGIN = s.LOGIN
       WHERE s.SID_HASH = @hash AND s.APP = @app`,
@@ -138,7 +147,14 @@ export async function sessaoDoCookie(id) {
 
   // A troca pendente viaja na sessão em vez de ser consultada pela tela: assim
   // ela sobrevive a um F5 e o front não tem como esquecer de perguntar.
-  return sessao && { ...sessao, trocarSenha: linha.TROCAR_SENHA === true };
+  const primeiroAcesso = linha.SEM_SENHA === 1 || linha.SEM_SENHA === true;
+  return (
+    sessao && {
+      ...sessao,
+      trocarSenha: primeiroAcesso || linha.TROCAR_SENHA === true,
+      primeiroAcesso,
+    }
+  );
 }
 
 // --------------------------------------------------------------------------
@@ -189,12 +205,13 @@ async function registrar({ login, evento, detalhe, ip }) {
 // lista de quem trabalha aqui a quem estiver tentando.
 // --------------------------------------------------------------------------
 
-// O limite vive no módulo, não na rota: assim nenhum outro caminho de código
-// chega à conferência de senha sem passar por ele.
+// O limite vive no módulo, não na rota: assim nenhum caminho de código chega ao
+// AD nem à conferência de senha sem passar por ele.
 //
-// Com senha própria do portal o motivo do limite mudou, e ficou mais forte: não
-// existe mais o bloqueio de conta do AD para segurar quem tenta adivinhar. Aqui
-// o único freio é este.
+// Ele protege as duas portas, por motivos diferentes: no primeiro acesso,
+// impede que o portal dispare a política de bloqueio de conta do AD; depois,
+// é o único freio contra adivinhação, já que a senha do portal não tem bloqueio
+// nenhum atrás dela.
 const limite = criarLimite();
 
 export async function entrar({ usuario, senha, ip, userAgent, res }) {
@@ -226,12 +243,40 @@ export async function entrar({ usuario, senha, ip, userAgent, res }) {
       )
     : null;
 
-  // Conferir a senha mesmo sem cadastro, contra um hash descartável. Sem isto a
-  // resposta volta na hora para login inexistente e depois de ~100ms para login
-  // real — e esse intervalo entrega a lista de quem trabalha aqui.
-  const confere = await conferir(senha ?? "", cadastro?.SENHA_HASH ?? HASH_FANTASMA);
+  // Login que não existe nunca chega ao AD: consultar o diretório para qualquer
+  // nome digitado transformaria o formulário num descobridor de contas e, pior,
+  // gastaria tentativa de bloqueio de conta de gente que nem usa o portal.
+  // O hash descartável iguala o tempo de resposta — sem ele, "não existe" volta
+  // na hora e "existe" volta depois do scrypt, e o intervalo entrega a lista de
+  // quem trabalha aqui.
+  if (!cadastro) {
+    await conferir(senha ?? "", HASH_FANTASMA);
+    limite.registrarFalha(login, origem);
+    await registrar({ login, evento: "negado", detalhe: "login inexistente", ip });
+    throw negar();
+  }
 
-  if (!cadastro || !cadastro.SENHA_HASH || !confere) {
+  // Duas portas, e qual vale depende de a pessoa já ter senha no portal:
+  //
+  //   SEM senha  →  entra com a do Windows (bind no AD) e é obrigada a definir
+  //                 a do portal na hora. É assim que o primeiro acesso funciona
+  //                 sem ninguém precisar distribuir senha.
+  //   COM senha  →  o AD não é mais consultado. Daí em diante a senha do portal
+  //                 é a única que abre esta conta.
+  const primeiroAcesso = !cadastro.SENHA_HASH;
+
+  if (primeiroAcesso) {
+    try {
+      await autenticar(usuario, senha);
+    } catch (erro) {
+      // 503 é o DC fora do ar ou mal configurado: precisa aparecer como tal, e
+      // não conta como tentativa — o serviço caído não é ninguém errando senha.
+      if (erro.status === 503) throw erro;
+      limite.registrarFalha(login, origem);
+      await registrar({ login, evento: "negado", detalhe: "ad", ip });
+      throw negar();
+    }
+  } else if (!(await conferir(senha ?? "", cadastro.SENHA_HASH))) {
     limite.registrarFalha(login, origem);
     await registrar({ login, evento: "negado", detalhe: "senha", ip });
     throw negar();
@@ -266,7 +311,7 @@ export async function entrar({ usuario, senha, ip, userAgent, res }) {
 
   // A sessão nasce válida mesmo com troca pendente: sem ela a tela de troca não
   // teria como se autenticar para trocar. Quem barra o resto é `exigirSessao`.
-  return { ...sessao, trocarSenha: cadastro.TROCAR_SENHA === true };
+  return { ...sessao, trocarSenha: primeiroAcesso || cadastro.TROCAR_SENHA === true, primeiroAcesso };
 }
 
 // --------------------------------------------------------------------------
@@ -322,9 +367,25 @@ export async function trocarSenha({ login, senhaAtual, senhaNova, ip, sessaoAtua
 
   // Exige a senha atual mesmo já estando logado: sem isso, uma sessão deixada
   // aberta numa máquina vira troca de senha e sequestro da conta.
-  if (!(await conferir(senhaAtual ?? "", cadastro.SENHA_HASH))) {
+  //
+  // Quem ainda não tem senha no portal confirma com a do Windows — a mesma com
+  // que acabou de entrar. Simétrico com `entrar()`: quem manda é ter ou não ter
+  // senha no portal.
+  const conferiu = cadastro.SENHA_HASH
+    ? await conferir(senhaAtual ?? "", cadastro.SENHA_HASH)
+    : await autenticar(login, senhaAtual ?? "").then(
+        () => true,
+        (erro) => {
+          if (erro.status === 503) throw erro;
+          return false;
+        }
+      );
+
+  if (!conferiu) {
     await registrar({ login, evento: "negado", detalhe: "troca de senha: atual errada", ip });
-    const erro = new Error("A senha atual está errada.");
+    const erro = new Error(
+      cadastro.SENHA_HASH ? "A senha atual está errada." : "A senha do Windows está errada."
+    );
     erro.status = 401;
     throw erro;
   }

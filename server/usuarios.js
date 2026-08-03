@@ -1,6 +1,5 @@
 import { query, transaction } from "./sqlserver.js";
 import { normalizarLogin } from "./ldap.js";
-import { SENHA_PADRAO, gerarHash } from "./senha.js";
 
 // ============================================================================
 // ADMINISTRAÇÃO DE USUÁRIOS
@@ -9,9 +8,8 @@ import { SENHA_PADRAO, gerarHash } from "./senha.js";
 // administra aqui é só o acesso a ESTE portal. Desativar alguém no Orçamento não
 // mexe no Fluxo Fiscal nem no Modelagem.
 //
-// O AD serve para descobrir QUEM cadastrar; quem autentica é o portal, com
-// senha própria. A primeira senha é a padrão da empresa, e o portal fica
-// trancado até a pessoa trocá-la — ver `SENHA_PADRAO` em server/senha.js.
+// Quem nunca definiu senha no portal entra com a do Windows e define a dele na
+// hora — então cadastrar alguém aqui não cria nem entrega senha nenhuma.
 // ============================================================================
 
 const APP = "orcamento";
@@ -19,7 +17,8 @@ const APP = "orcamento";
 export async function listarUsuarios() {
   const [usuarios, acessos] = await Promise.all([
     query(
-      `SELECT u.LOGIN, u.NOME, u.EMAIL, u.SITUACAO, u.ULTIMO_LOGIN, u.TROCAR_SENHA,
+      `SELECT u.LOGIN, u.NOME, u.EMAIL, u.SITUACAO, u.ULTIMO_LOGIN,
+              CASE WHEN u.SENHA_HASH IS NULL THEN 1 ELSE 0 END AS SEM_SENHA,
               a.ADMIN, a.SITUACAO AS SITUACAO_APP
          FROM dbo.KING_IDENTIDADE_USUARIO AS u
          INNER JOIN dbo.KING_IDENTIDADE_ACESSO AS a
@@ -41,9 +40,8 @@ export async function listarUsuarios() {
     inativoNoCadastro: linha.SITUACAO !== "ativo",
     admin: linha.ADMIN === true,
     ultimoLogin: linha.ULTIMO_LOGIN,
-    // Ainda com a senha padrão. Enquanto for verdade, a conta está aberta para
-    // quem souber a senha da empresa — quem administra precisa ver e cobrar.
-    senhaPadrao: linha.TROCAR_SENHA === true,
+    // Ainda entra pela senha do Windows: nunca definiu a do portal.
+    semSenhaDoPortal: linha.SEM_SENHA === 1 || linha.SEM_SENHA === true,
     acessos: acessos
       .filter((acesso) => acesso.LOGIN === linha.LOGIN)
       .map((acesso) => ({
@@ -60,9 +58,9 @@ export async function listarUsuarios() {
 // existir no cadastro por causa de outro portal — nesse caso só ganha o acesso,
 // e mantém a senha que já tinha.
 //
-// Devolve a primeira senha em texto UMA ÚNICA VEZ, para o administrador
-// repassar. Ela não fica recuperável: o que se guarda é o hash. Perdida, o
-// caminho é gerar outra.
+// NÃO cria senha. Quem entra sem ter senha no portal entra com a do Windows e
+// define a dele na hora — então não há senha inicial para inventar, entregar
+// nem cobrar de volta.
 export async function darAcesso({ login, nome, email }, quem) {
   const alvo = normalizarLogin(login);
   if (!alvo) {
@@ -71,25 +69,13 @@ export async function darAcesso({ login, nome, email }, quem) {
     throw erro;
   }
 
-  const jaTem = await query(
-    "SELECT SENHA_HASH FROM dbo.KING_IDENTIDADE_USUARIO WHERE LOGIN = @login",
-    { login: alvo }
-  );
-  const precisaDeSenha = !jaTem[0]?.SENHA_HASH;
-  const senha = precisaDeSenha ? SENHA_PADRAO : null;
-  const hash = senha ? await gerarHash(senha) : null;
-
   await transaction(async ({ query: q }) => {
     await q(
       `MERGE dbo.KING_IDENTIDADE_USUARIO AS destino
        USING (SELECT @login AS LOGIN) AS origem ON destino.LOGIN = origem.LOGIN
-       WHEN MATCHED THEN UPDATE SET
-         NOME = @nome, EMAIL = @email, ATUALIZADO_EM = SYSUTCDATETIME(),
-         SENHA_HASH = COALESCE(@hash, destino.SENHA_HASH),
-         TROCAR_SENHA = CASE WHEN @hash IS NULL THEN destino.TROCAR_SENHA ELSE 1 END
-       WHEN NOT MATCHED THEN INSERT (LOGIN, NOME, EMAIL, ORIGEM, SENHA_HASH, TROCAR_SENHA)
-         VALUES (@login, @nome, @email, 'ad', @hash, 1);`,
-      { login: alvo, nome: nome ?? alvo, email: email ?? null, hash }
+       WHEN MATCHED THEN UPDATE SET NOME = @nome, EMAIL = @email, ATUALIZADO_EM = SYSUTCDATETIME()
+       WHEN NOT MATCHED THEN INSERT (LOGIN, NOME, EMAIL, ORIGEM) VALUES (@login, @nome, @email, 'ad');`,
+      { login: alvo, nome: nome ?? alvo, email: email ?? null }
     );
 
     await q(
@@ -100,33 +86,32 @@ export async function darAcesso({ login, nome, email }, quem) {
     );
   });
 
-  return { login: alvo, senha };
+  return { login: alvo };
 }
 
-// Devolve a senha padrão a quem perdeu a dela, e obriga a trocar no próximo
-// acesso. A senha padrão nunca é aceita como senha NOVA (`criticarSenha`), então
-// ninguém consegue ficar com ela.
-export async function redefinirSenha(login, quem) {
-  const senha = SENHA_PADRAO;
-
+// Apaga a senha do portal. A pessoa volta a entrar pela senha do Windows e
+// define outra na hora — nenhuma senha é inventada, escrita num bilhete ou dita
+// por telefone, e não existe janela em que uma senha conhecida abre a conta.
+//
+// É o que fazer quando alguém esquece a senha ou quando se desconfia que ela
+// vazou.
+export async function limparSenha(login, quem) {
   await query(
     `UPDATE dbo.KING_IDENTIDADE_USUARIO
-        SET SENHA_HASH = @hash, TROCAR_SENHA = 1, ATUALIZADO_EM = SYSUTCDATETIME()
+        SET SENHA_HASH = NULL, TROCAR_SENHA = 0, ATUALIZADO_EM = SYSUTCDATETIME()
       WHERE LOGIN = @login`,
-    { login, hash: await gerarHash(senha) }
+    { login }
   );
 
-  // Sessões abertas caem: se a senha foi redefinida por suspeita, deixar a
-  // sessão de pé até expirar não resolve nada.
+  // Sessões abertas caem: se a senha foi apagada por suspeita, deixar a sessão
+  // de pé até expirar não resolve nada.
   await query("DELETE FROM dbo.KING_IDENTIDADE_SESSAO WHERE LOGIN = @login", { login });
 
   await query(
     `INSERT INTO dbo.KING_IDENTIDADE_AUDITORIA (LOGIN, APP, EVENTO, DETALHE)
      VALUES (@login, @app, 'senha-redefinida', @detalhe)`,
-    { login, app: APP, detalhe: `por ${quem ?? "?"}` }
+    { login, app: APP, detalhe: `apagada por ${quem ?? "?"}` }
   ).catch(() => {});
-
-  return senha;
 }
 
 export async function alterarUsuario(login, { admin, situacao }, quem) {

@@ -4,8 +4,9 @@ import { promisify } from "node:util";
 // ============================================================================
 // SENHA DO PORTAL
 //
-// O portal passou a ter senha propria, separada da senha de rede. O AD continua
-// sendo consultado para descobrir QUEM cadastrar, mas nao valida mais ninguem.
+// O portal tem senha propria, separada da senha de rede. O AD ainda valida o
+// PRIMEIRO acesso de cada pessoa (que assim nao precisa receber senha nenhuma);
+// a partir do momento em que ela define a senha do portal, so esta abre a conta.
 //
 // Guardar senha e uma responsabilidade que o bind no AD nao tinha. As regras
 // abaixo existem para que ela seja carregada direito:
@@ -119,37 +120,15 @@ export function criticarSenha(senha, { login, nome } = {}) {
 }
 
 // --------------------------------------------------------------------------
-// Primeira senha
+// Senha sorteada
 //
-// Sorteada, nunca fixa: senha padrao igual para todo mundo vira a chave-mestra
-// do portal no dia em que uma pessoa a repassa por WhatsApp.
+// Nao e usada no fluxo normal -- ali a pessoa escolhe a propria senha depois de
+// entrar pelo AD. Serve para `scripts/definir-senha.mjs`, quando e preciso dar
+// acesso a alguem sem passar pelo AD (o DC fora do ar, por exemplo).
 //
 // Alfabeto sem 0/O/1/l/I: esta senha vai ser lida em voz alta ou copiada a mao,
 // e confundir zero com O e o jeito mais comum de "a senha nao funciona".
 // --------------------------------------------------------------------------
-
-// --------------------------------------------------------------------------
-// Senha padrão
-//
-// Uma senha só, conhecida internamente, entregue a todo mundo. Foi decisão do
-// dono do portal, pela praticidade de não ter que repassar uma senha diferente
-// para cada pessoa.
-//
-// O preço, para ficar registrado: ela vale da concessão do acesso até o primeiro
-// login. Nessa janela, quem souber a senha padrão entra COMO a pessoa e define a
-// senha dela — ficando com a conta. Não é o estranho da internet (o Cloudflare
-// Access barra antes), é quem já está dentro. Por isso:
-//
-//   - `TROCAR_SENHA` nasce ligado e o portal fica trancado até a troca, o que
-//     encurta a janela ao máximo que dá;
-//   - a tela de Usuários mostra quem ainda não trocou, para a janela ser vista
-//     e cobrada em vez de ficar aberta em silêncio;
-//   - a senha padrão é recusada como senha NOVA, então ninguém a mantém.
-//
-// `SENHA_PADRAO` no .env troca o valor sem mexer no código.
-// --------------------------------------------------------------------------
-
-export const SENHA_PADRAO = process.env.SENHA_PADRAO?.trim() || "king@123";
 
 const ALFABETO = "abcdefghjkmnpqrstuvwxyz23456789";
 const BLOCOS = 4;

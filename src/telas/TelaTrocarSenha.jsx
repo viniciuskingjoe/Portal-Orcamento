@@ -6,10 +6,9 @@ import { EMPRESA } from "../dados/seeds.js";
 // ============================================================================
 // TROCA DE SENHA
 //
-// Aparece quando `sessao.trocarSenha` está marcado: a pessoa entrou com a senha
-// que o administrador entregou, e essa senha passou por e-mail, WhatsApp ou pelo
-// corredor. Trocar não é sugestão — o servidor recusa todo o resto com 428
-// enquanto a troca não acontece.
+// Aparece quando `sessao.trocarSenha` está marcado — no caso normal, porque a
+// pessoa acabou de entrar pela senha da rede e ainda não tem senha do portal.
+// Não é sugestão: o servidor recusa todo o resto com 428 até a troca acontecer.
 //
 // A pessoa também chega aqui por vontade própria, pelo menu, e aí `obrigatoria`
 // vem falso e existe o botão de cancelar.
@@ -20,6 +19,9 @@ import { EMPRESA } from "../dados/seeds.js";
 // ============================================================================
 
 export default function TelaTrocarSenha({ sessao, obrigatoria = false, onTrocar, onCancelar }) {
+  // No primeiro acesso a pessoa ainda não tem senha no portal: quem confirma é
+  // a senha do Windows, a mesma com que ela acabou de entrar.
+  const primeiroAcesso = sessao?.primeiroAcesso === true;
   const [senhaAtual, setSenhaAtual] = useState("");
   const [senhaNova, setSenhaNova] = useState("");
   const [repetida, setRepetida] = useState("");
@@ -53,16 +55,18 @@ export default function TelaTrocarSenha({ sessao, obrigatoria = false, onTrocar,
         </div>
 
         <div className="cartao-login__titulo">
-          <h1>{obrigatoria ? "Defina a sua senha" : "Trocar senha"}</h1>
+          <h1>{obrigatoria ? "Defina a senha do portal" : "Trocar senha"}</h1>
           <p>
-            {obrigatoria
-              ? "A senha que você recebeu é temporária e passou por outra pessoa. Escolha uma que só você saiba."
-              : `Você está logado como ${sessao?.nome ?? sessao?.login}.`}
+            {primeiroAcesso
+              ? "Você entrou com a senha da rede. Escolha agora uma senha só deste portal — é ela que vai valer daqui em diante."
+              : obrigatoria
+                ? "Escolha uma senha nova para continuar."
+                : `Você está logado como ${sessao?.nome ?? sessao?.login}.`}
           </p>
         </div>
 
         <label className="campo-login">
-          <span>{obrigatoria ? "Senha que você recebeu" : "Senha atual"}</span>
+          <span>{primeiroAcesso ? "Senha da rede (Windows)" : "Senha atual"}</span>
           <input
             type="password"
             value={senhaAtual}

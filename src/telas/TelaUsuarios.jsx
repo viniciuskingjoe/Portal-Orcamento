@@ -257,47 +257,6 @@ function BuscaNoAd({ jaTem, onAdicionar }) {
   );
 }
 
-// Confirma qual senha entregar. É a padrão da empresa, então não é segredo que
-// se perde ao fechar — o que o aviso precisa dizer é que a conta fica aberta a
-// quem souber a padrão até a pessoa entrar e trocar.
-function SenhaGerada({ dados, onFechar }) {
-  const [copiado, setCopiado] = useState(false);
-
-  async function copiar() {
-    try {
-      await navigator.clipboard.writeText(dados.senha);
-      setCopiado(true);
-      setTimeout(() => setCopiado(false), 2000);
-    } catch {
-      // Sem permissão de área de transferência a senha continua na tela para
-      // ser lida — não vale travar nada por causa disso.
-    }
-  }
-
-  return (
-    <div className="senha-gerada" role="status">
-      <div className="senha-gerada__texto">
-        <strong>Senha de {dados.nome ?? dados.login}</strong>
-        <code className="senha-gerada__valor">{dados.senha}</code>
-        <small>
-          É a senha padrão da empresa. {dados.login} vai ser obrigado a trocá-la
-          no primeiro acesso — e até lá a conta está aberta a qualquer um que
-          saiba a padrão. Avise agora.
-        </small>
-      </div>
-      <div className="senha-gerada__acoes">
-        <button type="button" className="botao botao--secundario" onClick={copiar}>
-          <Icone nome={copiado ? "check" : "copy"} tamanho={15} />
-          {copiado ? "Copiado" : "Copiar"}
-        </button>
-        <button type="button" className="botao" onClick={onFechar}>
-          Já anotei
-        </button>
-      </div>
-    </div>
-  );
-}
-
 export default function TelaUsuarios({ filiais, centros, sessao, onVoltar }) {
   const [usuarios, setUsuarios] = useState([]);
   const [carregando, setCarregando] = useState(true);
@@ -308,9 +267,6 @@ export default function TelaUsuarios({ filiais, centros, sessao, onVoltar }) {
   // pouco para uma ação que tira alguém do sistema no meio do trabalho.
   const [aRemover, setARemover] = useState(null);
   const [aRedefinir, setARedefinir] = useState(null);
-  // Senha em texto, mostrada uma única vez. Fica só em memória: guardar no
-  // localStorage a deixaria legível para sempre em quem abrir o DevTools.
-  const [senhaGerada, setSenhaGerada] = useState(null);
 
   const catalogos = useMemo(
     () => ({
@@ -349,7 +305,7 @@ export default function TelaUsuarios({ filiais, centros, sessao, onVoltar }) {
     : usuarios;
 
   const semPermissao = usuarios.filter((usuario) => !usuario.admin && !usuario.acessos.length).length;
-  const comSenhaPadrao = usuarios.filter((usuario) => usuario.senhaPadrao);
+  const semSenhaDoPortal = usuarios.filter((usuario) => usuario.semSenhaDoPortal);
   const jaTem = useMemo(() => new Set(usuarios.map((usuario) => usuario.login)), [usuarios]);
 
   if (carregando) {
@@ -370,38 +326,20 @@ export default function TelaUsuarios({ filiais, centros, sessao, onVoltar }) {
 
       {erro ? <AvisoErro mensagem={erro} onTentarDeNovo={recarregar} /> : null}
 
-      <BuscaNoAd
-        jaTem={jaTem}
-        onAdicionar={(usuario) =>
-          executar(
-            api.darAcesso(usuario).then((resposta) => {
-              // Só quem ainda não tinha senha recebe uma: quem já usa outro
-              // portal AKR entra aqui com a que já tem.
-              if (resposta?.senha) {
-                setSenhaGerada({ login: resposta.login, nome: usuario.nome, senha: resposta.senha });
-              }
-            })
-          )
-        }
-      />
-
-      {senhaGerada ? (
-        <SenhaGerada dados={senhaGerada} onFechar={() => setSenhaGerada(null)} />
-      ) : null}
+      <BuscaNoAd jaTem={jaTem} onAdicionar={(usuario) => executar(api.darAcesso(usuario))} />
 
       {/* Enquanto alguém está com a senha padrão, a conta dele está aberta a
           quem souber a padrão. Fica no topo, junto com o outro aviso, para ser
           cobrado em vez de ficar aberto em silêncio. */}
-      {comSenhaPadrao.length ? (
-        <p className="modulo-aviso modulo-aviso--atencao">
+      {semSenhaDoPortal.length ? (
+        <p className="modulo-aviso">
           <Icone nome="chave" tamanho={16} />
           <span>
-            {comSenhaPadrao.length === 1
-              ? `${comSenhaPadrao[0].nome} ainda está com a senha padrão`
-              : `${comSenhaPadrao.length} usuários ainda estão com a senha padrão`}
-            {" "}e não {comSenhaPadrao.length === 1 ? "entrou" : "entraram"} para trocar. Até lá,{" "}
-            {comSenhaPadrao.length === 1 ? "essa conta está aberta" : "essas contas estão abertas"} a
-            quem souber a senha da empresa.
+            {semSenhaDoPortal.length === 1
+              ? `${semSenhaDoPortal[0].nome} ainda não entrou`
+              : `${semSenhaDoPortal.length} usuários ainda não entraram`}
+            {" "}no portal. No primeiro acesso {semSenhaDoPortal.length === 1 ? "ele usa" : "eles usam"}{" "}
+            a senha da rede e {semSenhaDoPortal.length === 1 ? "define a" : "definem as"} deste portal.
           </span>
         </p>
       ) : null}
@@ -456,12 +394,12 @@ export default function TelaUsuarios({ filiais, centros, sessao, onVoltar }) {
 
                 <span className="cartao-usuario__marcas">
                   {usuario.admin ? <span className="chip chip--receita">admin</span> : null}
-                  {usuario.senhaPadrao ? (
+                  {usuario.semSenhaDoPortal ? (
                     <span
-                      className="chip chip--despesa"
-                      title="Ainda não entrou para trocar a senha padrão. Até lá, quem souber a padrão entra como esta pessoa."
+                      className="chip"
+                      title="Nunca entrou. No primeiro acesso usa a senha da rede e define a senha do portal."
                     >
-                      senha padrão
+                      1º acesso pendente
                     </span>
                   ) : null}
                   {usuario.situacao !== "ativo" ? (
@@ -502,7 +440,7 @@ export default function TelaUsuarios({ filiais, centros, sessao, onVoltar }) {
                     className="botao-texto"
                     onClick={() => setARedefinir(usuario)}
                   >
-                    Nova senha
+                    Apagar senha
                   </button>
 
                   <button
@@ -600,25 +538,19 @@ export default function TelaUsuarios({ filiais, centros, sessao, onVoltar }) {
 
         {aRedefinir ? (
           <ModalConfirmacao
-            titulo="Gerar nova senha"
-            rotuloConfirmar="Gerar nova senha"
+            titulo="Apagar a senha do portal"
+            rotuloConfirmar="Apagar a senha"
             mensagem={
               <>
-                <strong>{aRedefinir.nome}</strong> recebe uma senha nova, sorteada, e precisa
-                trocá-la no primeiro acesso. A senha atual dele para de valer e as sessões abertas
-                caem na hora. A senha aparece uma única vez, aqui na tela.
+                A senha de <strong>{aRedefinir.nome}</strong> no portal é apagada e as sessões
+                abertas caem na hora. Ele volta a entrar com a senha da rede e define outra no
+                acesso seguinte — você não precisa entregar senha nenhuma.
               </>
             }
             onConfirmar={() => {
               const alvo = aRedefinir;
               setARedefinir(null);
-              executar(
-                api
-                  .redefinirSenha(alvo.login)
-                  .then((resposta) =>
-                    setSenhaGerada({ login: alvo.login, nome: alvo.nome, senha: resposta.senha })
-                  )
-              );
+              executar(api.redefinirSenha(alvo.login));
             }}
             onFechar={() => setARedefinir(null)}
           />

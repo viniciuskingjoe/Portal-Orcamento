@@ -216,45 +216,35 @@ dezembro em vez de cancelar o gesto.
 
 ### Login
 
-**A senha é do portal, não a da rede.** O Active Directory diz *quem existe na
-empresa* — é o que alimenta a busca da tela de Usuários — mas não autentica
-ninguém. A separação foi pedida para que a senha de rede não seja digitada num
-formulário publicado na internet.
+**Duas portas, e qual vale depende de a pessoa já ter senha no portal.**
+
+| Estado | Como entra |
+|---|---|
+| Nunca definiu senha | senha da **rede** (bind no AD) e define a do portal na hora |
+| Já definiu | senha do **portal**; o AD não é mais consultado para essa conta |
+
+Isso resolve o primeiro acesso sem ninguém precisar inventar, entregar ou cobrar
+senha inicial — e sem uma senha padrão conhecida, que ficaria valendo para toda
+conta ainda não usada. A senha da rede é digitada uma única vez na vida.
 
 O que se guarda é **scrypt com sal por senha** ([server/senha.js](server/senha.js)),
 nunca a senha. Comparação em tempo constante, e o hash carrega versão e
 parâmetros para o custo poder subir sem invalidar o que já existe.
 
-Quando o login não existe, a senha é conferida assim mesmo, contra um hash
-descartável. Sem isso a resposta volta na hora para login inexistente e depois de
-~100ms para login real, e esse intervalo entrega a lista de quem trabalha aqui.
+**Login que não existe nunca chega ao AD**: consultar o diretório para qualquer
+nome digitado transformaria o formulário num descobridor de contas e gastaria
+tentativa de bloqueio de gente que nem usa o portal. Ele é conferido contra um
+hash descartável, só para gastar o mesmo tempo — sem isso "não existe" volta na
+hora e "existe" volta depois do scrypt, e o intervalo entrega a lista de quem
+trabalha aqui.
 
-**Primeira senha.** É a **senha padrão da empresa** (`SENHA_PADRAO` no `.env`),
-entregue a todo mundo — decisão de quem opera o portal, pela praticidade de não
-repassar uma senha diferente para cada pessoa.
+`TROCAR_SENHA` fica ligado enquanto a pessoa não define a dela, e o servidor recusa
+**todas** as outras rotas com **428** até isso acontecer.
 
-O que isso custa, para ficar registrado: a senha padrão vale da concessão do
-acesso até o primeiro login, e nessa janela **quem a conhece entra como aquela
-pessoa** e define a senha dela, ficando com a conta. Não é o estranho da internet
-— o Cloudflare Access barra antes —, é quem já está dentro. O que fecha a janela:
-
-- `TROCAR_SENHA` nasce ligado e o servidor recusa **todas** as outras rotas com
-  **428** até a troca. Não adianta ignorar o formulário e seguir usando.
-- A tela de Usuários mostra quem ainda não trocou, com etiqueta no cartão e aviso
-  no topo — a janela fica visível e cobrável em vez de aberta em silêncio.
-- A senha padrão é recusada como senha **nova**, com ou sem enfeite no fim
-  (`king@1230`, `king@123!!`), então ninguém fica com ela.
-
-Cada hash usa sal próprio, mesmo sendo a mesma senha: hashes iguais denunciariam
-quem ainda está com a padrão a quem conseguisse ler a tabela.
-
-Para uma conta que não deve ficar aberta a quem conhece a padrão — a de um
-administrador, por exemplo — `scripts/definir-senha.mjs <login> --sortear` gera
-uma aleatória, num alfabeto sem `0/O/1/l/I` porque ela vai ser lida em voz alta.
-
-**Não há "esqueci a senha"**, de propósito. Quem confirma identidade é um
-administrador pela tela de Usuários (`Nova senha`), não um formulário que decide
-sozinho com quem está falando.
+**Esqueceu a senha?** Um administrador clica em `Apagar senha` no cartão dele. A
+senha do portal é apagada e a conta volta a entrar pela rede — nada é gerado,
+anotado ou dito por telefone. É também o que fazer quando se desconfia que uma
+senha vazou; as sessões abertas caem junto.
 
 **Força**: mínimo 10 caracteres, e barra o óbvio (`senha123`, `portal@2026`), o
 próprio login e o próprio nome. Não exige maiúscula-número-símbolo — isso produz
@@ -269,15 +259,12 @@ pela tela de Usuários. `PORTAL_ADMINS` no `.env` marca quem é administrador, m
 não cria senha — o primeiro acesso de todos vem de:
 
 ```bash
-# migrando do login por AD: todos estão sem senha e ninguém consegue entrar
-node --env-file=.env scripts/definir-senha.mjs --todos
-
-# uma pessoa só
-node --env-file=.env scripts/definir-senha.mjs <login>            # senha padrão
-node --env-file=.env scripts/definir-senha.mjs <login> --sortear  # aleatória
+node --env-file=.env scripts/definir-senha.mjs <login>
 ```
 
-Sem isso ninguém entra: a tela que criaria a primeira senha exige estar logado.
+Isso NÃO é o caminho normal — no dia a dia ninguém precisa dele, porque o
+primeiro acesso passa pelo AD. Serve para quando o AD não está disponível e o
+portal ficaria inacessível até o diretório voltar.
 
 **A sessão** dura 8 horas e renova a cada uso. O cookie é `httpOnly` +
 `SameSite=Lax`; no banco fica o **SHA-256** do id, nunca o valor do cookie, para
@@ -286,9 +273,10 @@ apaga as sessões abertas na hora — revogação que só vale depois de expirar
 revogação.
 
 **Limite de tentativas** ([server/limite.js](server/limite.js)): 5 falhas no
-mesmo login travam aquele login por 5 minutos. Com senha própria do portal isso
-ficou mais importante, não menos — não existe mais o bloqueio de conta do AD para
-segurar quem tenta adivinhar, e este é o único freio. Há também um limite por
+mesmo login travam aquele login por 5 minutos. Ele protege as duas portas, por
+motivos diferentes: no primeiro acesso impede que o portal dispare a política de
+bloqueio de conta do AD; depois, é o único freio contra adivinhação, já que a
+senha do portal não tem bloqueio nenhum atrás dela. Há também um limite por
 origem, que conta **logins distintos** e não tentativas: atrás de proxy ou NAT
 toda a empresa chega com o mesmo IP, e contar tentativas faria dele um fusível
 geral. Falha de rede/configuração (503) não conta como tentativa.
@@ -340,7 +328,7 @@ server/
 ├── sqlserver.js             pool mssql, query/queryOne/transaction
 ├── consultas.js             SELECTs do ERP (views confirmadas)
 ├── repositorio.js           leitura e gravação do estado do portal
-├── ldap.js                  busca de usuários no Active Directory
+├── ldap.js                  bind do primeiro acesso e busca de usuários no AD
 ├── senha.js                 hash scrypt, força e sorteio da primeira senha
 ├── identidade.js            sessão, middleware, quem-pode-o-quê
 ├── limite.js                limite de tentativas de login

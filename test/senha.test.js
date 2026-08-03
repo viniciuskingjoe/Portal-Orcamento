@@ -1,14 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import {
-  conferir,
-  criticarSenha,
-  gerarHash,
-  SENHA_PADRAO,
-  sortearSenha,
-  TAMANHO_MINIMO,
-} from "../server/senha.js";
+import { conferir, criticarSenha, gerarHash, sortearSenha, TAMANHO_MINIMO } from "../server/senha.js";
 
 describe("hash de senha", () => {
   it("a senha certa confere e a errada não", async () => {
@@ -93,23 +86,7 @@ describe("força da senha", () => {
   });
 });
 
-// A senha padrão é conhecida por toda a empresa. Ela serve para entrar a
-// primeira vez e nada mais: se pudesse ser mantida como senha definitiva, a
-// conta ficaria aberta para sempre a quem a conhece — que é justamente o que a
-// troca obrigatória existe para fechar.
-describe("senha padrão", () => {
-  it("nunca é aceita como senha nova", () => {
-    assert.ok(criticarSenha(SENHA_PADRAO, { login: "fulano", nome: "Fulano" }));
-  });
-
-  it("nem com enfeite no fim", () => {
-    for (const variação of [SENHA_PADRAO + "0", SENHA_PADRAO + "!!", SENHA_PADRAO + "2026"]) {
-      assert.ok(criticarSenha(variação, { login: "fulano", nome: "Fulano" }), variação);
-    }
-  });
-});
-
-describe("primeira senha sorteada", () => {
+describe("senha sorteada (scripts/definir-senha.mjs)", () => {
   it("passa nas próprias regras de força", () => {
     for (let i = 0; i < 50; i += 1) {
       const senha = sortearSenha();

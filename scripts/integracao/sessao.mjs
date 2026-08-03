@@ -9,6 +9,7 @@ const BASE = "http://localhost:3411";
 const LOGIN = "__teste.portal";
 
 const { query, encerrar } = await import("../../server/sqlserver.js");
+const { gerarHash } = await import("../../server/senha.js");
 
 async function limpar() {
   await query("DELETE FROM dbo.KING_IDENTIDADE_SESSAO WHERE LOGIN = @l", { l: LOGIN });
@@ -42,7 +43,9 @@ try {
   ok(recusado.status !== 500, "e nunca 500");
 
   // --- usuário e sessão criados à mão -------------------------------------
-  await query(`INSERT INTO dbo.KING_IDENTIDADE_USUARIO (LOGIN, NOME, ORIGEM) VALUES (@l, 'Teste Portal', 'manual')`, { l: LOGIN });
+  // Com SENHA_HASH: sem ela o cadastro fica em "primeiro acesso" e toda rota
+  // responde 428 (defina a senha do portal), que não é o que estes testes exercitam.
+  await query(`INSERT INTO dbo.KING_IDENTIDADE_USUARIO (LOGIN, NOME, ORIGEM, SENHA_HASH) VALUES (@l, 'Teste Portal', 'manual', @h)`, { l: LOGIN, h: await gerarHash("senha-de-teste-99") });
   await query(`INSERT INTO dbo.KING_IDENTIDADE_ACESSO (LOGIN, APP, ADMIN) VALUES (@l, 'orcamento', 0)`, { l: LOGIN });
   await query(`INSERT INTO dbo.KING_PORTAL_ORC_ACESSO (LOGIN, MODULO, COD_FILIAL, CENTRO_CUSTO, PODE_EDITAR)
                VALUES (@l, NULL, NULL, '020', 1)`, { l: LOGIN });
