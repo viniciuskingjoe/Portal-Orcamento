@@ -103,6 +103,37 @@ function primeiro(valor) {
   return Array.isArray(valor) ? valor[0] : valor;
 }
 
+// Distingue "o AD disse que a senha está errada" de "não deu para falar com o
+// AD". Sem essa separação, DC fora do ar, porta errada ou LDAPS quebrado
+// aparecem como "usuário ou senha inválidos" — e a pessoa fica trocando a senha
+// enquanto o problema é a rede.
+//
+// 49 é o código LDAP de invalidCredentials.
+export function ehCredencialInvalida(erro) {
+  return erro?.code === 49 || /invalidcredentials/i.test(erro?.name ?? "");
+}
+
+function falhaDeConexao(erro) {
+  const causa = erro?.code ?? erro?.message ?? "desconhecida";
+  const dicas = {
+    ECONNRESET:
+      "o servidor derrubou a conexão — em ldaps:// isso costuma ser certificado ausente ou inválido no controlador de domínio",
+    ECONNREFUSED: "porta fechada no controlador de domínio",
+    ETIMEDOUT: "sem rota até o controlador de domínio",
+    ENOTFOUND: "o nome do controlador de domínio não resolve",
+    DEPTH_ZERO_SELF_SIGNED_CERT: "certificado auto-assinado e a CA interna não está instalada nesta máquina",
+    UNABLE_TO_VERIFY_LEAF_SIGNATURE: "a cadeia da CA interna não está instalada nesta máquina",
+  };
+
+  const falha = new Error(
+    `Não foi possível falar com o Active Directory (${causa}).` +
+      (dicas[causa] ? ` ${dicas[causa]}.` : "")
+  );
+  falha.status = 503;
+  falha.cause = erro;
+  return falha;
+}
+
 // Valida a credencial no AD e devolve os dados do usuário.
 // Lança em credencial inválida — quem chama traduz para mensagem genérica.
 export async function autenticar(usuario, senha) {
@@ -116,7 +147,14 @@ export async function autenticar(usuario, senha) {
   const identidade = identidadeDeBind(usuario);
 
   try {
-    await cliente.bind(identidade, senha);
+    try {
+      await cliente.bind(identidade, senha);
+    } catch (erro) {
+      // Só credencial recusada vira 401. Qualquer outra falha é do canal e
+      // precisa aparecer como tal.
+      if (!ehCredencialInvalida(erro)) throw falhaDeConexao(erro);
+      throw erro;
+    }
 
     // O bind já autenticou. A busca é só para pegar nome e e-mail; se falhar,
     // o login continua válido — negar acesso porque o diretório não respondeu a
@@ -168,7 +206,14 @@ export async function buscarUsuarios(termo, limite = 20) {
     `(|(sAMAccountName=*${alvo}*)(displayName=*${alvo}*)(mail=*${alvo}*)))`;
 
   try {
-    await cliente.bind(LDAP_BIND_DN, LDAP_BIND_PASSWORD);
+    try {
+      await cliente.bind(LDAP_BIND_DN, LDAP_BIND_PASSWORD);
+    } catch (erro) {
+      throw ehCredencialInvalida(erro)
+        ? Object.assign(new Error("Conta de serviço do AD com credencial inválida."), { status: 503 })
+        : falhaDeConexao(erro);
+    }
+
     const { searchEntries } = await cliente.search(LDAP_SEARCH_BASE, {
       scope: "sub",
       filter: filtro,

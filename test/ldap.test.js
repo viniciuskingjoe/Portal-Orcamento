@@ -69,3 +69,39 @@ test("as três formas de digitar chegam ao mesmo usuário", () => {
   const logins = new Set(formas.map(normalizarLogin));
   assert.equal(logins.size, 1);
 });
+
+// ---------------------------------------------------------------------------
+// Credencial recusada x canal quebrado
+//
+// Regressão que custou tempo real: com LDAPS mal configurado no controlador de
+// domínio, TODO login respondia "usuário ou senha inválidos". A pessoa fica
+// trocando a senha enquanto o problema é o certificado.
+// ---------------------------------------------------------------------------
+
+const { ehCredencialInvalida } = await import("../server/ldap.js");
+
+test("só o código 49 do LDAP é credencial inválida", () => {
+  assert.equal(ehCredencialInvalida({ code: 49 }), true);
+  assert.equal(ehCredencialInvalida({ name: "InvalidCredentialsError" }), true);
+});
+
+test("falha de rede ou de TLS não é senha errada", () => {
+  for (const erro of [
+    { code: "ECONNRESET" },
+    { code: "ECONNREFUSED" },
+    { code: "ETIMEDOUT" },
+    { code: "ENOTFOUND" },
+    { code: "UNABLE_TO_VERIFY_LEAF_SIGNATURE" },
+    { code: "DEPTH_ZERO_SELF_SIGNED_CERT" },
+  ]) {
+    assert.equal(ehCredencialInvalida(erro), false, `${erro.code} não é credencial`);
+  }
+});
+
+test("erro sem código nenhum não vira credencial inválida", () => {
+  // Na dúvida, é problema de canal: dizer "senha errada" manda a pessoa para o
+  // caminho errado e ainda gasta tentativa de bloqueio no AD.
+  assert.equal(ehCredencialInvalida({}), false);
+  assert.equal(ehCredencialInvalida(null), false);
+  assert.equal(ehCredencialInvalida(new Error("boom")), false);
+});
