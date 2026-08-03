@@ -76,6 +76,40 @@ try {
   ok(alvo.acessos.length === 1 && alvo.acessos[0].podeEditar === false,
      "conceder de novo atualiza em vez de duplicar");
 
+  // Lote: marcar vários centros de uma vez vira várias linhas numa transação.
+  await req(`/api/usuarios/${ALVO}/acessos`, {
+    ...admin, metodo: "POST",
+    corpo: { acessos: [
+      { modulo: "", filial: "", centro: "002", podeEditar: true },
+      { modulo: "", filial: "", centro: "005", podeEditar: true },
+      { modulo: "", filial: "", centro: "017", podeEditar: true },
+    ] },
+  });
+  lista = await (await req("/api/usuarios", admin)).json();
+  alvo = lista.find((u) => u.login === ALVO);
+  ok(alvo.acessos.length === 4, `lote concedeu as três de uma vez (tem ${alvo.acessos.length})`);
+  ok(
+    ["002", "005", "017"].every((c) => alvo.acessos.some((a) => a.centro === c)),
+    "as três combinações do lote entraram"
+  );
+
+  // Uma combinação repetida no lote não duplica.
+  await req(`/api/usuarios/${ALVO}/acessos`, {
+    ...admin, metodo: "POST",
+    corpo: { acessos: [{ modulo: "", filial: "", centro: "002", podeEditar: false }] },
+  });
+  lista = await (await req("/api/usuarios", admin)).json();
+  alvo = lista.find((u) => u.login === ALVO);
+  ok(alvo.acessos.length === 4 && alvo.acessos.find((a) => a.centro === "002").podeEditar === false,
+     "repetir no lote atualiza em vez de duplicar");
+
+  // Limpa para o resto do roteiro seguir do mesmo ponto.
+  for (const acesso of alvo.acessos.filter((a) => a.centro !== "020")) {
+    await req(`/api/usuarios/${ALVO}/acessos/${acesso.id}`, { ...admin, metodo: "DELETE" });
+  }
+  lista = await (await req("/api/usuarios", admin)).json();
+  alvo = lista.find((u) => u.login === ALVO);
+
   // A sessão do alvo já enxerga a permissão nova.
   const suaSessao = await (await req("/api/sessao", comum)).json();
   ok(suaSessao.acessos.length === 1, "a permissão chega na sessão de quem a recebeu");

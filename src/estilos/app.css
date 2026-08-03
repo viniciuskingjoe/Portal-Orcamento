@@ -3236,3 +3236,58 @@ dialog::backdrop {
   font-size: 12.5px;
   text-align: center;
 }
+
+/* Opção com caixa: o painel fica aberto e a marcação precisa aparecer no
+   próprio item, não só na cor. */
+.seletor__opcao--multipla {
+  grid-template-columns: auto auto minmax(0, 1fr);
+}
+
+.seletor__opcao--multipla .checkbox-visual {
+  width: 16px;
+  height: 16px;
+}
+
+.seletor__opcao--multipla.is-escolhida .checkbox-visual {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: #fff;
+}
+
+.seletor__limpar {
+  width: 100%;
+  margin-bottom: 6px;
+  padding: 6px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: var(--surface-soft);
+  color: var(--muted);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.seletor__limpar:hover {
+  color: var(--danger);
+}
+
+/* A prévia vira lista quando a escolha múltipla multiplica as combinações. */
+.nova-concessao__previa {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.nova-concessao__previa ul {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+  margin: 4px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.nova-concessao__previa li {
+  padding: 2px 8px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  color: var(--text-soft);
+}

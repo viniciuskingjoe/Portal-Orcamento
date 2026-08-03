@@ -136,10 +136,24 @@ export async function removerAcesso(login, quem) {
 // ver; `podeEditar` diz se também lança.
 // --------------------------------------------------------------------------
 
-export async function concederAcesso(login, { modulo, filial, centro, podeEditar }, quem) {
+// Lote em transação: marcar cinco centros e gravar três é pior que não gravar
+// nada — a pessoa sai achando que concedeu os cinco.
+export async function concederAcessos(login, lista, quem) {
+  await transaction(async ({ query: q }) => {
+    for (const acesso of lista ?? []) {
+      await gravarConcessao(q, login, acesso, quem);
+    }
+  });
+}
+
+export async function concederAcesso(login, acesso, quem) {
+  await concederAcessos(login, [acesso], quem);
+}
+
+function gravarConcessao(executar, login, { modulo, filial, centro, podeEditar }, quem) {
   const vazio = (valor) => (valor === "" || valor === undefined ? null : valor);
 
-  await query(
+  return executar(
     `IF NOT EXISTS (
        SELECT 1 FROM dbo.KING_PORTAL_ORC_ACESSO
         WHERE LOGIN = @login

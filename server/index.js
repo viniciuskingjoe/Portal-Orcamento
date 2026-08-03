@@ -35,6 +35,7 @@ import {
 import {
   alterarUsuario,
   concederAcesso,
+  concederAcessos,
   darAcesso,
   listarUsuarios,
   removerAcesso,
@@ -334,8 +335,11 @@ app.post(
   "/api/usuarios/:login/acessos",
   exigirAdmin,
   rota(async (req, res) => {
-    await concederAcesso(req.params.login, req.body ?? {}, req.sessao.login);
-    res.json({ ok: true });
+    // Aceita uma concessão ou um lote. O lote existe porque a tela deixa marcar
+    // vários centros de uma vez, e meia concessão gravada é pior que nenhuma.
+    const lista = Array.isArray(req.body?.acessos) ? req.body.acessos : [req.body ?? {}];
+    await concederAcessos(req.params.login, lista, req.sessao.login);
+    res.json({ ok: true, concedidas: lista.length });
   })
 );
 

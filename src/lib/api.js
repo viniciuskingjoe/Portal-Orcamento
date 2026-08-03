@@ -104,8 +104,8 @@ export const api = {
     buscar(`/api/usuarios/${encodeURIComponent(login)}`, null, { metodo: "PUT", corpo: mudanca }),
   removerUsuario: (login) =>
     buscar(`/api/usuarios/${encodeURIComponent(login)}`, null, { metodo: "DELETE" }),
-  concederAcesso: (login, acesso) =>
-    buscar(`/api/usuarios/${encodeURIComponent(login)}/acessos`, null, { corpo: acesso }),
+  concederAcessos: (login, acessos) =>
+    buscar(`/api/usuarios/${encodeURIComponent(login)}/acessos`, null, { corpo: { acessos } }),
   revogarAcesso: (login, id) =>
     buscar(`/api/usuarios/${encodeURIComponent(login)}/acessos/${id}`, null, { metodo: "DELETE" }),
 

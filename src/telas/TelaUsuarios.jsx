@@ -43,19 +43,35 @@ function Concessao({ acesso, catalogos, onRevogar }) {
   );
 }
 
+// Vazio em qualquer dimensão vale por "todos" — e é assim que a concessão sem
+// restrição continua sendo uma linha só, em vez de 42.
+function combinar(modulos, filiais, centros) {
+  const ou = (lista) => (lista.length ? lista : [null]);
+  const combinacoes = [];
+
+  ou(modulos).forEach((modulo) =>
+    ou(filiais).forEach((filial) =>
+      ou(centros).forEach((centro) => combinacoes.push({ modulo, filial, centro }))
+    )
+  );
+  return combinacoes;
+}
+
 function NovaConcessao({ catalogos, onConceder }) {
-  const [modulo, setModulo] = useState(TODOS);
-  const [filial, setFilial] = useState(TODOS);
-  const [centro, setCentro] = useState(TODOS);
+  const [modulos, setModulos] = useState([]);
+  const [filiais, setFiliais] = useState([]);
+  const [centros, setCentros] = useState([]);
   const [podeEditar, setPodeEditar] = useState(true);
 
-  const previa = descreverConcessao({ modulo: modulo || null, filial: filial || null, centro: centro || null }, catalogos);
+  // Marcar dois módulos e três centros são seis concessões. Dizer o número antes
+  // de confirmar evita a surpresa de conceder mais do que se queria.
+  const combinacoes = combinar(modulos, filiais, centros);
 
-  function conceder(acesso) {
-    onConceder(acesso);
-    setModulo(TODOS);
-    setFilial(TODOS);
-    setCentro(TODOS);
+  function conceder(lista) {
+    onConceder(lista);
+    setModulos([]);
+    setFiliais([]);
+    setCentros([]);
   }
 
   return (
@@ -66,7 +82,7 @@ function NovaConcessao({ catalogos, onConceder }) {
             key={atalho.rotulo}
             type="button"
             className="botao botao--secundario botao--compacto"
-            onClick={() => conceder(atalho.acesso)}
+            onClick={() => conceder([atalho.acesso])}
           >
             {atalho.rotulo}
           </button>
@@ -77,30 +93,28 @@ function NovaConcessao({ catalogos, onConceder }) {
         className="nova-concessao__campos"
         onSubmit={(evento) => {
           evento.preventDefault();
-          conceder({ modulo, filial, centro, podeEditar });
+          conceder(combinacoes.map((combinacao) => ({ ...combinacao, podeEditar })));
         }}
       >
         <label>
           <span>Módulo</span>
           <Seletor
-            valor={modulo}
-            opcoes={[
-              { valor: TODOS, rotulo: "todos os módulos" },
-              ...catalogos.modulos.map((item) => ({ valor: item.id, rotulo: item.nome })),
-            ]}
-            aoEscolher={setModulo}
+            multiplo
+            rotuloTodos="todos os módulos"
+            valor={modulos}
+            opcoes={catalogos.modulos.map((item) => ({ valor: item.id, rotulo: item.nome }))}
+            aoEscolher={setModulos}
           />
         </label>
 
         <label>
           <span>Filial</span>
           <Seletor
-            valor={filial}
-            opcoes={[
-              { valor: TODOS, rotulo: "todas as filiais" },
-              ...catalogos.filiais.map((item) => ({ valor: item.id, rotulo: item.nome })),
-            ]}
-            aoEscolher={setFilial}
+            multiplo
+            rotuloTodos="todas as filiais"
+            valor={filiais}
+            opcoes={catalogos.filiais.map((item) => ({ valor: item.id, rotulo: item.nome }))}
+            aoEscolher={setFiliais}
             buscaVazia="Nenhuma filial com esse nome."
           />
         </label>
@@ -108,16 +122,15 @@ function NovaConcessao({ catalogos, onConceder }) {
         <label>
           <span>Centro de custo</span>
           <Seletor
-            valor={centro}
-            opcoes={[
-              { valor: TODOS, rotulo: "todos os centros" },
-              ...catalogos.centros.map((item) => ({
-                valor: item.id,
-                rotulo: item.nome,
-                detalhe: item.id,
-              })),
-            ]}
-            aoEscolher={setCentro}
+            multiplo
+            rotuloTodos="todos os centros"
+            valor={centros}
+            opcoes={catalogos.centros.map((item) => ({
+              valor: item.id,
+              rotulo: item.nome,
+              detalhe: item.id,
+            }))}
+            aoEscolher={setCentros}
             buscaVazia="Nenhum centro com esse nome."
           />
         </label>
@@ -131,14 +144,22 @@ function NovaConcessao({ catalogos, onConceder }) {
         </label>
 
         <button type="submit" className="botao botao--primario botao--compacto">
-          Conceder
+          {combinacoes.length > 1 ? `Conceder ${combinacoes.length}` : "Conceder"}
         </button>
       </form>
 
-      {/* Prévia: ler três selects e imaginar o resultado é onde se erra. */}
-      <p className="nova-concessao__previa">
-        Vai conceder: <strong>{podeEditar ? "editar" : "ver"}</strong> {previa}.
-      </p>
+      {/* Prévia: ler três seletores e imaginar o resultado é onde se erra —
+          ainda mais quando a escolha múltipla multiplica as linhas. */}
+      <div className="nova-concessao__previa">
+        Vai conceder <strong>{podeEditar ? "editar" : "ver"}</strong> em{" "}
+        {combinacoes.length === 1 ? "" : `${combinacoes.length} combinações: `}
+        <ul>
+          {combinacoes.slice(0, 6).map((combinacao, indice) => (
+            <li key={indice}>{descreverConcessao(combinacao, catalogos)}</li>
+          ))}
+          {combinacoes.length > 6 ? <li>e mais {combinacoes.length - 6}…</li> : null}
+        </ul>
+      </div>
     </div>
   );
 }
@@ -397,7 +418,7 @@ export default function TelaUsuarios({ filiais, centros, sessao, onVoltar }) {
 
                   <NovaConcessao
                     catalogos={catalogos}
-                    onConceder={(acesso) => executar(api.concederAcesso(usuario.login, acesso))}
+                    onConceder={(lista) => executar(api.concederAcessos(usuario.login, lista))}
                   />
                 </div>
               ) : null}

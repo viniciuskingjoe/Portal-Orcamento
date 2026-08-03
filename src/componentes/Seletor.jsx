@@ -12,6 +12,11 @@ import Icone from "./Icone.jsx";
 // Este abre SEMPRE para baixo, filtra enquanto se digita e é navegável só pelo
 // teclado. Nas listas curtas o campo de busca some sozinho: caixa de busca para
 // escolher entre três coisas é ruído.
+//
+// Em `multiplo`, `valor` é uma lista e o painel FICA ABERTO enquanto se marca —
+// fechar a cada clique obrigaria a reabrir para cada item, que é justamente o
+// trabalho que o modo múltiplo existe para evitar. Lista vazia quer dizer
+// "todos", que é o padrão de qualquer concessão.
 // ============================================================================
 
 const MINIMO_PARA_BUSCAR = 8;
@@ -23,6 +28,8 @@ export default function Seletor({
   placeholder = "Selecionar…",
   buscaVazia = "Nada encontrado.",
   desabilitado = false,
+  multiplo = false,
+  rotuloTodos = "todos",
 }) {
   const [aberto, setAberto] = useState(false);
   const [termo, setTermo] = useState("");
@@ -33,8 +40,23 @@ export default function Seletor({
   const lista = useRef(null);
   const idBase = useId();
 
-  const escolhida = opcoes.find((opcao) => opcao.valor === valor);
+  const marcados = multiplo ? new Set(valor ?? []) : null;
+  const escolhida = multiplo ? null : opcoes.find((opcao) => opcao.valor === valor);
   const comBusca = opcoes.length >= MINIMO_PARA_BUSCAR;
+
+  const estaMarcada = (opcao) => (multiplo ? marcados.has(opcao.valor) : opcao.valor === valor);
+
+  // Nada marcado é "todos": a concessão sem restrição é o caso normal, e
+  // obrigar a marcar 42 centros para dizer "todos" seria absurdo.
+  const rotuloDoCampo = () => {
+    if (!multiplo) return escolhida?.rotulo ?? placeholder;
+    if (!marcados.size) return rotuloTodos;
+    if (marcados.size === 1) {
+      const unica = opcoes.find((opcao) => marcados.has(opcao.valor));
+      return unica?.rotulo ?? rotuloTodos;
+    }
+    return `${marcados.size} selecionados`;
+  };
 
   const filtradas = useMemo(() => {
     const alvo = termo.trim().toLowerCase();
@@ -71,14 +93,22 @@ export default function Seletor({
   function abrir() {
     if (desabilitado) return;
     setTermo("");
-    setDestacado(Math.max(0, filtradas.findIndex((opcao) => opcao.valor === valor)));
+    setDestacado(Math.max(0, filtradas.findIndex(estaMarcada)));
     setAberto(true);
   }
 
   function escolher(opcao) {
-    aoEscolher(opcao.valor);
-    setAberto(false);
-    setTermo("");
+    if (!multiplo) {
+      aoEscolher(opcao.valor);
+      setAberto(false);
+      setTermo("");
+      return;
+    }
+
+    const proximo = new Set(marcados);
+    if (proximo.has(opcao.valor)) proximo.delete(opcao.valor);
+    else proximo.add(opcao.valor);
+    aoEscolher([...proximo]);
   }
 
   function teclado(evento) {
@@ -117,7 +147,7 @@ export default function Seletor({
         onClick={() => (aberto ? setAberto(false) : abrir())}
         onKeyDown={teclado}
       >
-        <span className={escolhida ? "" : "seletor__vazio"}>{escolhida?.rotulo ?? placeholder}</span>
+        <span className={escolhida || marcados?.size ? "" : "seletor__vazio"}>{rotuloDoCampo()}</span>
         <Icone nome="chevron" tamanho={14} />
       </button>
 
@@ -138,7 +168,17 @@ export default function Seletor({
             />
           ) : null}
 
-          <ul className="seletor__lista" role="listbox" ref={lista}>
+          {multiplo && marcados.size ? (
+            <button
+              type="button"
+              className="seletor__limpar"
+              onClick={() => aoEscolher([])}
+            >
+              Limpar seleção ({marcados.size})
+            </button>
+          ) : null}
+
+          <ul className="seletor__lista" role="listbox" aria-multiselectable={multiplo} ref={lista}>
             {filtradas.map((opcao, indice) => (
               <li key={opcao.valor}>
                 <button
@@ -146,10 +186,11 @@ export default function Seletor({
                   id={`${idBase}-${indice}`}
                   data-indice={indice}
                   role="option"
-                  aria-selected={opcao.valor === valor}
+                  aria-selected={estaMarcada(opcao)}
                   className={[
                     "seletor__opcao",
-                    opcao.valor === valor ? "is-escolhida" : "",
+                    multiplo ? "seletor__opcao--multipla" : "",
+                    estaMarcada(opcao) ? "is-escolhida" : "",
                     indice === destacado ? "is-destacada" : "",
                   ]
                     .filter(Boolean)
@@ -157,9 +198,14 @@ export default function Seletor({
                   onMouseEnter={() => setDestacado(indice)}
                   onClick={() => escolher(opcao)}
                 >
+                  {multiplo ? (
+                    <span className="checkbox-visual" aria-hidden="true">
+                      {estaMarcada(opcao) ? <Icone nome="check" tamanho={13} /> : null}
+                    </span>
+                  ) : null}
                   {opcao.detalhe ? <code>{opcao.detalhe}</code> : null}
                   <span>{opcao.rotulo}</span>
-                  {opcao.valor === valor ? <Icone nome="check" tamanho={14} /> : null}
+                  {!multiplo && estaMarcada(opcao) ? <Icone nome="check" tamanho={14} /> : null}
                 </button>
               </li>
             ))}
