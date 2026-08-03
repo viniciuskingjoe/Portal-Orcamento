@@ -1,6 +1,15 @@
 import Icone from "./Icone.jsx";
 import { modulosDaVisao } from "../dados/visao.js";
 
+// Duas letras do nome, para o avatar. Nome de uma palavra só usa as duas
+// primeiras letras — "V" sozinho num círculo não identifica ninguém.
+function iniciais(nome) {
+  const partes = String(nome ?? "").trim().split(/\s+/).filter(Boolean);
+  if (!partes.length) return null;
+  if (partes.length === 1) return partes[0].slice(0, 2).toUpperCase();
+  return (partes[0][0] + partes[partes.length - 1][0]).toUpperCase();
+}
+
 function ItemNav({ id, titulo, icone, badge, ativo, onNavegar }) {
   return (
     <button
@@ -27,6 +36,8 @@ export default function Sidebar({
   onNavegar,
   tema,
   onAlternarTema,
+  sessao,
+  onSair,
 }) {
   const modulos = visaoDoPlano ? modulosDaVisao(visaoDoPlano) : [];
 
@@ -134,14 +145,18 @@ export default function Sidebar({
           <span>{tema === "dark" ? "Tema claro" : "Tema escuro"}</span>
         </button>
 
-        {/* O padrão prevê card de usuário com "Sair". Enquanto o portal não tem
-            autenticação, o rodapé identifica a empresa em vez de simular login. */}
+        {/* Sem sessão o rodapé identifica a empresa em vez de simular login. */}
         <div className="card-usuario">
-          <span className="card-usuario__avatar">KJ</span>
+          <span className="card-usuario__avatar">{iniciais(sessao?.nome) ?? "KJ"}</span>
           <span className="card-usuario__texto">
-            <strong>{empresa}</strong>
-            <small>Sessão local · sem autenticação</small>
+            <strong>{sessao?.nome ?? empresa}</strong>
+            <small>{sessao ? (sessao.admin ? "Administrador" : empresa) : "Sessão local"}</small>
           </span>
+          {sessao ? (
+            <button type="button" className="botao-sair" onClick={onSair} title="Sair">
+              <Icone nome="logout" tamanho={16} />
+            </button>
+          ) : null}
         </div>
       </div>
     </aside>

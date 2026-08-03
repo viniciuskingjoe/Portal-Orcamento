@@ -8,6 +8,14 @@ import {
   listarRealizado,
   listarVisoesContabeis,
 } from "./consultas.js";
+import {
+  comSessao,
+  cookieDaRequisicao,
+  encerrarSessao,
+  entrar,
+  exigirSessao,
+  limparCookie,
+} from "./identidade.js";
 
 // ============================================================================
 // API do Portal Orçamento
@@ -26,6 +34,9 @@ app.use(express.json({ limit: "1mb" }));
 // Envolve handler async para que rejeição vire resposta de erro, não crash.
 const rota = (handler) => (req, res, next) => Promise.resolve(handler(req, res)).catch(next);
 
+// Resolve a sessão antes de tudo. Só popula `req.sessao`; quem exige é a rota.
+app.use(comSessao());
+
 app.get(
   "/api/health",
   rota(async (_req, res) => {
@@ -33,6 +44,44 @@ app.get(
     res.json({ ok: true, banco: linha?.banco ?? null, agora: linha?.agora ?? null });
   })
 );
+
+// --------------------------------------------------------------------------
+// Sessão
+// --------------------------------------------------------------------------
+
+app.post(
+  "/api/login",
+  rota(async (req, res) => {
+    const sessao = await entrar({
+      usuario: req.body?.usuario,
+      senha: req.body?.senha,
+      ip: req.ip,
+      userAgent: req.get("user-agent"),
+      res,
+    });
+    res.json(sessao);
+  })
+);
+
+app.post(
+  "/api/logout",
+  rota(async (req, res) => {
+    await encerrarSessao(cookieDaRequisicao(req));
+    limparCookie(res);
+    res.json({ ok: true });
+  })
+);
+
+// `null` em vez de 401: no primeiro carregamento a ausência de sessão é o caso
+// normal, não erro. O front decide mostrar o login.
+app.get(
+  "/api/sessao",
+  rota(async (req, res) => res.json(req.sessao ?? null))
+);
+
+// Daqui para baixo, tudo exige sessão. Os dados do ERP são da empresa e não
+// ficam abertos a quem alcançar a porta.
+app.use("/api", exigirSessao);
 
 app.get(
   "/api/visoes-contabeis",

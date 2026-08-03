@@ -12,15 +12,26 @@ class ErroDaApi extends Error {
   }
 }
 
-async function buscar(caminho, parametros) {
+async function buscar(caminho, parametros, opcoes = {}) {
   const url = new URL(caminho, window.location.origin);
   Object.entries(parametros ?? {}).forEach(([chave, valor]) => {
     if (valor != null) url.searchParams.set(chave, String(valor));
   });
 
+  const corpoEnviado = opcoes.corpo;
   let resposta;
   try {
-    resposta = await fetch(url, { headers: { Accept: "application/json" } });
+    resposta = await fetch(url, {
+      method: corpoEnviado ? "POST" : "GET",
+      // O cookie de sessão é httpOnly: o JavaScript não o lê, mas precisa
+      // pedir que ele vá junto.
+      credentials: "same-origin",
+      headers: {
+        Accept: "application/json",
+        ...(corpoEnviado ? { "Content-Type": "application/json" } : {}),
+      },
+      body: corpoEnviado ? JSON.stringify(corpoEnviado) : undefined,
+    });
   } catch (erro) {
     throw new ErroDaApi(`${RODAR_API} (${erro.message})`, 0);
   }
@@ -37,6 +48,11 @@ async function buscar(caminho, parametros) {
   }
 
   if (!resposta.ok) {
+    // 401 é sessão expirada, não falha de rede: quem chama volta para o login
+    // em vez de mostrar "a API não está respondendo".
+    if (resposta.status === 401) {
+      throw new ErroDaApi(corpo?.erro ?? "Sessão expirada. Entre novamente.", 401);
+    }
     if (corpo?.erro) throw new ErroDaApi(corpo.erro, resposta.status);
     // Sem JSON no corpo, o erro não veio do nosso handler: é o proxy sem alcançar
     // o backend, ou um intermediário no caminho.
@@ -51,6 +67,9 @@ async function buscar(caminho, parametros) {
 
 export const api = {
   health: () => buscar("/api/health"),
+  sessao: () => buscar("/api/sessao"),
+  login: (usuario, senha) => buscar("/api/login", null, { corpo: { usuario, senha } }),
+  logout: () => buscar("/api/logout", null, { corpo: {} }),
   visoesContabeis: () => buscar("/api/visoes-contabeis"),
   contas: (visao) => buscar("/api/contas", { visao }),
   filiais: () => buscar("/api/filiais"),

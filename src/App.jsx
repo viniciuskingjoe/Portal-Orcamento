@@ -15,6 +15,7 @@ import TelaVisao from "./telas/TelaVisao.jsx";
 import TelaVisaoModulo from "./telas/TelaVisaoModulo.jsx";
 import TelaDre from "./telas/TelaDre.jsx";
 import TelaOrcamento, { TODAS_AS_CONTAS } from "./telas/TelaOrcamento.jsx";
+import TelaLogin from "./telas/TelaLogin.jsx";
 
 import { EMPRESA, MESES } from "./dados/seeds.js";
 import { ehModulo, modulo as definicaoDoModulo } from "./dados/modulos.js";
@@ -47,6 +48,7 @@ import { carregarEstado, salvarEstado } from "./lib/persistencia.js";
 import { formatarParaEdicao, parseNumeroPtBr } from "./lib/formato.js";
 import { aplicarTema, temaInicial } from "./lib/tema.js";
 import { useCadastrosDoErp, useContas, useRealizado } from "./lib/useErp.js";
+import { useSessao } from "./lib/useSessao.js";
 
 const FILTROS_PADRAO = {
   filial: "total",
@@ -57,7 +59,27 @@ const FILTROS_PADRAO = {
 };
 const TELAS_ERP = new Set(["filiais", "centros"]);
 
-export default function PlanejamentoOrcamentario() {
+// Portão: sem sessão não se renderiza o portal. O componente inteiro fica
+// desmontado, então nem os dados do ERP chegam a ser pedidos.
+export default function App() {
+  const { sessao, carregando, entrando, erro, entrar, sair } = useSessao();
+
+  if (carregando) {
+    return (
+      <main className="tela-login">
+        <Carregando texto="Verificando a sessão…" />
+      </main>
+    );
+  }
+
+  if (!sessao) return <TelaLogin onEntrar={entrar} carregando={entrando} erro={erro} />;
+
+  // `key` remonta o portal inteiro quando troca o usuário: estado de tela, de
+  // filtro e de edição de outra pessoa não pode sobreviver ao login seguinte.
+  return <PlanejamentoOrcamentario key={sessao.login} sessao={sessao} onSair={sair} />;
+}
+
+function PlanejamentoOrcamentario({ sessao, onSair }) {
   const inicial = useMemo(carregarEstado, []);
 
   const [configuracao, setConfiguracao] = useState(inicial.configuracao);
@@ -744,6 +766,8 @@ export default function PlanejamentoOrcamentario() {
         }
         planoAtivo={planoAtivo}
         visaoDoPlano={visaoDoPlano}
+        sessao={sessao}
+        onSair={onSair}
         tela={tela}
         onNavegar={navegar}
         tema={tema}

@@ -1,0 +1,64 @@
+import { useCallback, useEffect, useState } from "react";
+
+import { api } from "./api.js";
+
+// ============================================================================
+// SESSÃO
+//
+// O cookie é httpOnly: o JavaScript não consegue lê-lo, e é justamente essa a
+// proteção — um XSS não rouba a sessão. Quem sabe se há sessão é o servidor,
+// então o estado daqui nasce de uma pergunta a ele.
+// ============================================================================
+
+export function useSessao() {
+  const [sessao, setSessao] = useState(null);
+  // `carregando` começa true: entre abrir a página e o servidor responder, não
+  // se sabe se há sessão. Começar em false piscaria a tela de login para quem
+  // já está logado.
+  const [carregando, setCarregando] = useState(true);
+  const [entrando, setEntrando] = useState(false);
+  const [erro, setErro] = useState("");
+
+  useEffect(() => {
+    let vivo = true;
+    api
+      .sessao()
+      .then((atual) => vivo && setSessao(atual))
+      .catch(() => vivo && setSessao(null))
+      .finally(() => vivo && setCarregando(false));
+    return () => {
+      vivo = false;
+    };
+  }, []);
+
+  const entrar = useCallback(async ({ usuario, senha }) => {
+    setEntrando(true);
+    setErro("");
+    try {
+      setSessao(await api.login(usuario, senha));
+    } catch (falha) {
+      // A mensagem vem pronta do servidor e é deliberadamente genérica em erro
+      // de credencial. Só a de configuração (503) é específica, para o suporte
+      // não procurar senha errada onde o problema é o certificado do DC.
+      setErro(falha?.message ?? "Não foi possível entrar.");
+    } finally {
+      setEntrando(false);
+    }
+  }, []);
+
+  const sair = useCallback(async () => {
+    await api.logout().catch(() => {});
+    setSessao(null);
+    setErro("");
+  }, []);
+
+  // Chamada por quem receber 401 no meio do uso: a sessão morreu do outro lado
+  // (expirou, admin revogou, alguém saiu do AD) e a tela precisa voltar ao login
+  // em vez de insistir em requisições que nunca vão passar.
+  const expirar = useCallback(() => {
+    setSessao(null);
+    setErro("Sua sessão expirou. Entre novamente.");
+  }, []);
+
+  return { sessao, carregando, entrando, erro, entrar, sair, expirar };
+}

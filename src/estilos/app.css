@@ -2832,3 +2832,25 @@ dialog::backdrop {
   font-size: 11.5px;
   text-align: center;
 }
+
+/* Sair fica no card de usuário, discreto: é ação rara e destrutiva de contexto,
+   não deve competir com a navegação. */
+.botao-sair {
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background: none;
+  color: var(--muted);
+  cursor: pointer;
+  transition: 0.14s ease;
+}
+
+.botao-sair:hover {
+  border-color: var(--danger);
+  color: var(--danger);
+}
