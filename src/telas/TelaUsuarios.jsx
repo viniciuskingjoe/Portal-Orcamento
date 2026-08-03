@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from "react";
 import Cabecalho from "../componentes/Cabecalho.jsx";
 import Icone from "../componentes/Icone.jsx";
 import Seletor from "../componentes/Seletor.jsx";
+import ModalConfirmacao from "../componentes/ModalConfirmacao.jsx";
 import { AvisoErro, Carregando } from "../componentes/Estados.jsx";
 import { MODULOS } from "../dados/modulos.js";
 import {
@@ -24,18 +25,38 @@ import { api } from "../lib/api.js";
 // descobrir quem ficou sem permissão.
 // ============================================================================
 
-function Concessao({ acesso, catalogos, redundante, onRevogar }) {
+function Concessao({ acesso, catalogos, redundante, onAlternar, onRevogar }) {
+  const oQue = descreverConcessao(acesso, catalogos);
+
   return (
     <li
       className={`concessao ${redundante ? "is-redundante" : ""}`}
       title={redundante ? "Não muda nada: já existe uma concessão mais ampla" : undefined}
     >
-      <span className={`chip chip--${acesso.podeEditar ? "edicao" : "leitura"}`}>
+      {/* O poder alterna no próprio lugar. Antes, trocar "edita" por "só vê"
+          exigia remover e conceder de novo a mesma combinação. */}
+      <button
+        type="button"
+        className={`chip chip--${acesso.podeEditar ? "edicao" : "leitura"} chip--acao`}
+        onClick={() => onAlternar(acesso)}
+        title={acesso.podeEditar ? "Passar para somente leitura" : "Permitir lançar"}
+      >
         {acesso.podeEditar ? "edita" : "só vê"}
-      </span>
-      <span className="concessao__texto">{descreverConcessao(acesso, catalogos)}</span>
-      <button type="button" className="botao-texto" onClick={() => onRevogar(acesso.id)}>
-        Remover
+      </button>
+
+      <span className="concessao__texto">{oQue}</span>
+
+      {/* `×` em vez da palavra: com uma dúzia de concessões, doze "Remover"
+          competem com o conteúdo. O nome acessível diz de qual se trata —
+          doze botões chamados "Remover" são indistinguíveis por leitor de tela. */}
+      <button
+        type="button"
+        className="concessao__remover"
+        aria-label={`Remover permissão ${oQue}`}
+        title={`Remover permissão ${oQue}`}
+        onClick={() => onRevogar(acesso.id)}
+      >
+        <Icone nome="close" tamanho={13} />
       </button>
     </li>
   );
@@ -242,6 +263,9 @@ export default function TelaUsuarios({ filiais, centros, sessao, onVoltar }) {
   const [erro, setErro] = useState("");
   const [aberto, setAberto] = useState(null);
   const [filtro, setFiltro] = useState("");
+  // Remover derruba a sessão aberta da pessoa na hora. Um clique de distância é
+  // pouco para uma ação que tira alguém do sistema no meio do trabalho.
+  const [aRemover, setARemover] = useState(null);
 
   const catalogos = useMemo(
     () => ({
@@ -387,7 +411,7 @@ export default function TelaUsuarios({ filiais, centros, sessao, onVoltar }) {
                     className="botao-texto botao-texto--perigo"
                     disabled={euMesmo}
                     title={euMesmo ? "Você não pode remover o seu próprio acesso" : undefined}
-                    onClick={() => executar(api.removerUsuario(usuario.login))}
+                    onClick={() => setARemover(usuario)}
                   >
                     Remover
                   </button>
@@ -428,6 +452,13 @@ export default function TelaUsuarios({ filiais, centros, sessao, onVoltar }) {
                               acesso={acesso}
                               catalogos={catalogos}
                               redundante={redundantes.has(acesso.id)}
+                              onAlternar={(alvo) =>
+                                executar(
+                                  api.concederAcessos(usuario.login, [
+                                    { ...alvo, podeEditar: !alvo.podeEditar },
+                                  ])
+                                )
+                              }
                               onRevogar={(id) => executar(api.revogarAcesso(usuario.login, id))}
                             />
                           ))}
@@ -445,6 +476,28 @@ export default function TelaUsuarios({ filiais, centros, sessao, onVoltar }) {
             </section>
           );
         })}
+
+        {aRemover ? (
+          <ModalConfirmacao
+            titulo="Remover acesso ao portal"
+            rotuloConfirmar="Remover acesso"
+            mensagem={
+              <>
+                <strong>{aRemover.nome}</strong> perde o acesso ao Planejamento Orçamentário e a
+                sessão dele é encerrada na hora
+                {aRemover.acessos.length
+                  ? `, junto com ${aRemover.acessos.length} ${aRemover.acessos.length === 1 ? "permissão" : "permissões"}`
+                  : ""}
+                . O cadastro continua para os outros portais.
+              </>
+            }
+            onConfirmar={() => {
+              executar(api.removerUsuario(aRemover.login));
+              setARemover(null);
+            }}
+            onFechar={() => setARemover(null)}
+          />
+        ) : null}
 
         {!visiveis.length ? (
           <p className="sem-contas">

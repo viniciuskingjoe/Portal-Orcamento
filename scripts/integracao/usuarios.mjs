@@ -110,6 +110,20 @@ try {
   lista = await (await req("/api/usuarios", admin)).json();
   alvo = lista.find((u) => u.login === ALVO);
 
+  // Alternar o poder é reconceder a MESMA combinação com o inverso: a linha é
+  // atualizada, não duplicada, e o id se mantém.
+  const antes = alvo.acessos[0];
+  await req(`/api/usuarios/${ALVO}/acessos`, {
+    ...admin, metodo: "POST",
+    corpo: { acessos: [{ modulo: antes.modulo ?? "", filial: antes.filial ?? "",
+                         centro: antes.centro ?? "", podeEditar: !antes.podeEditar }] },
+  });
+  lista = await (await req("/api/usuarios", admin)).json();
+  alvo = lista.find((u) => u.login === ALVO);
+  ok(alvo.acessos.length === 1 && alvo.acessos[0].id === antes.id,
+     "alternar edita/só vê atualiza a mesma linha");
+  ok(alvo.acessos[0].podeEditar === !antes.podeEditar, "e o poder inverteu");
+
   // A sessão do alvo já enxerga a permissão nova.
   const suaSessao = await (await req("/api/sessao", comum)).json();
   ok(suaSessao.acessos.length === 1, "a permissão chega na sessão de quem a recebeu");

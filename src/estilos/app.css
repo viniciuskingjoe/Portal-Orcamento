@@ -3336,3 +3336,40 @@ dialog::backdrop {
   gap: 8px;
   flex-wrap: wrap;
 }
+
+/* O chip da concessão virou botão: alterna edita/só vê no lugar, em vez de
+   obrigar a remover e conceder de novo a mesma combinação. */
+.chip--acao {
+  border: 0;
+  cursor: pointer;
+  font-family: inherit;
+  transition: 0.14s ease;
+}
+
+.chip--acao:hover {
+  filter: brightness(1.15);
+  box-shadow: inset 0 0 0 1px currentColor;
+}
+
+.concessao__remover {
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  background: none;
+  color: var(--muted);
+  cursor: pointer;
+  transition: 0.14s ease;
+}
+
+.concessao:hover .concessao__remover {
+  color: var(--text-soft);
+}
+
+.concessao__remover:hover {
+  background: var(--danger-soft);
+  color: var(--danger);
+}
