@@ -32,6 +32,15 @@ import {
   salvarPlano,
   salvarVisao,
 } from "./repositorio.js";
+import {
+  alterarUsuario,
+  concederAcesso,
+  darAcesso,
+  listarUsuarios,
+  removerAcesso,
+  revogarAcesso,
+} from "./usuarios.js";
+import { buscarUsuarios } from "./ldap.js";
 import { podeEditar } from "../src/dados/permissoes.js";
 
 // Quem não pode editar nada não passa nas rotas de escrita. A checagem fina,
@@ -265,6 +274,77 @@ app.put(
 
     await gravarPlanejado(req.params.id, celulas, req.sessao.login);
     res.json({ ok: true, gravadas: celulas.length });
+  })
+);
+
+// --------------------------------------------------------------------------
+// Administração de usuários
+//
+// Tudo aqui é de admin. Nenhuma rota cria senha: quem autentica é o AD.
+// --------------------------------------------------------------------------
+
+app.get(
+  "/api/usuarios",
+  exigirAdmin,
+  rota(async (_req, res) => res.json(await listarUsuarios()))
+);
+
+// Busca no diretório para achar quem cadastrar. Usa a conta de serviço, nunca a
+// de quem está logado.
+app.get(
+  "/api/ad/usuarios",
+  exigirAdmin,
+  rota(async (req, res) => res.json(await buscarUsuarios(req.query.termo)))
+);
+
+app.post(
+  "/api/usuarios",
+  exigirAdmin,
+  rota(async (req, res) => {
+    const login = await darAcesso(req.body ?? {}, req.sessao.login);
+    res.json({ ok: true, login });
+  })
+);
+
+app.put(
+  "/api/usuarios/:login",
+  exigirAdmin,
+  rota(async (req, res) => {
+    await alterarUsuario(req.params.login, req.body ?? {}, req.sessao.login);
+    res.json({ ok: true });
+  })
+);
+
+app.delete(
+  "/api/usuarios/:login",
+  exigirAdmin,
+  rota(async (req, res) => {
+    // Tirar o próprio acesso deixaria o portal sem quem administre.
+    if (req.params.login === req.sessao.login) {
+      const erro = new Error("Você não pode remover o seu próprio acesso.");
+      erro.status = 400;
+      throw erro;
+    }
+    await removerAcesso(req.params.login, req.sessao.login);
+    res.json({ ok: true });
+  })
+);
+
+app.post(
+  "/api/usuarios/:login/acessos",
+  exigirAdmin,
+  rota(async (req, res) => {
+    await concederAcesso(req.params.login, req.body ?? {}, req.sessao.login);
+    res.json({ ok: true });
+  })
+);
+
+app.delete(
+  "/api/usuarios/:login/acessos/:id",
+  exigirAdmin,
+  rota(async (req, res) => {
+    await revogarAcesso(req.params.login, req.params.id);
+    res.json({ ok: true });
   })
 );
 

@@ -69,6 +69,8 @@ export default function TelaOrcamento({
   filiaisIgnoradas,
   filtros,
   onAlterarFiltro,
+  escopo,
+  podeLancar = true,
   linhas,
   carregandoRealizado,
   edicao,
@@ -99,13 +101,16 @@ export default function TelaOrcamento({
   // módulo percentual, também uma receita: o mesmo percentual vale valores
   // diferentes conforme a receita sobre a qual incide.
   const podeEditar =
+    podeLancar &&
     filtros.filial !== "total" &&
     filtros.conta !== TODAS_AS_CONTAS &&
     contasDisponiveis.length > 0 &&
     (!usaCentro || filtros.centro !== SEM_CENTRO) &&
     (!percentual || (filtros.receita !== TODAS_AS_CONTAS && receitas.length > 0));
 
-  const motivo = !contasDisponiveis.length
+  const motivo = !podeLancar && filtros.filial !== "total"
+    ? "Você tem acesso de leitura nesta combinação — os valores aparecem, mas não podem ser alterados."
+    : !contasDisponiveis.length
     ? "Nenhuma conta configurada para esta combinação. Ajuste a visão."
     : percentual && !receitas.length
       ? "Nenhuma conta de receita configurada nesta filial. Ajuste Receita de vendas na visão."
@@ -204,6 +209,14 @@ export default function TelaOrcamento({
             <span className={`chip chip--${grupo?.chip ?? "receita"}`}>{modulo.grupo}</span>
           </output>
         </label>
+
+        {/* O recorte de quem está vendo, quando não é tudo. */}
+        {escopo ? (
+          <label>
+            <span>Seu acesso</span>
+            <output className="campo-fixo">{escopo}</output>
+          </label>
+        ) : null}
 
         {/* A dica fecha a linha dos filtros: é sobre o que falta escolher neles. */}
         <DicaEdicao pronta={podeEditar}>{motivo}</DicaEdicao>

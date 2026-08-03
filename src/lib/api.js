@@ -96,6 +96,19 @@ export const api = {
   salvarPlano: (plano) =>
     buscar(`/api/planos/${encodeURIComponent(plano.id)}`, null, { metodo: "PUT", corpo: plano }),
   excluirPlano: (id) => buscar(`/api/planos/${encodeURIComponent(id)}`, null, { metodo: "DELETE" }),
+  // --- usuários (admin) ----------------------------------------------------
+  usuarios: () => buscar("/api/usuarios"),
+  buscarNoAd: (termo) => buscar("/api/ad/usuarios", { termo }),
+  darAcesso: (usuario) => buscar("/api/usuarios", null, { corpo: usuario }),
+  alterarUsuario: (login, mudanca) =>
+    buscar(`/api/usuarios/${encodeURIComponent(login)}`, null, { metodo: "PUT", corpo: mudanca }),
+  removerUsuario: (login) =>
+    buscar(`/api/usuarios/${encodeURIComponent(login)}`, null, { metodo: "DELETE" }),
+  concederAcesso: (login, acesso) =>
+    buscar(`/api/usuarios/${encodeURIComponent(login)}/acessos`, null, { corpo: acesso }),
+  revogarAcesso: (login, id) =>
+    buscar(`/api/usuarios/${encodeURIComponent(login)}/acessos/${id}`, null, { metodo: "DELETE" }),
+
   salvarPlanejado: (planoId, celulas) =>
     buscar(`/api/planos/${encodeURIComponent(planoId)}/planejado`, null, {
       metodo: "PUT",

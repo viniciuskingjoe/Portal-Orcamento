@@ -16,6 +16,7 @@ import TelaVisaoModulo from "./telas/TelaVisaoModulo.jsx";
 import TelaDre from "./telas/TelaDre.jsx";
 import TelaOrcamento, { TODAS_AS_CONTAS } from "./telas/TelaOrcamento.jsx";
 import TelaLogin from "./telas/TelaLogin.jsx";
+import TelaUsuarios from "./telas/TelaUsuarios.jsx";
 
 import { EMPRESA, MESES } from "./dados/seeds.js";
 import { ehModulo, modulo as definicaoDoModulo } from "./dados/modulos.js";
@@ -40,6 +41,13 @@ import {
   usaCentroDeCusto,
 } from "./dados/visao.js";
 import { montarDre } from "./dados/dre.js";
+import {
+  centrosPermitidos,
+  filiaisPermitidas,
+  modulosPermitidos,
+  podeLancar,
+  resumirEscopo,
+} from "./dados/permissoes.js";
 import { conta as buscarConta } from "./dados/contas.js";
 import { filiaisForaDoUso } from "./dados/realizado.js";
 import { contasDoMapeamento, temMapeamentoPadrao } from "./dados/mapeamentoPadrao.js";
@@ -130,10 +138,25 @@ function PlanejamentoOrcamentario({ sessao, onSair }) {
   // Filiais que o portal usa. `null` = ainda não escolhidas, o que vale por todas.
   const filiaisAtivas = useMemo(() => {
     const escolhidas = configuracao.filiaisAtivas;
-    if (!escolhidas) return erp.filiais;
-    const marcadas = new Set(escolhidas);
-    return erp.filiais.filter((filial) => marcadas.has(filial.id));
-  }, [erp.filiais, configuracao.filiaisAtivas]);
+    const emUso = escolhidas
+      ? erp.filiais.filter((filial) => new Set(escolhidas).has(filial.id))
+      : erp.filiais;
+    // Escopo por cima da configuração: mostrar filial que não se pode ver já é
+    // vazamento — o nome das filiais diz o tamanho da operação.
+    return filiaisPermitidas(sessao, emUso, { modulo: moduloDaTela?.id });
+  }, [erp.filiais, configuracao.filiaisAtivas, sessao, moduloDaTela]);
+
+  const centrosPermitidosNaTela = useMemo(
+    () => centrosPermitidos(sessao, erp.centros, { modulo: moduloDaTela?.id }),
+    [sessao, erp.centros, moduloDaTela]
+  );
+
+  // O que a pessoa está vendo, quando não é tudo. Sem isto o DRE de quem tem um
+  // centro só não bate com o da empresa e vira "erro de cálculo".
+  const escopo = useMemo(
+    () => resumirEscopo(sessao, { filiais: erp.filiais, centros: erp.centros }),
+    [sessao, erp.filiais, erp.centros]
+  );
 
   // A visão contábil em uso depende de onde se está: montando uma visão ou
   // orçando um plano.
@@ -765,6 +788,17 @@ function PlanejamentoOrcamentario({ sessao, onSair }) {
       );
     }
 
+    if (tela === "usuarios") {
+      return exigirErp(
+        <TelaUsuarios
+          filiais={erp.filiais}
+          centros={erp.centros}
+          sessao={sessao}
+          onVoltar={voltar}
+        />
+      );
+    }
+
     if (TELAS_ERP.has(tela)) {
       return exigirErp(
         <TelaListaErp
@@ -798,7 +832,7 @@ function PlanejamentoOrcamentario({ sessao, onSair }) {
           modulo={moduloDaTela}
           catalogo={contas.catalogo}
           filiais={filiaisAtivas}
-          centros={erp.centros}
+          centros={centrosPermitidosNaTela}
           contasDisponiveis={contasDisponiveis}
           receitasDisponiveis={receitasDisponiveis}
           totaisDasReceitas={totaisDasReceitas}
@@ -807,6 +841,13 @@ function PlanejamentoOrcamentario({ sessao, onSair }) {
           onAlterarFiltro={alterarFiltro}
           linhas={linhasOrcamento}
           carregandoRealizado={realizado.carregando || contas.carregando}
+          escopo={escopo}
+          podeLancar={podeLancar(sessao, {
+            modulo: moduloDaTela.id,
+            filial: filtros.filial,
+            centro: filtros.centro,
+            usaCentro: usaCentroDeCusto(visaoDoPlano, moduloDaTela.id),
+          })}
           edicao={edicao}
           onVoltar={voltar}
         />
@@ -850,6 +891,7 @@ function PlanejamentoOrcamentario({ sessao, onSair }) {
         }
         planoAtivo={planoAtivo}
         visaoDoPlano={visaoDoPlano}
+        modulosVisiveis={(lista) => modulosPermitidos(sessao, lista)}
         sessao={sessao}
         onSair={onSair}
         tela={tela}

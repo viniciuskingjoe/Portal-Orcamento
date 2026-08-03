@@ -32,6 +32,7 @@ export default function Sidebar({
   badgeConfiguracoes,
   planoAtivo,
   visaoDoPlano,
+  modulosVisiveis,
   tela,
   onNavegar,
   tema,
@@ -39,7 +40,9 @@ export default function Sidebar({
   sessao,
   onSair,
 }) {
-  const modulos = visaoDoPlano ? modulosDaVisao(visaoDoPlano) : [];
+  const configurados = visaoDoPlano ? modulosDaVisao(visaoDoPlano) : [];
+  // Módulo que a pessoa não pode ver não aparece na navegação.
+  const modulos = modulosVisiveis ? modulosVisiveis(configurados) : configurados;
 
   return (
     <aside className="sidebar">
@@ -84,6 +87,16 @@ export default function Sidebar({
           ativo={tela === "configuracoes" || tela === "filiais" || tela === "centros"}
           onNavegar={onNavegar}
         />
+        {/* Só admin: quem não administra não precisa saber que a tela existe. */}
+        {sessao?.admin ? (
+          <ItemNav
+            id="usuarios"
+            titulo="Usuários"
+            icone="users"
+            ativo={tela === "usuarios"}
+            onNavegar={onNavegar}
+          />
+        ) : null}
 
         {planoAtivo ? (
           <>
