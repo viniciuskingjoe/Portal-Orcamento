@@ -1,6 +1,7 @@
 import Cabecalho from "../componentes/Cabecalho.jsx";
 import TabelaOrcamento from "../componentes/TabelaOrcamento.jsx";
 import Icone from "../componentes/Icone.jsx";
+import Seletor from "../componentes/Seletor.jsx";
 import { Carregando } from "../componentes/Estados.jsx";
 import { DicaEdicao } from "../componentes/FiltrosOrcamento.jsx";
 import { conta as buscarConta } from "../dados/contas.js";
@@ -185,19 +186,18 @@ export default function TelaOrcamento({
           {/* "Total" é o total das filiais EM USO, não do ERP inteiro. Dizer
               "todas" faria o número parecer errado contra qualquer relatório que
               não filtre filial. */}
-          <select
-            value={filtros.filial}
-            onChange={(evento) => onAlterarFiltro({ filial: evento.target.value })}
-          >
-            <option value="total">
-              Total — {filiais.length} {filiais.length === 1 ? "filial em uso" : "filiais em uso"}
-            </option>
-            {filiais.map((filial) => (
-              <option value={filial.id} key={filial.id}>
-                {filial.nome}
-              </option>
-            ))}
-          </select>
+          <Seletor
+            valor={filtros.filial}
+            opcoes={[
+              {
+                valor: "total",
+                rotulo: `Total — ${filiais.length} ${filiais.length === 1 ? "filial em uso" : "filiais em uso"}`,
+              },
+              ...filiais.map((filial) => ({ valor: filial.id, rotulo: filial.nome })),
+            ]}
+            aoEscolher={(valor) => onAlterarFiltro({ filial: valor })}
+            buscaVazia="Nenhuma filial com esse nome."
+          />
         </label>
 
         {/* O ano é o do plano — não há o que escolher, então o campo ocupa só o

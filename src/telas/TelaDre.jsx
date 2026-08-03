@@ -1,5 +1,6 @@
 import Cabecalho from "../componentes/Cabecalho.jsx";
 import Icone from "../componentes/Icone.jsx";
+import Seletor from "../componentes/Seletor.jsx";
 import { Carregando } from "../componentes/Estados.jsx";
 import { formatarMoeda, formatarPercentual } from "../lib/formato.js";
 
@@ -104,19 +105,18 @@ export default function TelaDre({
       <div className="filtros-orcamento">
         <label>
           <span>Filial</span>
-          <select
-            value={filtroFilial}
-            onChange={(evento) => onAlterarFiltroFilial(evento.target.value)}
-          >
-            <option value="total">
-              Total — {filiais.length} {filiais.length === 1 ? "filial em uso" : "filiais em uso"}
-            </option>
-            {filiais.map((filial) => (
-              <option value={filial.id} key={filial.id}>
-                {filial.nome}
-              </option>
-            ))}
-          </select>
+          <Seletor
+            valor={filtroFilial}
+            opcoes={[
+              {
+                valor: "total",
+                rotulo: `Total — ${filiais.length} ${filiais.length === 1 ? "filial em uso" : "filiais em uso"}`,
+              },
+              ...filiais.map((filial) => ({ valor: filial.id, rotulo: filial.nome })),
+            ]}
+            aoEscolher={onAlterarFiltroFilial}
+            buscaVazia="Nenhuma filial com esse nome."
+          />
         </label>
 
         {/* O ano é o do plano — não há o que escolher, então o campo ocupa só o

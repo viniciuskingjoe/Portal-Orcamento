@@ -1143,6 +1143,14 @@ button {
   min-width: 260px;
 }
 
+/* Nos filtros o seletor ocupa o lugar do antigo select: mesma altura, mesma
+   largura mínima. */
+.filtros-orcamento .seletor__campo {
+  min-height: 40px;
+  border-radius: var(--radius-md);
+  font-size: 13.5px;
+}
+
 /* O ano não é editável e cabe em quatro dígitos. Reservar a largura de um select
    para ele abria um vão no meio da linha. */
 .filtros-orcamento label.filtro-ano {
@@ -3072,4 +3080,159 @@ dialog::backdrop {
     grid-template-columns: 1fr;
     gap: 8px;
   }
+}
+
+/* ==========================================================================
+   Seletor com busca
+   ========================================================================== */
+
+.seletor {
+  position: relative;
+  min-width: 190px;
+}
+
+.seletor__campo {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+  min-height: 36px;
+  padding: 0 10px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--text);
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+  transition: 0.14s ease;
+}
+
+.seletor__campo > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.seletor__campo:hover:not(:disabled) {
+  border-color: var(--accent);
+}
+
+.seletor__campo:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.seletor.is-aberto .seletor__campo {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
+/* A seta acompanha o estado, como no nativo — só que apontando para onde o
+   painel realmente vai abrir. */
+.seletor__campo svg {
+  flex: 0 0 auto;
+  color: var(--muted);
+  transform: rotate(90deg);
+  transition: transform 0.14s ease;
+}
+
+.seletor.is-aberto .seletor__campo svg {
+  transform: rotate(-90deg);
+}
+
+.seletor__vazio {
+  color: var(--muted);
+}
+
+/* SEMPRE para baixo: é a razão de este componente existir. */
+.seletor__painel {
+  position: absolute;
+  z-index: 30;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  min-width: 240px;
+  padding: 6px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  box-shadow: var(--shadow-panel), 0 12px 28px rgb(0 0 0 / 0.28);
+}
+
+.seletor__busca {
+  width: 100%;
+  min-height: 32px;
+  margin-bottom: 6px;
+  padding: 0 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface-soft);
+  color: var(--text);
+  font-size: 13px;
+}
+
+.seletor__busca:focus-visible {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.seletor__lista {
+  max-height: 260px;
+  margin: 0;
+  padding: 0;
+  overflow-y: auto;
+  list-style: none;
+}
+
+.seletor__opcao {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 7px 9px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: none;
+  color: var(--text-soft);
+  font-size: 12.5px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.seletor__opcao > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.seletor__opcao code {
+  color: var(--accent);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Destaque é do teclado E do mouse: as duas navegações apontam para o mesmo
+   item, então não existe "dois selecionados" na tela. */
+.seletor__opcao.is-destacada {
+  background: var(--surface-hover);
+  color: var(--text);
+}
+
+.seletor__opcao.is-escolhida {
+  color: var(--accent);
+  font-weight: 650;
+}
+
+.seletor__opcao.is-escolhida code {
+  color: inherit;
+}
+
+.seletor__vazio-lista {
+  padding: 10px;
+  color: var(--muted);
+  font-size: 12.5px;
+  text-align: center;
 }

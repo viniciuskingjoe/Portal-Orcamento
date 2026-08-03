@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 
 import Cabecalho from "../componentes/Cabecalho.jsx";
 import Icone from "../componentes/Icone.jsx";
+import Seletor from "../componentes/Seletor.jsx";
 import { AvisoErro, Carregando } from "../componentes/Estados.jsx";
 import { MODULOS } from "../dados/modulos.js";
 import { descreverConcessao, resumirAcessos } from "../dados/permissoes.js";
@@ -81,38 +82,44 @@ function NovaConcessao({ catalogos, onConceder }) {
       >
         <label>
           <span>Módulo</span>
-          <select value={modulo} onChange={(e) => setModulo(e.target.value)}>
-            <option value={TODOS}>todos</option>
-            {catalogos.modulos.map((item) => (
-              <option key={item.id} value={item.id}>
-                {item.nome}
-              </option>
-            ))}
-          </select>
+          <Seletor
+            valor={modulo}
+            opcoes={[
+              { valor: TODOS, rotulo: "todos os módulos" },
+              ...catalogos.modulos.map((item) => ({ valor: item.id, rotulo: item.nome })),
+            ]}
+            aoEscolher={setModulo}
+          />
         </label>
 
         <label>
           <span>Filial</span>
-          <select value={filial} onChange={(e) => setFilial(e.target.value)}>
-            <option value={TODOS}>todas</option>
-            {catalogos.filiais.map((item) => (
-              <option key={item.id} value={item.id}>
-                {item.nome}
-              </option>
-            ))}
-          </select>
+          <Seletor
+            valor={filial}
+            opcoes={[
+              { valor: TODOS, rotulo: "todas as filiais" },
+              ...catalogos.filiais.map((item) => ({ valor: item.id, rotulo: item.nome })),
+            ]}
+            aoEscolher={setFilial}
+            buscaVazia="Nenhuma filial com esse nome."
+          />
         </label>
 
         <label>
           <span>Centro de custo</span>
-          <select value={centro} onChange={(e) => setCentro(e.target.value)}>
-            <option value={TODOS}>todos</option>
-            {catalogos.centros.map((item) => (
-              <option key={item.id} value={item.id}>
-                {item.id} — {item.nome}
-              </option>
-            ))}
-          </select>
+          <Seletor
+            valor={centro}
+            opcoes={[
+              { valor: TODOS, rotulo: "todos os centros" },
+              ...catalogos.centros.map((item) => ({
+                valor: item.id,
+                rotulo: item.nome,
+                detalhe: item.id,
+              })),
+            ]}
+            aoEscolher={setCentro}
+            buscaVazia="Nenhum centro com esse nome."
+          />
         </label>
 
         <label className="check-inline">
