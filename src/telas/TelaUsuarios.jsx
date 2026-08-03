@@ -257,9 +257,9 @@ function BuscaNoAd({ jaTem, onAdicionar }) {
   );
 }
 
-// A senha aparece UMA vez. O banco guarda só o hash, então não há tela que a
-// mostre de novo — o caminho é gerar outra. O aviso diz isso antes de a pessoa
-// fechar, porque descobrir depois custa uma redefinição.
+// Confirma qual senha entregar. É a padrão da empresa, então não é segredo que
+// se perde ao fechar — o que o aviso precisa dizer é que a conta fica aberta a
+// quem souber a padrão até a pessoa entrar e trocar.
 function SenhaGerada({ dados, onFechar }) {
   const [copiado, setCopiado] = useState(false);
 
@@ -280,8 +280,9 @@ function SenhaGerada({ dados, onFechar }) {
         <strong>Senha de {dados.nome ?? dados.login}</strong>
         <code className="senha-gerada__valor">{dados.senha}</code>
         <small>
-          Anote e entregue agora. Ela não aparece de novo — o portal guarda só o
-          hash. {dados.login} vai ter que trocá-la no primeiro acesso.
+          É a senha padrão da empresa. {dados.login} vai ser obrigado a trocá-la
+          no primeiro acesso — e até lá a conta está aberta a qualquer um que
+          saiba a padrão. Avise agora.
         </small>
       </div>
       <div className="senha-gerada__acoes">
@@ -348,6 +349,7 @@ export default function TelaUsuarios({ filiais, centros, sessao, onVoltar }) {
     : usuarios;
 
   const semPermissao = usuarios.filter((usuario) => !usuario.admin && !usuario.acessos.length).length;
+  const comSenhaPadrao = usuarios.filter((usuario) => usuario.senhaPadrao);
   const jaTem = useMemo(() => new Set(usuarios.map((usuario) => usuario.login)), [usuarios]);
 
   if (carregando) {
@@ -385,6 +387,23 @@ export default function TelaUsuarios({ filiais, centros, sessao, onVoltar }) {
 
       {senhaGerada ? (
         <SenhaGerada dados={senhaGerada} onFechar={() => setSenhaGerada(null)} />
+      ) : null}
+
+      {/* Enquanto alguém está com a senha padrão, a conta dele está aberta a
+          quem souber a padrão. Fica no topo, junto com o outro aviso, para ser
+          cobrado em vez de ficar aberto em silêncio. */}
+      {comSenhaPadrao.length ? (
+        <p className="modulo-aviso modulo-aviso--atencao">
+          <Icone nome="chave" tamanho={16} />
+          <span>
+            {comSenhaPadrao.length === 1
+              ? `${comSenhaPadrao[0].nome} ainda está com a senha padrão`
+              : `${comSenhaPadrao.length} usuários ainda estão com a senha padrão`}
+            {" "}e não {comSenhaPadrao.length === 1 ? "entrou" : "entraram"} para trocar. Até lá,{" "}
+            {comSenhaPadrao.length === 1 ? "essa conta está aberta" : "essas contas estão abertas"} a
+            quem souber a senha da empresa.
+          </span>
+        </p>
       ) : null}
 
       {/* Entrar e não ver nada é indistinguível de estar quebrado. Quem
@@ -437,6 +456,14 @@ export default function TelaUsuarios({ filiais, centros, sessao, onVoltar }) {
 
                 <span className="cartao-usuario__marcas">
                   {usuario.admin ? <span className="chip chip--receita">admin</span> : null}
+                  {usuario.senhaPadrao ? (
+                    <span
+                      className="chip chip--despesa"
+                      title="Ainda não entrou para trocar a senha padrão. Até lá, quem souber a padrão entra como esta pessoa."
+                    >
+                      senha padrão
+                    </span>
+                  ) : null}
                   {usuario.situacao !== "ativo" ? (
                     <span className="chip chip--despesa">inativo</span>
                   ) : null}

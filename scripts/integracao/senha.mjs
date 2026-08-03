@@ -7,7 +7,7 @@
 process.env.API_PORT = "3417";
 const BASE = "http://127.0.0.1:3417";
 const { query, encerrar } = await import("../../server/sqlserver.js");
-const { gerarHash } = await import("../../server/senha.js");
+const { SENHA_PADRAO, gerarHash } = await import("../../server/senha.js");
 
 const ADMIN = "__t.senha.adm";
 const ALVO = "__t.senha.alvo";
@@ -71,7 +71,7 @@ try {
   const criado = await (
     await req("/api/usuarios", { ...admin, metodo: "POST", corpo: { login: ALVO, nome: "Alvo de Teste" } })
   ).json();
-  ok(typeof criado.senha === "string" && criado.senha.length >= 10, "cadastrar devolve a primeira senha");
+  ok(criado.senha === SENHA_PADRAO, "cadastrar entrega a senha padrão da empresa");
 
   const guardado = await query(
     "SELECT SENHA_HASH, TROCAR_SENHA FROM dbo.KING_IDENTIDADE_USUARIO WHERE LOGIN = @l", { l: ALVO }
@@ -133,7 +133,7 @@ try {
 
   // --- redefinição pelo administrador --------------------------------------
   const nova = await (await req(`/api/usuarios/${ALVO}/senha`, { ...admin, metodo: "POST" })).json();
-  ok(typeof nova.senha === "string", "admin gera nova senha");
+  ok(nova.senha === SENHA_PADRAO, "admin devolve a conta para a senha padrão");
   ok(
     (await req("/api/login", { metodo: "POST", corpo: { usuario: ALVO, senha: "Chuva-Azul-2026" } })).status === 401,
     "a senha que a pessoa tinha escolhido para de valer"

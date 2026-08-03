@@ -128,6 +128,29 @@ export function criticarSenha(senha, { login, nome } = {}) {
 // e confundir zero com O e o jeito mais comum de "a senha nao funciona".
 // --------------------------------------------------------------------------
 
+// --------------------------------------------------------------------------
+// Senha padrão
+//
+// Uma senha só, conhecida internamente, entregue a todo mundo. Foi decisão do
+// dono do portal, pela praticidade de não ter que repassar uma senha diferente
+// para cada pessoa.
+//
+// O preço, para ficar registrado: ela vale da concessão do acesso até o primeiro
+// login. Nessa janela, quem souber a senha padrão entra COMO a pessoa e define a
+// senha dela — ficando com a conta. Não é o estranho da internet (o Cloudflare
+// Access barra antes), é quem já está dentro. Por isso:
+//
+//   - `TROCAR_SENHA` nasce ligado e o portal fica trancado até a troca, o que
+//     encurta a janela ao máximo que dá;
+//   - a tela de Usuários mostra quem ainda não trocou, para a janela ser vista
+//     e cobrada em vez de ficar aberta em silêncio;
+//   - a senha padrão é recusada como senha NOVA, então ninguém a mantém.
+//
+// `SENHA_PADRAO` no .env troca o valor sem mexer no código.
+// --------------------------------------------------------------------------
+
+export const SENHA_PADRAO = process.env.SENHA_PADRAO?.trim() || "king@123";
+
 const ALFABETO = "abcdefghjkmnpqrstuvwxyz23456789";
 const BLOCOS = 4;
 const POR_BLOCO = 4;

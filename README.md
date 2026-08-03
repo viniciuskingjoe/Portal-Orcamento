@@ -229,12 +229,28 @@ Quando o login não existe, a senha é conferida assim mesmo, contra um hash
 descartável. Sem isso a resposta volta na hora para login inexistente e depois de
 ~100ms para login real, e esse intervalo entrega a lista de quem trabalha aqui.
 
-**Primeira senha.** Sorteada pelo portal ao conceder acesso e mostrada **uma
-única vez** ao administrador — não há senha padrão igual para todos, que viraria
-a chave-mestra no dia em que alguém a repassasse. O alfabeto não tem `0/O/1/l/I`,
-porque ela vai ser lida em voz alta. `TROCAR_SENHA` nasce ligado e o servidor
-recusa **todas** as outras rotas com **428** enquanto a troca não acontece: não
-adianta ignorar o formulário.
+**Primeira senha.** É a **senha padrão da empresa** (`SENHA_PADRAO` no `.env`),
+entregue a todo mundo — decisão de quem opera o portal, pela praticidade de não
+repassar uma senha diferente para cada pessoa.
+
+O que isso custa, para ficar registrado: a senha padrão vale da concessão do
+acesso até o primeiro login, e nessa janela **quem a conhece entra como aquela
+pessoa** e define a senha dela, ficando com a conta. Não é o estranho da internet
+— o Cloudflare Access barra antes —, é quem já está dentro. O que fecha a janela:
+
+- `TROCAR_SENHA` nasce ligado e o servidor recusa **todas** as outras rotas com
+  **428** até a troca. Não adianta ignorar o formulário e seguir usando.
+- A tela de Usuários mostra quem ainda não trocou, com etiqueta no cartão e aviso
+  no topo — a janela fica visível e cobrável em vez de aberta em silêncio.
+- A senha padrão é recusada como senha **nova**, com ou sem enfeite no fim
+  (`king@1230`, `king@123!!`), então ninguém fica com ela.
+
+Cada hash usa sal próprio, mesmo sendo a mesma senha: hashes iguais denunciariam
+quem ainda está com a padrão a quem conseguisse ler a tabela.
+
+Para uma conta que não deve ficar aberta a quem conhece a padrão — a de um
+administrador, por exemplo — `scripts/definir-senha.mjs <login> --sortear` gera
+uma aleatória, num alfabeto sem `0/O/1/l/I` porque ela vai ser lida em voz alta.
 
 **Não há "esqueci a senha"**, de propósito. Quem confirma identidade é um
 administrador pela tela de Usuários (`Nova senha`), não um formulário que decide
@@ -253,7 +269,12 @@ pela tela de Usuários. `PORTAL_ADMINS` no `.env` marca quem é administrador, m
 não cria senha — o primeiro acesso de todos vem de:
 
 ```bash
-node --env-file=.env scripts/definir-senha.mjs <login>
+# migrando do login por AD: todos estão sem senha e ninguém consegue entrar
+node --env-file=.env scripts/definir-senha.mjs --todos
+
+# uma pessoa só
+node --env-file=.env scripts/definir-senha.mjs <login>            # senha padrão
+node --env-file=.env scripts/definir-senha.mjs <login> --sortear  # aleatória
 ```
 
 Sem isso ninguém entra: a tela que criaria a primeira senha exige estar logado.

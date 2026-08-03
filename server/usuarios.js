@@ -1,6 +1,6 @@
 import { query, transaction } from "./sqlserver.js";
 import { normalizarLogin } from "./ldap.js";
-import { gerarHash, sortearSenha } from "./senha.js";
+import { SENHA_PADRAO, gerarHash } from "./senha.js";
 
 // ============================================================================
 // ADMINISTRAÇÃO DE USUÁRIOS
@@ -10,7 +10,8 @@ import { gerarHash, sortearSenha } from "./senha.js";
 // mexe no Fluxo Fiscal nem no Modelagem.
 //
 // O AD serve para descobrir QUEM cadastrar; quem autentica é o portal, com
-// senha própria. A primeira senha é sorteada aqui e mostrada uma única vez.
+// senha própria. A primeira senha é a padrão da empresa, e o portal fica
+// trancado até a pessoa trocá-la — ver `SENHA_PADRAO` em server/senha.js.
 // ============================================================================
 
 const APP = "orcamento";
@@ -18,7 +19,7 @@ const APP = "orcamento";
 export async function listarUsuarios() {
   const [usuarios, acessos] = await Promise.all([
     query(
-      `SELECT u.LOGIN, u.NOME, u.EMAIL, u.SITUACAO, u.ULTIMO_LOGIN,
+      `SELECT u.LOGIN, u.NOME, u.EMAIL, u.SITUACAO, u.ULTIMO_LOGIN, u.TROCAR_SENHA,
               a.ADMIN, a.SITUACAO AS SITUACAO_APP
          FROM dbo.KING_IDENTIDADE_USUARIO AS u
          INNER JOIN dbo.KING_IDENTIDADE_ACESSO AS a
@@ -40,6 +41,9 @@ export async function listarUsuarios() {
     inativoNoCadastro: linha.SITUACAO !== "ativo",
     admin: linha.ADMIN === true,
     ultimoLogin: linha.ULTIMO_LOGIN,
+    // Ainda com a senha padrão. Enquanto for verdade, a conta está aberta para
+    // quem souber a senha da empresa — quem administra precisa ver e cobrar.
+    senhaPadrao: linha.TROCAR_SENHA === true,
     acessos: acessos
       .filter((acesso) => acesso.LOGIN === linha.LOGIN)
       .map((acesso) => ({
@@ -72,7 +76,7 @@ export async function darAcesso({ login, nome, email }, quem) {
     { login: alvo }
   );
   const precisaDeSenha = !jaTem[0]?.SENHA_HASH;
-  const senha = precisaDeSenha ? sortearSenha() : null;
+  const senha = precisaDeSenha ? SENHA_PADRAO : null;
   const hash = senha ? await gerarHash(senha) : null;
 
   await transaction(async ({ query: q }) => {
@@ -99,11 +103,11 @@ export async function darAcesso({ login, nome, email }, quem) {
   return { login: alvo, senha };
 }
 
-// Gera outra primeira senha, para quem perdeu ou nunca recebeu a dela. Também
-// obriga a trocar no próximo acesso: senha que passou por outra pessoa não pode
-// continuar valendo.
+// Devolve a senha padrão a quem perdeu a dela, e obriga a trocar no próximo
+// acesso. A senha padrão nunca é aceita como senha NOVA (`criticarSenha`), então
+// ninguém consegue ficar com ela.
 export async function redefinirSenha(login, quem) {
-  const senha = sortearSenha();
+  const senha = SENHA_PADRAO;
 
   await query(
     `UPDATE dbo.KING_IDENTIDADE_USUARIO
