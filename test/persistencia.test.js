@@ -80,8 +80,9 @@ test("ida e volta preserva visão, filiais ativas e planejado", () => {
   });
 });
 
-test("contas do centro fora das da filial são descartadas na leitura", () => {
-  // O centro é subconjunto da filial; sobra de gravação antiga não pode voltar.
+test("o que o centro tem é o que vale, e a filial acompanha", () => {
+  // A regra virou: com centro, quem lança é o centro e a lista da filial é o
+  // consolidado. Gravação antiga com sobra na filial se conserta na leitura.
   const estado = {
     configuracao: { filiaisAtivas: null },
     visoes: [
@@ -103,12 +104,13 @@ test("contas do centro fora das da filial são descartadas na leitura", () => {
   };
 
   comArmazenamento(JSON.stringify(estado), () => {
-    const modulo = carregarEstado().visoes[0].modulos["despesas-operacionais"];
-    assert.deepEqual(modulo.filiais["000001"].centros["002"], ["4.4.1.01"]);
+    const daFilial = carregarEstado().visoes[0].modulos["despesas-operacionais"].filiais["000001"];
+    assert.deepEqual(daFilial.centros["002"], ["4.4.1.01", "9.9.9"]);
+    assert.deepEqual(daFilial.contas, ["4.4.1.01", "9.9.9"]);
   });
 });
 
-test("centro que fica sem conta some", () => {
+test("módulo sem centro guarda a lista da filial como escolha", () => {
   const estado = {
     visoes: [
       {
@@ -116,14 +118,14 @@ test("centro que fica sem conta some", () => {
         nome: "X",
         visaoContabil: "25",
         modulos: {
-          m: { usaCentro: true, filiais: { f: { contas: ["A"], centros: { "002": ["Z"] } } } },
+          m: { usaCentro: false, filiais: { f: { contas: ["A"], centros: {} } } },
         },
       },
     ],
     planos: [],
   };
   comArmazenamento(JSON.stringify(estado), () => {
-    assert.deepEqual(carregarEstado().visoes[0].modulos.m.filiais.f.centros, {});
+    assert.deepEqual(carregarEstado().visoes[0].modulos.m.filiais.f.contas, ["A"]);
   });
 });
 
@@ -218,4 +220,60 @@ test("falha de gravação vira resultado, não exceção", () => {
     if (original === undefined) delete globalThis.localStorage;
     else globalThis.localStorage = original;
   }
+});
+
+test("centro em uso sem conta sobrevive à recarga", () => {
+  // Regressão: o normalizador descartava centro vazio, então marcar o centro e
+  // recarregar a página desfazia a marcação.
+  const estado = {
+    configuracao: { filiaisAtivas: null },
+    visoes: [
+      {
+        id: "v1",
+        nome: "DRE",
+        visaoContabil: "25",
+        modulos: {
+          "despesas-operacionais": {
+            usaCentro: true,
+            filiais: { "000001": { contas: [], centros: { "052": [], "002": ["4.4.1.01"] } } },
+          },
+        },
+      },
+    ],
+    planos: [],
+  };
+
+  const [visao] = comArmazenamento(JSON.stringify(estado), carregarEstado).visoes;
+  const daFilial = visao.modulos["despesas-operacionais"].filiais["000001"];
+
+  assert.deepEqual(Object.keys(daFilial.centros).sort(), ["002", "052"]);
+  // E a lista da filial sai como o consolidado dos centros.
+  assert.deepEqual(daFilial.contas, ["4.4.1.01"]);
+});
+
+test("contas da filial são recalculadas dos centros ao carregar", () => {
+  // Gravação antiga trazia a lista da filial como escolha própria. Com centro,
+  // quem manda são os centros — o consolidado se conserta sozinho.
+  const estado = {
+    configuracao: { filiaisAtivas: null },
+    visoes: [
+      {
+        id: "v1",
+        nome: "DRE",
+        visaoContabil: "25",
+        modulos: {
+          "despesas-operacionais": {
+            usaCentro: true,
+            filiais: {
+              "000001": { contas: ["9.9.9", "4.4.1.01"], centros: { "002": ["4.4.1.01"] } },
+            },
+          },
+        },
+      },
+    ],
+    planos: [],
+  };
+
+  const [visao] = comArmazenamento(JSON.stringify(estado), carregarEstado).visoes;
+  assert.deepEqual(visao.modulos["despesas-operacionais"].filiais["000001"].contas, ["4.4.1.01"]);
 });

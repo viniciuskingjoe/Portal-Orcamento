@@ -51,23 +51,28 @@ function normalizarVisao(visao) {
   const modulos = {};
 
   Object.entries(visao.modulos ?? {}).forEach(([moduloId, bruto]) => {
+    const usaCentro = bruto?.usaCentro === true;
     const filiais = {};
-    Object.entries(bruto?.filiais ?? {}).forEach(([filialId, daFilial]) => {
-      const contas = listaDeTexto(daFilial?.contas);
-      const permitidas = new Set(contas);
 
+    Object.entries(bruto?.filiais ?? {}).forEach(([filialId, daFilial]) => {
+      // Centro vazio é estado legítimo: foi marcado como em uso e as contas
+      // ainda não. Descartá-lo aqui apagaria a marcação a cada recarga.
       const centros = {};
       Object.entries(daFilial?.centros ?? {}).forEach(([centroId, doCentro]) => {
-        // O centro é subconjunto da filial; sobra vinda de gravação antiga sai.
-        const validas = listaDeTexto(doCentro).filter((codigo) => permitidas.has(codigo));
-        if (validas.length) centros[centroId] = validas;
+        centros[centroId] = listaDeTexto(doCentro);
       });
+
+      // Mesma regra de dados/visao.js: com centro, a lista da filial é o
+      // consolidado. Recalcular na leitura também conserta gravação antiga.
+      const contas = usaCentro
+        ? [...new Set(Object.values(centros).flat())].sort()
+        : listaDeTexto(daFilial?.contas);
 
       filiais[filialId] = { contas, centros };
     });
 
     modulos[moduloId] = {
-      usaCentro: bruto?.usaCentro === true,
+      usaCentro,
       // Sinal definido à mão, conta a conta. Só receita/despesa entram.
       sinais: normalizarSinais(bruto?.sinais),
       filiais,
