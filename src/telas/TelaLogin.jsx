@@ -6,9 +6,11 @@ import { EMPRESA } from "../dados/seeds.js";
 // ============================================================================
 // LOGIN
 //
-// A credencial é a do Windows: o servidor valida por bind no AD e o portal não
-// guarda senha nenhuma. Por isso não há "criar conta", "esqueci a senha" nem
-// troca de senha — nada disso é nosso.
+// A senha é do portal, não a da rede: o administrador entrega a primeira e a
+// pessoa troca no primeiro acesso. Não há "criar conta" nem "esqueci a senha" —
+// quem perde a dela pede outra a um administrador, e é ele quem sabe se está
+// falando com a pessoa certa. Um formulário de recuperação faria essa decisão
+// sozinho, sem saber com quem está falando.
 //
 // O erro é sempre o mesmo, dê o que der: dizer "usuário não existe" entrega a
 // lista de quem trabalha aqui para quem estiver tentando.
@@ -36,7 +38,7 @@ export default function TelaLogin({ onEntrar, carregando, erro }) {
 
         <div className="cartao-login__titulo">
           <h1>Planejamento Orçamentário</h1>
-          <p>Entre com o seu usuário da rede.</p>
+          <p>Entre com o seu usuário e a senha do portal.</p>
         </div>
 
         <label className="campo-login">
@@ -74,7 +76,7 @@ export default function TelaLogin({ onEntrar, carregando, erro }) {
           {carregando ? "Entrando…" : "Entrar"}
         </button>
 
-        <p className="cartao-login__rodape">{EMPRESA} · a senha é a mesma do computador</p>
+        <p className="cartao-login__rodape">{EMPRESA}</p>
       </form>
     </main>
   );

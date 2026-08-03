@@ -5,7 +5,7 @@ API em Node + Express sobre SQL Server.
 
 > **Sem dados falsos e sem estado local.** Plano de contas, filiais, centros de
 > custo e realizado vêm do ERP; visões, planos e planejado ficam nas tabelas
-> `KING_PORTAL_ORC_*`. Login por bind no Active Directory, permissão por usuário
+> `KING_PORTAL_ORC_*`. Login com senha própria do portal e permissão por usuário
 > — ver [Acesso](#acesso).
 
 ## Executar
@@ -216,18 +216,47 @@ dezembro em vez de cancelar o gesto.
 
 ### Login
 
-**O portal não guarda senha.** Quem valida é o Active Directory, por bind: se o
-bind passa, a senha está certa. Não há hash, não há redefinição, não há senha
-padrão — trocar a senha do Windows troca a do portal.
+**A senha é do portal, não a da rede.** O Active Directory diz *quem existe na
+empresa* — é o que alimenta a busca da tela de Usuários — mas não autentica
+ninguém. A separação foi pedida para que a senha de rede não seja digitada num
+formulário publicado na internet.
+
+O que se guarda é **scrypt com sal por senha** ([server/senha.js](server/senha.js)),
+nunca a senha. Comparação em tempo constante, e o hash carrega versão e
+parâmetros para o custo poder subir sem invalidar o que já existe.
+
+Quando o login não existe, a senha é conferida assim mesmo, contra um hash
+descartável. Sem isso a resposta volta na hora para login inexistente e depois de
+~100ms para login real, e esse intervalo entrega a lista de quem trabalha aqui.
+
+**Primeira senha.** Sorteada pelo portal ao conceder acesso e mostrada **uma
+única vez** ao administrador — não há senha padrão igual para todos, que viraria
+a chave-mestra no dia em que alguém a repassasse. O alfabeto não tem `0/O/1/l/I`,
+porque ela vai ser lida em voz alta. `TROCAR_SENHA` nasce ligado e o servidor
+recusa **todas** as outras rotas com **428** enquanto a troca não acontece: não
+adianta ignorar o formulário.
+
+**Não há "esqueci a senha"**, de propósito. Quem confirma identidade é um
+administrador pela tela de Usuários (`Nova senha`), não um formulário que decide
+sozinho com quem está falando.
+
+**Força**: mínimo 10 caracteres, e barra o óbvio (`senha123`, `portal@2026`), o
+próprio login e o próprio nome. Não exige maiúscula-número-símbolo — isso produz
+`Senha@123` e um papel colado no monitor.
 
 O login aceita as três formas que a pessoa já usa (`fulano`, `DOMINIO\fulano`,
 `fulano@dominio`) e todas viram um só login em `normalizarLogin`.
 
 Ter conta no AD **não** dá acesso: é preciso uma linha em
 `KING_IDENTIDADE_ACESSO` para o app `orcamento`. Quem concede é um administrador,
-pela tela de Usuários. `PORTAL_ADMINS` no `.env` existe só para destravar o
-primeiro — sem ele não haveria como criar o primeiro admin, porque a tela exige
-já ser admin.
+pela tela de Usuários. `PORTAL_ADMINS` no `.env` marca quem é administrador, mas
+não cria senha — o primeiro acesso de todos vem de:
+
+```bash
+node --env-file=.env scripts/definir-senha.mjs <login>
+```
+
+Sem isso ninguém entra: a tela que criaria a primeira senha exige estar logado.
 
 **A sessão** dura 8 horas e renova a cada uso. O cookie é `httpOnly` +
 `SameSite=Lax`; no banco fica o **SHA-256** do id, nunca o valor do cookie, para
@@ -236,9 +265,9 @@ apaga as sessões abertas na hora — revogação que só vale depois de expirar
 revogação.
 
 **Limite de tentativas** ([server/limite.js](server/limite.js)): 5 falhas no
-mesmo login param de ir ao AD por 5 minutos. O alvo não é adivinhação de senha —
-é impedir que o portal dispare a política de **bloqueio de conta** do AD, que
-tiraria a pessoa do Windows e do e-mail, não só daqui. Há também um limite por
+mesmo login travam aquele login por 5 minutos. Com senha própria do portal isso
+ficou mais importante, não menos — não existe mais o bloqueio de conta do AD para
+segurar quem tenta adivinhar, e este é o único freio. Há também um limite por
 origem, que conta **logins distintos** e não tentativas: atrás de proxy ou NAT
 toda a empresa chega com o mesmo IP, e contar tentativas faria dele um fusível
 geral. Falha de rede/configuração (503) não conta como tentativa.
@@ -290,7 +319,8 @@ server/
 ├── sqlserver.js             pool mssql, query/queryOne/transaction
 ├── consultas.js             SELECTs do ERP (views confirmadas)
 ├── repositorio.js           leitura e gravação do estado do portal
-├── ldap.js                  bind e busca no Active Directory
+├── ldap.js                  busca de usuários no Active Directory
+├── senha.js                 hash scrypt, força e sorteio da primeira senha
 ├── identidade.js            sessão, middleware, quem-pode-o-quê
 ├── limite.js                limite de tentativas de login
 └── usuarios.js              administração de acesso e permissão

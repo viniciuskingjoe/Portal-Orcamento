@@ -1,5 +1,6 @@
 import { query, transaction } from "./sqlserver.js";
 import { normalizarLogin } from "./ldap.js";
+import { gerarHash, sortearSenha } from "./senha.js";
 
 // ============================================================================
 // ADMINISTRAÇÃO DE USUÁRIOS
@@ -8,7 +9,8 @@ import { normalizarLogin } from "./ldap.js";
 // administra aqui é só o acesso a ESTE portal. Desativar alguém no Orçamento não
 // mexe no Fluxo Fiscal nem no Modelagem.
 //
-// Nenhuma rota daqui cria senha: quem autentica é o AD.
+// O AD serve para descobrir QUEM cadastrar; quem autentica é o portal, com
+// senha própria. A primeira senha é sorteada aqui e mostrada uma única vez.
 // ============================================================================
 
 const APP = "orcamento";
@@ -51,7 +53,12 @@ export async function listarUsuarios() {
 }
 
 // Cria o vínculo com o portal a partir do que veio do AD. O usuário pode já
-// existir no cadastro por causa de outro portal — nesse caso só ganha o acesso.
+// existir no cadastro por causa de outro portal — nesse caso só ganha o acesso,
+// e mantém a senha que já tinha.
+//
+// Devolve a primeira senha em texto UMA ÚNICA VEZ, para o administrador
+// repassar. Ela não fica recuperável: o que se guarda é o hash. Perdida, o
+// caminho é gerar outra.
 export async function darAcesso({ login, nome, email }, quem) {
   const alvo = normalizarLogin(login);
   if (!alvo) {
@@ -60,13 +67,25 @@ export async function darAcesso({ login, nome, email }, quem) {
     throw erro;
   }
 
+  const jaTem = await query(
+    "SELECT SENHA_HASH FROM dbo.KING_IDENTIDADE_USUARIO WHERE LOGIN = @login",
+    { login: alvo }
+  );
+  const precisaDeSenha = !jaTem[0]?.SENHA_HASH;
+  const senha = precisaDeSenha ? sortearSenha() : null;
+  const hash = senha ? await gerarHash(senha) : null;
+
   await transaction(async ({ query: q }) => {
     await q(
       `MERGE dbo.KING_IDENTIDADE_USUARIO AS destino
        USING (SELECT @login AS LOGIN) AS origem ON destino.LOGIN = origem.LOGIN
-       WHEN MATCHED THEN UPDATE SET NOME = @nome, EMAIL = @email, ATUALIZADO_EM = SYSUTCDATETIME()
-       WHEN NOT MATCHED THEN INSERT (LOGIN, NOME, EMAIL, ORIGEM) VALUES (@login, @nome, @email, 'ad');`,
-      { login: alvo, nome: nome ?? alvo, email: email ?? null }
+       WHEN MATCHED THEN UPDATE SET
+         NOME = @nome, EMAIL = @email, ATUALIZADO_EM = SYSUTCDATETIME(),
+         SENHA_HASH = COALESCE(@hash, destino.SENHA_HASH),
+         TROCAR_SENHA = CASE WHEN @hash IS NULL THEN destino.TROCAR_SENHA ELSE 1 END
+       WHEN NOT MATCHED THEN INSERT (LOGIN, NOME, EMAIL, ORIGEM, SENHA_HASH, TROCAR_SENHA)
+         VALUES (@login, @nome, @email, 'ad', @hash, 1);`,
+      { login: alvo, nome: nome ?? alvo, email: email ?? null, hash }
     );
 
     await q(
@@ -77,7 +96,33 @@ export async function darAcesso({ login, nome, email }, quem) {
     );
   });
 
-  return alvo;
+  return { login: alvo, senha };
+}
+
+// Gera outra primeira senha, para quem perdeu ou nunca recebeu a dela. Também
+// obriga a trocar no próximo acesso: senha que passou por outra pessoa não pode
+// continuar valendo.
+export async function redefinirSenha(login, quem) {
+  const senha = sortearSenha();
+
+  await query(
+    `UPDATE dbo.KING_IDENTIDADE_USUARIO
+        SET SENHA_HASH = @hash, TROCAR_SENHA = 1, ATUALIZADO_EM = SYSUTCDATETIME()
+      WHERE LOGIN = @login`,
+    { login, hash: await gerarHash(senha) }
+  );
+
+  // Sessões abertas caem: se a senha foi redefinida por suspeita, deixar a
+  // sessão de pé até expirar não resolve nada.
+  await query("DELETE FROM dbo.KING_IDENTIDADE_SESSAO WHERE LOGIN = @login", { login });
+
+  await query(
+    `INSERT INTO dbo.KING_IDENTIDADE_AUDITORIA (LOGIN, APP, EVENTO, DETALHE)
+     VALUES (@login, @app, 'senha-redefinida', @detalhe)`,
+    { login, app: APP, detalhe: `por ${quem ?? "?"}` }
+  ).catch(() => {});
+
+  return senha;
 }
 
 export async function alterarUsuario(login, { admin, situacao }, quem) {

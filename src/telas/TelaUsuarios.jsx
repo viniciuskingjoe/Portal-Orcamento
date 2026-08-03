@@ -257,6 +257,46 @@ function BuscaNoAd({ jaTem, onAdicionar }) {
   );
 }
 
+// A senha aparece UMA vez. O banco guarda só o hash, então não há tela que a
+// mostre de novo — o caminho é gerar outra. O aviso diz isso antes de a pessoa
+// fechar, porque descobrir depois custa uma redefinição.
+function SenhaGerada({ dados, onFechar }) {
+  const [copiado, setCopiado] = useState(false);
+
+  async function copiar() {
+    try {
+      await navigator.clipboard.writeText(dados.senha);
+      setCopiado(true);
+      setTimeout(() => setCopiado(false), 2000);
+    } catch {
+      // Sem permissão de área de transferência a senha continua na tela para
+      // ser lida — não vale travar nada por causa disso.
+    }
+  }
+
+  return (
+    <div className="senha-gerada" role="status">
+      <div className="senha-gerada__texto">
+        <strong>Senha de {dados.nome ?? dados.login}</strong>
+        <code className="senha-gerada__valor">{dados.senha}</code>
+        <small>
+          Anote e entregue agora. Ela não aparece de novo — o portal guarda só o
+          hash. {dados.login} vai ter que trocá-la no primeiro acesso.
+        </small>
+      </div>
+      <div className="senha-gerada__acoes">
+        <button type="button" className="botao botao--secundario" onClick={copiar}>
+          <Icone nome={copiado ? "check" : "copy"} tamanho={15} />
+          {copiado ? "Copiado" : "Copiar"}
+        </button>
+        <button type="button" className="botao" onClick={onFechar}>
+          Já anotei
+        </button>
+      </div>
+    </div>
+  );
+}
+
 export default function TelaUsuarios({ filiais, centros, sessao, onVoltar }) {
   const [usuarios, setUsuarios] = useState([]);
   const [carregando, setCarregando] = useState(true);
@@ -266,6 +306,10 @@ export default function TelaUsuarios({ filiais, centros, sessao, onVoltar }) {
   // Remover derruba a sessão aberta da pessoa na hora. Um clique de distância é
   // pouco para uma ação que tira alguém do sistema no meio do trabalho.
   const [aRemover, setARemover] = useState(null);
+  const [aRedefinir, setARedefinir] = useState(null);
+  // Senha em texto, mostrada uma única vez. Fica só em memória: guardar no
+  // localStorage a deixaria legível para sempre em quem abrir o DevTools.
+  const [senhaGerada, setSenhaGerada] = useState(null);
 
   const catalogos = useMemo(
     () => ({
@@ -324,7 +368,24 @@ export default function TelaUsuarios({ filiais, centros, sessao, onVoltar }) {
 
       {erro ? <AvisoErro mensagem={erro} onTentarDeNovo={recarregar} /> : null}
 
-      <BuscaNoAd jaTem={jaTem} onAdicionar={(usuario) => executar(api.darAcesso(usuario))} />
+      <BuscaNoAd
+        jaTem={jaTem}
+        onAdicionar={(usuario) =>
+          executar(
+            api.darAcesso(usuario).then((resposta) => {
+              // Só quem ainda não tinha senha recebe uma: quem já usa outro
+              // portal AKR entra aqui com a que já tem.
+              if (resposta?.senha) {
+                setSenhaGerada({ login: resposta.login, nome: usuario.nome, senha: resposta.senha });
+              }
+            })
+          )
+        }
+      />
+
+      {senhaGerada ? (
+        <SenhaGerada dados={senhaGerada} onFechar={() => setSenhaGerada(null)} />
+      ) : null}
 
       {/* Entrar e não ver nada é indistinguível de estar quebrado. Quem
           administra precisa ver isso sem abrir cartão por cartão. */}
@@ -404,6 +465,17 @@ export default function TelaUsuarios({ filiais, centros, sessao, onVoltar }) {
                     onClick={() => executar(api.alterarUsuario(usuario.login, { admin: !usuario.admin }))}
                   >
                     {usuario.admin ? "Tirar admin" : "Tornar admin"}
+                  </button>
+
+                  {/* Redefinir derruba as sessões abertas da pessoa e obriga
+                      troca no próximo acesso — por isso passa por confirmação
+                      em vez de agir no clique. */}
+                  <button
+                    type="button"
+                    className="botao-texto"
+                    onClick={() => setARedefinir(usuario)}
+                  >
+                    Nova senha
                   </button>
 
                   <button
@@ -496,6 +568,32 @@ export default function TelaUsuarios({ filiais, centros, sessao, onVoltar }) {
               setARemover(null);
             }}
             onFechar={() => setARemover(null)}
+          />
+        ) : null}
+
+        {aRedefinir ? (
+          <ModalConfirmacao
+            titulo="Gerar nova senha"
+            rotuloConfirmar="Gerar nova senha"
+            mensagem={
+              <>
+                <strong>{aRedefinir.nome}</strong> recebe uma senha nova, sorteada, e precisa
+                trocá-la no primeiro acesso. A senha atual dele para de valer e as sessões abertas
+                caem na hora. A senha aparece uma única vez, aqui na tela.
+              </>
+            }
+            onConfirmar={() => {
+              const alvo = aRedefinir;
+              setARedefinir(null);
+              executar(
+                api
+                  .redefinirSenha(alvo.login)
+                  .then((resposta) =>
+                    setSenhaGerada({ login: alvo.login, nome: alvo.nome, senha: resposta.senha })
+                  )
+              );
+            }}
+            onFechar={() => setARedefinir(null)}
           />
         ) : null}
 

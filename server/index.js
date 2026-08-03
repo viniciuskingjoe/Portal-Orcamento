@@ -20,6 +20,7 @@ import {
   exigirAdmin,
   exigirSessao,
   limparCookie,
+  trocarSenha,
 } from "./identidade.js";
 import {
   carregarEstado,
@@ -42,6 +43,7 @@ import {
   concederAcessos,
   darAcesso,
   listarUsuarios,
+  redefinirSenha,
   removerAcesso,
   revogarAcesso,
 } from "./usuarios.js";
@@ -109,6 +111,27 @@ app.post(
       res,
     });
     res.json(sessao);
+  })
+);
+
+// Fora de `exigirSessao` de propósito: com troca pendente aquele middleware
+// recusa tudo com 428, e esta é justamente a rota que resolve a pendência.
+app.post(
+  "/api/senha",
+  rota(async (req, res) => {
+    if (!req.sessao) {
+      const erro = new Error("Sessão expirada. Entre novamente.");
+      erro.status = 401;
+      throw erro;
+    }
+    await trocarSenha({
+      login: req.sessao.login,
+      senhaAtual: req.body?.senhaAtual,
+      senhaNova: req.body?.senhaNova,
+      ip: req.ip,
+      sessaoAtual: cookieDaRequisicao(req),
+    });
+    res.json({ ok: true });
   })
 );
 
@@ -315,8 +338,20 @@ app.post(
   "/api/usuarios",
   exigirAdmin,
   rota(async (req, res) => {
-    const login = await darAcesso(req.body ?? {}, req.sessao.login);
-    res.json({ ok: true, login });
+    // A senha volta em texto UMA vez, para o administrador repassar. Não fica
+    // recuperável: o banco guarda só o hash.
+    const { login, senha } = await darAcesso(req.body ?? {}, req.sessao.login);
+    res.json({ ok: true, login, senha });
+  })
+);
+
+app.post(
+  "/api/usuarios/:login/senha",
+  exigirSessao,
+  exigirAdmin,
+  rota(async (req, res) => {
+    const senha = await redefinirSenha(req.params.login, req.sessao.login);
+    res.json({ ok: true, senha });
   })
 );
 

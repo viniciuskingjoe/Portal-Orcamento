@@ -84,6 +84,8 @@ export const api = {
   sessao: () => buscar("/api/sessao"),
   login: (usuario, senha) => buscar("/api/login", null, { corpo: { usuario, senha } }),
   logout: () => buscar("/api/logout", null, { corpo: {} }),
+  trocarSenha: (senhaAtual, senhaNova) =>
+    buscar("/api/senha", null, { corpo: { senhaAtual, senhaNova } }),
   visoesContabeis: () => buscar("/api/visoes-contabeis"),
   contas: (visao) => buscar("/api/contas", { visao }),
   filiais: () => buscar("/api/filiais"),
@@ -115,6 +117,8 @@ export const api = {
   darAcesso: (usuario) => buscar("/api/usuarios", null, { corpo: usuario }),
   alterarUsuario: (login, mudanca) =>
     buscar(`/api/usuarios/${encodeURIComponent(login)}`, null, { metodo: "PUT", corpo: mudanca }),
+  redefinirSenha: (login) =>
+    buscar(`/api/usuarios/${encodeURIComponent(login)}/senha`, null, { corpo: {} }),
   removerUsuario: (login) =>
     buscar(`/api/usuarios/${encodeURIComponent(login)}`, null, { metodo: "DELETE" }),
   concederAcessos: (login, acessos) =>

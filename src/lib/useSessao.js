@@ -52,6 +52,15 @@ export function useSessao() {
     setErro("");
   }, []);
 
+  // Deixa o erro subir: quem chama é o formulário, e é ele que sabe onde
+  // mostrar "a senha atual está errada" sem derrubar a tela.
+  const trocarSenha = useCallback(async ({ senhaAtual, senhaNova }) => {
+    await api.trocarSenha(senhaAtual, senhaNova);
+    // Relê do servidor em vez de apagar `trocarSenha` na mão: a sessão é dele, e
+    // adivinhar aqui é como o front e o servidor passam a discordar.
+    setSessao(await api.sessao());
+  }, []);
+
   // Disparada por qualquer 401 no meio do uso: a sessão morreu do outro lado
   // (expirou, admin revogou, alguém saiu do AD) e a tela precisa voltar ao login
   // em vez de insistir em requisições que nunca vão passar.
@@ -69,5 +78,5 @@ export function useSessao() {
     return () => quandoSessaoExpirar(null);
   }, [expirar]);
 
-  return { sessao, carregando, entrando, erro, entrar, sair, expirar };
+  return { sessao, carregando, entrando, erro, entrar, sair, expirar, trocarSenha };
 }

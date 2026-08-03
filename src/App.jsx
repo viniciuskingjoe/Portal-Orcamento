@@ -16,6 +16,7 @@ import TelaVisaoModulo from "./telas/TelaVisaoModulo.jsx";
 import TelaDre from "./telas/TelaDre.jsx";
 import TelaOrcamento, { TODAS_AS_CONTAS } from "./telas/TelaOrcamento.jsx";
 import TelaLogin from "./telas/TelaLogin.jsx";
+import TelaTrocarSenha from "./telas/TelaTrocarSenha.jsx";
 import TelaUsuarios from "./telas/TelaUsuarios.jsx";
 
 import { EMPRESA, MESES } from "./dados/seeds.js";
@@ -72,7 +73,7 @@ const TELAS_ERP = new Set(["filiais", "centros"]);
 // Portão: sem sessão não se renderiza o portal. O componente inteiro fica
 // desmontado, então nem os dados do ERP chegam a ser pedidos.
 export default function App() {
-  const { sessao, carregando, entrando, erro, entrar, sair } = useSessao();
+  const { sessao, carregando, entrando, erro, entrar, sair, trocarSenha } = useSessao();
 
   if (carregando) {
     return (
@@ -83,6 +84,13 @@ export default function App() {
   }
 
   if (!sessao) return <TelaLogin onEntrar={entrar} carregando={entrando} erro={erro} />;
+
+  // Troca pendente tranca o portal antes de qualquer tela. Não é só cortesia: o
+  // servidor recusa todas as outras rotas com 428 enquanto isso, então deixar
+  // passar daria uma tela montada onde nada funciona.
+  if (sessao.trocarSenha) {
+    return <TelaTrocarSenha sessao={sessao} obrigatoria onTrocar={trocarSenha} />;
+  }
 
   // `key` remonta o portal inteiro quando troca o usuário: estado de tela, de
   // filtro e de edição de outra pessoa não pode sobreviver ao login seguinte.

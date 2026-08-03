@@ -1,8 +1,15 @@
 import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 
 import { query, queryOne } from "./sqlserver.js";
-import { autenticar, normalizarLogin } from "./ldap.js";
+import { normalizarLogin } from "./ldap.js";
 import { criarLimite } from "./limite.js";
+import { conferir, criticarSenha, gerarHash } from "./senha.js";
+
+// Hash de uma senha aleatória que ninguém sabe, conferido quando o login não
+// existe. Serve só para gastar o mesmo tempo: sem ele, login inexistente
+// responde na hora e login real depois de ~100ms de scrypt, e essa diferença
+// permite descobrir quem tem conta aqui sem acertar senha nenhuma.
+const HASH_FANTASMA = await gerarHash(randomBytes(32).toString("hex"));
 
 // ============================================================================
 // IDENTIDADE E SESSÃO
@@ -106,7 +113,7 @@ export async function sessaoDoCookie(id) {
   const hash = hashDoId(id);
 
   const linha = await queryOne(
-    `SELECT s.LOGIN, s.EXPIRA_EM, u.NOME, u.SITUACAO
+    `SELECT s.LOGIN, s.EXPIRA_EM, u.NOME, u.SITUACAO, u.TROCAR_SENHA
        FROM dbo.KING_IDENTIDADE_SESSAO AS s
        INNER JOIN dbo.KING_IDENTIDADE_USUARIO AS u ON u.LOGIN = s.LOGIN
       WHERE s.SID_HASH = @hash AND s.APP = @app`,
@@ -127,7 +134,11 @@ export async function sessaoDoCookie(id) {
     { hash, expira: new Date(Date.now() + HORAS_DE_SESSAO * 3600 * 1000) }
   );
 
-  return montarSessao(linha.LOGIN, linha.NOME);
+  const sessao = await montarSessao(linha.LOGIN, linha.NOME);
+
+  // A troca pendente viaja na sessão em vez de ser consultada pela tela: assim
+  // ela sobrevive a um F5 e o front não tem como esquecer de perguntar.
+  return sessao && { ...sessao, trocarSenha: linha.TROCAR_SENHA === true };
 }
 
 // --------------------------------------------------------------------------
@@ -163,21 +174,6 @@ async function montarSessao(login, nome) {
   };
 }
 
-// Cria ou atualiza o cadastro com o que veio do AD. O AD é a fonte de nome e
-// e-mail; permissão é do portal e não é tocada aqui.
-async function sincronizarUsuario({ login, nome, email }) {
-  await query(
-    `MERGE dbo.KING_IDENTIDADE_USUARIO AS destino
-     USING (SELECT @login AS LOGIN) AS origem ON destino.LOGIN = origem.LOGIN
-     WHEN MATCHED THEN UPDATE SET
-       NOME = @nome, EMAIL = @email,
-       ATUALIZADO_EM = SYSUTCDATETIME(), ULTIMO_LOGIN = SYSUTCDATETIME()
-     WHEN NOT MATCHED THEN INSERT (LOGIN, NOME, EMAIL, ORIGEM, ULTIMO_LOGIN)
-       VALUES (@login, @nome, @email, 'ad', SYSUTCDATETIME());`,
-    { login, nome, email: email ?? null }
-  );
-}
-
 async function registrar({ login, evento, detalhe, ip }) {
   await query(
     `INSERT INTO dbo.KING_IDENTIDADE_AUDITORIA (LOGIN, APP, EVENTO, DETALHE, IP)
@@ -194,7 +190,11 @@ async function registrar({ login, evento, detalhe, ip }) {
 // --------------------------------------------------------------------------
 
 // O limite vive no módulo, não na rota: assim nenhum outro caminho de código
-// chega ao bind do AD sem passar por ele.
+// chega à conferência de senha sem passar por ele.
+//
+// Com senha própria do portal o motivo do limite mudou, e ficou mais forte: não
+// existe mais o bloqueio de conta do AD para segurar quem tenta adivinhar. Aqui
+// o único freio é este.
 const limite = criarLimite();
 
 export async function entrar({ usuario, senha, ip, userAgent, res }) {
@@ -207,9 +207,6 @@ export async function entrar({ usuario, senha, ip, userAgent, res }) {
   const login = normalizarLogin(usuario);
   const origem = ip ?? "?";
 
-  // Antes de qualquer coisa: se este login já errou demais, o portal para de
-  // encaminhar ao AD. É o que impede o portal de virar o gatilho do bloqueio de
-  // conta lá — veja server/limite.js.
   const espera = limite.esperaRestante(login, origem);
   if (espera > 0) {
     await registrar({ login, evento: "negado", detalhe: "excesso de tentativas", ip });
@@ -221,39 +218,55 @@ export async function entrar({ usuario, senha, ip, userAgent, res }) {
     throw erro;
   }
 
-  let doAd;
-  try {
-    doAd = await autenticar(usuario, senha);
-  } catch (erro) {
-    // 503 é falha de configuração/rede: precisa aparecer como tal, senão o
-    // suporte procura senha errada onde o problema é o certificado do DC. E não
-    // conta como tentativa: o DC fora do ar não é ninguém errando senha, e
-    // contar bloquearia a empresa toda justo na volta do serviço.
-    if (erro.status === 503) throw erro;
+  const cadastro = login
+    ? await queryOne(
+        `SELECT LOGIN, NOME, SENHA_HASH, TROCAR_SENHA, SITUACAO
+           FROM dbo.KING_IDENTIDADE_USUARIO WHERE LOGIN = @login`,
+        { login }
+      )
+    : null;
+
+  // Conferir a senha mesmo sem cadastro, contra um hash descartável. Sem isto a
+  // resposta volta na hora para login inexistente e depois de ~100ms para login
+  // real — e esse intervalo entrega a lista de quem trabalha aqui.
+  const confere = await conferir(senha ?? "", cadastro?.SENHA_HASH ?? HASH_FANTASMA);
+
+  if (!cadastro || !cadastro.SENHA_HASH || !confere) {
     limite.registrarFalha(login, origem);
-    await registrar({ login, evento: "negado", detalhe: "ad", ip });
+    await registrar({ login, evento: "negado", detalhe: "senha", ip });
     throw negar();
   }
 
-  // Senha certa: o contador daquele login zera. A partir daqui nada mais chega
-  // ao AD, então nenhuma falha adiante põe a conta em risco de bloqueio.
-  limite.registrarAcerto(doAd.login);
+  if (cadastro.SITUACAO !== "ativo") {
+    await registrar({ login, evento: "negado", detalhe: "cadastro inativo", ip });
+    const erro = new Error("Seu acesso está inativo. Procure um administrador.");
+    erro.status = 403;
+    throw erro;
+  }
 
-  await sincronizarUsuario(doAd);
-  const sessao = await montarSessao(doAd.login, doAd.nome);
+  limite.registrarAcerto(cadastro.LOGIN);
+
+  const sessao = await montarSessao(cadastro.LOGIN, cadastro.NOME);
 
   if (!sessao) {
-    await registrar({ login: doAd.login, evento: "negado", detalhe: "sem acesso ao portal", ip });
+    await registrar({ login: cadastro.LOGIN, evento: "negado", detalhe: "sem acesso ao portal", ip });
     const erro = new Error("Você não tem acesso ao Planejamento Orçamentário.");
     erro.status = 403;
     throw erro;
   }
 
-  const id = await criarSessao(doAd.login, { ip, userAgent });
-  gravarCookie(res, id);
-  await registrar({ login: doAd.login, evento: "login", ip });
+  await query(
+    "UPDATE dbo.KING_IDENTIDADE_USUARIO SET ULTIMO_LOGIN = SYSUTCDATETIME() WHERE LOGIN = @login",
+    { login: cadastro.LOGIN }
+  ).catch(() => {});
 
-  return sessao;
+  const id = await criarSessao(cadastro.LOGIN, { ip, userAgent });
+  gravarCookie(res, id);
+  await registrar({ login: cadastro.LOGIN, evento: "login", ip });
+
+  // A sessão nasce válida mesmo com troca pendente: sem ela a tela de troca não
+  // teria como se autenticar para trocar. Quem barra o resto é `exigirSessao`.
+  return { ...sessao, trocarSenha: cadastro.TROCAR_SENHA === true };
 }
 
 // --------------------------------------------------------------------------
@@ -272,10 +285,79 @@ export function comSessao() {
 }
 
 export function exigirSessao(req, _res, next) {
-  if (req.sessao) return next();
-  const erro = new Error("Sessão expirada. Entre novamente.");
-  erro.status = 401;
-  next(erro);
+  if (!req.sessao) {
+    const erro = new Error("Sessão expirada. Entre novamente.");
+    erro.status = 401;
+    return next(erro);
+  }
+
+  // Troca pendente tranca o portal inteiro, não só a tela. Sem isto, quem
+  // recebeu a primeira senha poderia usar o sistema para sempre sem trocá-la,
+  // bastando ignorar o formulário — e a senha que circulou por e-mail ou
+  // WhatsApp continuaria valendo.
+  if (req.sessao.trocarSenha) {
+    const erro = new Error("Defina uma senha nova para continuar.");
+    erro.status = 428; // Precondition Required
+    return next(erro);
+  }
+
+  next();
+}
+
+// --------------------------------------------------------------------------
+// Trocar a senha
+// --------------------------------------------------------------------------
+
+export async function trocarSenha({ login, senhaAtual, senhaNova, ip, sessaoAtual }) {
+  const cadastro = await queryOne(
+    "SELECT LOGIN, NOME, SENHA_HASH FROM dbo.KING_IDENTIDADE_USUARIO WHERE LOGIN = @login",
+    { login }
+  );
+
+  if (!cadastro) {
+    const erro = new Error("Usuário não encontrado.");
+    erro.status = 404;
+    throw erro;
+  }
+
+  // Exige a senha atual mesmo já estando logado: sem isso, uma sessão deixada
+  // aberta numa máquina vira troca de senha e sequestro da conta.
+  if (!(await conferir(senhaAtual ?? "", cadastro.SENHA_HASH))) {
+    await registrar({ login, evento: "negado", detalhe: "troca de senha: atual errada", ip });
+    const erro = new Error("A senha atual está errada.");
+    erro.status = 401;
+    throw erro;
+  }
+
+  const critica = criticarSenha(senhaNova, { login, nome: cadastro.NOME });
+  if (critica) {
+    const erro = new Error(critica);
+    erro.status = 400;
+    throw erro;
+  }
+
+  if (await conferir(senhaNova, cadastro.SENHA_HASH)) {
+    const erro = new Error("A senha nova precisa ser diferente da atual.");
+    erro.status = 400;
+    throw erro;
+  }
+
+  await query(
+    `UPDATE dbo.KING_IDENTIDADE_USUARIO
+        SET SENHA_HASH = @hash, TROCAR_SENHA = 0, ATUALIZADO_EM = SYSUTCDATETIME()
+      WHERE LOGIN = @login`,
+    { login, hash: await gerarHash(senhaNova) }
+  );
+
+  // Derruba as OUTRAS sessões: trocar a senha é o que se faz quando se
+  // desconfia que alguém entrou, e de nada adianta se a sessão dele continua de
+  // pé até expirar.
+  await query(
+    "DELETE FROM dbo.KING_IDENTIDADE_SESSAO WHERE LOGIN = @login AND SID_HASH <> @atual",
+    { login, atual: hashDoId(sessaoAtual ?? "") }
+  ).catch(() => {});
+
+  await registrar({ login, evento: "senha-alterada", ip });
 }
 
 export function exigirAdmin(req, _res, next) {

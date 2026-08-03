@@ -2827,6 +2827,72 @@ dialog::backdrop {
   box-shadow: 0 0 0 3px var(--accent-soft);
 }
 
+/* Senha mostrada uma única vez. Destacada de propósito: fechar sem anotar
+   custa uma redefinição, então ela não pode passar despercebida. */
+.senha-gerada {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 16px;
+  padding: 16px 18px;
+  border: 1px solid var(--accent);
+  border-radius: var(--radius-md);
+  background: var(--accent-soft);
+}
+
+.senha-gerada__texto {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 240px;
+}
+
+.senha-gerada__texto small {
+  max-width: 52ch;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+/* Monoespaçada e grande: vai ser lida em voz alta ou copiada a mão. */
+.senha-gerada__valor {
+  align-self: flex-start;
+  padding: 6px 12px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace;
+  font-size: 17px;
+  letter-spacing: 0.08em;
+  user-select: all;
+}
+
+.senha-gerada__acoes {
+  display: flex;
+  gap: 8px;
+}
+
+/* Dica sob o campo. `text-transform: none` porque o `span` do rótulo é
+   maiúsculo e a regra acima pegaria a frase inteira. */
+.campo-login__dica {
+  color: var(--muted);
+  font-size: 11.5px;
+  line-height: 1.45;
+  text-transform: none;
+  letter-spacing: 0;
+  font-weight: 400;
+}
+
+.campo-login__dica--erro {
+  color: var(--danger, #e5534b);
+}
+
+.campo-login input[aria-invalid="true"] {
+  border-color: var(--danger, #e5534b);
+}
+
 .botao--login {
   justify-content: center;
   min-height: 42px;
