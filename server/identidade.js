@@ -2,6 +2,7 @@ import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 
 import { query, queryOne } from "./sqlserver.js";
 import { autenticar, normalizarLogin } from "./ldap.js";
+import { criarLimite } from "./limite.js";
 
 // ============================================================================
 // IDENTIDADE E SESSÃO
@@ -192,6 +193,10 @@ async function registrar({ login, evento, detalhe, ip }) {
 // lista de quem trabalha aqui a quem estiver tentando.
 // --------------------------------------------------------------------------
 
+// O limite vive no módulo, não na rota: assim nenhum outro caminho de código
+// chega ao bind do AD sem passar por ele.
+const limite = criarLimite();
+
 export async function entrar({ usuario, senha, ip, userAgent, res }) {
   const negar = () => {
     const erro = new Error("Usuário ou senha inválidos.");
@@ -199,16 +204,40 @@ export async function entrar({ usuario, senha, ip, userAgent, res }) {
     return erro;
   };
 
+  const login = normalizarLogin(usuario);
+  const origem = ip ?? "?";
+
+  // Antes de qualquer coisa: se este login já errou demais, o portal para de
+  // encaminhar ao AD. É o que impede o portal de virar o gatilho do bloqueio de
+  // conta lá — veja server/limite.js.
+  const espera = limite.esperaRestante(login, origem);
+  if (espera > 0) {
+    await registrar({ login, evento: "negado", detalhe: "excesso de tentativas", ip });
+    const erro = new Error(
+      `Tentativas demais. Espere ${Math.ceil(espera / 60_000)} min e tente de novo.`
+    );
+    erro.status = 429;
+    erro.retryApos = Math.ceil(espera / 1000);
+    throw erro;
+  }
+
   let doAd;
   try {
     doAd = await autenticar(usuario, senha);
   } catch (erro) {
     // 503 é falha de configuração/rede: precisa aparecer como tal, senão o
-    // suporte procura senha errada onde o problema é o certificado do DC.
+    // suporte procura senha errada onde o problema é o certificado do DC. E não
+    // conta como tentativa: o DC fora do ar não é ninguém errando senha, e
+    // contar bloquearia a empresa toda justo na volta do serviço.
     if (erro.status === 503) throw erro;
-    await registrar({ login: normalizarLogin(usuario), evento: "negado", detalhe: "ad", ip });
+    limite.registrarFalha(login, origem);
+    await registrar({ login, evento: "negado", detalhe: "ad", ip });
     throw negar();
   }
+
+  // Senha certa: o contador daquele login zera. A partir daqui nada mais chega
+  // ao AD, então nenhuma falha adiante põe a conta em risco de bloqueio.
+  limite.registrarAcerto(doAd.login);
 
   await sincronizarUsuario(doAd);
   const sessao = await montarSessao(doAd.login, doAd.nome);

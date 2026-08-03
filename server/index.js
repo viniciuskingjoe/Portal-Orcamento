@@ -359,6 +359,7 @@ app.use((_req, res) => res.status(404).json({ erro: "Rota não encontrada." }));
 app.use((erro, _req, res, _next) => {
   const status = erro.status ?? 500;
   if (status >= 500) console.error("[api]", erro);
+  if (erro.retryApos) res.set("Retry-After", String(erro.retryApos));
   res.status(status).json({ erro: erro.message ?? "Erro interno." });
 });
 

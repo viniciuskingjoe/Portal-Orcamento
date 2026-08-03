@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 
-import { api } from "./api.js";
+import { api, quandoSessaoExpirar } from "./api.js";
 
 // ============================================================================
 // SESSÃO
@@ -52,13 +52,22 @@ export function useSessao() {
     setErro("");
   }, []);
 
-  // Chamada por quem receber 401 no meio do uso: a sessão morreu do outro lado
+  // Disparada por qualquer 401 no meio do uso: a sessão morreu do outro lado
   // (expirou, admin revogou, alguém saiu do AD) e a tela precisa voltar ao login
   // em vez de insistir em requisições que nunca vão passar.
+  // Um 401 costuma chegar em rajada: várias requisições em voo caem juntas. Não
+  // precisa de trava — gravar o mesmo valor não re-renderiza.
   const expirar = useCallback(() => {
     setSessao(null);
     setErro("Sua sessão expirou. Entre novamente.");
   }, []);
+
+  // O cliente da API não conhece React; avisa por callback. Registrar aqui, e
+  // não em cada tela, é o que garante que nenhuma rota fique de fora.
+  useEffect(() => {
+    quandoSessaoExpirar(expirar);
+    return () => quandoSessaoExpirar(null);
+  }, [expirar]);
 
   return { sessao, carregando, entrando, erro, entrar, sair, expirar };
 }

@@ -92,6 +92,43 @@ try {
                VALUES (@l, 'orcamento', 'negado', 'teste')`, { l: LOGIN });
   const gravado = await query("SELECT EVENTO FROM dbo.KING_IDENTIDADE_AUDITORIA WHERE LOGIN = @l", { l: LOGIN });
   ok(gravado.length === 1 && gravado[0].EVENTO === "negado", "auditoria grava e lê por login");
+
+  // --- limite de tentativas -----------------------------------------------
+  // O unitário cobre limite.js; aqui o que se prova é o FIO: que `entrar()`
+  // consulta o limite antes de chegar ao AD. Login inexistente de propósito —
+  // gastar tentativas de um login real é exatamente o bloqueio de conta que
+  // este limite existe para evitar.
+  const { POR_LOGIN } = await import("../../server/limite.js");
+  const alvo = "__nao.existe.limite";
+  const tentar = () =>
+    fetch(`${BASE}/api/login`, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ usuario: alvo, senha: "errada" }),
+    });
+
+  const status = [];
+  for (let i = 0; i < POR_LOGIN.tentativas + 1; i += 1) status.push((await tentar()).status);
+
+  // Com o DC fora do ar tudo vira 503 e nada é contado — o que também é o
+  // comportamento correto, então o teste reconhece esse caso em vez de falhar.
+  if (status.every((s) => s === 503)) {
+    console.log("  --  limite não exercitado: o AD não respondeu (503)");
+  } else {
+    ok(status.slice(0, POR_LOGIN.tentativas).every((s) => s === 401),
+       `as ${POR_LOGIN.tentativas} primeiras tentativas chegam ao AD e voltam 401`);
+    const ultima = await tentar();
+    ok(ultima.status === 429, `passando do teto vira 429 (veio ${ultima.status})`);
+    ok(Number(ultima.headers.get("retry-after")) > 0, "e diz em quantos segundos tentar de novo");
+    ok(/\d+ min/.test((await ultima.json()).erro ?? ""), "a mensagem diz quanto esperar");
+
+    // Outro login não pode ser atingido: senão bastaria errar cinco vezes para
+    // travar o portal para todo mundo.
+    const outro = await fetch(`${BASE}/api/login`, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ usuario: "__nao.existe.outro", senha: "errada" }),
+    });
+    ok(outro.status !== 429, "o bloqueio é do login que errou, não dos outros");
+  }
 } finally {
   await limpar();
   await encerrar();

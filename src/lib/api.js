@@ -12,6 +12,16 @@ class ErroDaApi extends Error {
   }
 }
 
+// Aviso único de sessão morta. Fica aqui, e não em cada chamada, porque 401 pode
+// vir de qualquer uma das rotas abaixo: obrigar todo `catch` da aplicação a
+// lembrar de tratá-lo é garantir que um deles esqueça, e aí a tela trava sem
+// dizer por quê.
+let aoExpirarSessao = null;
+
+export function quandoSessaoExpirar(callback) {
+  aoExpirarSessao = callback;
+}
+
 async function buscar(caminho, parametros, opcoes = {}) {
   const url = new URL(caminho, window.location.origin);
   Object.entries(parametros ?? {}).forEach(([chave, valor]) => {
@@ -52,6 +62,9 @@ async function buscar(caminho, parametros, opcoes = {}) {
     // 401 é sessão expirada, não falha de rede: quem chama volta para o login
     // em vez de mostrar "a API não está respondendo".
     if (resposta.status === 401) {
+      // Menos no próprio login: ali 401 é senha errada, e derrubar a sessão
+      // apagaria a mensagem de erro que a pessoa precisa ler.
+      if (!caminho.startsWith("/api/login")) aoExpirarSessao?.();
       throw new ErroDaApi(corpo?.erro ?? "Sessão expirada. Entre novamente.", 401);
     }
     if (corpo?.erro) throw new ErroDaApi(corpo.erro, resposta.status);

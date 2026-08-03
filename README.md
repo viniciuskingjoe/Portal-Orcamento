@@ -3,9 +3,10 @@
 Planejamento orçamentário da King & Joe / AKR Brands. Front em React + Vite,
 API em Node + Express sobre SQL Server.
 
-> **Estado atual: sem dados falsos.** Plano de contas, filiais, centros de custo
-> e realizado vêm do SQL Server. O que o portal guarda é só o que o usuário cria:
-> visões e valores planejados — ainda no `localStorage`, sem tabela própria.
+> **Sem dados falsos e sem estado local.** Plano de contas, filiais, centros de
+> custo e realizado vêm do ERP; visões, planos e planejado ficam nas tabelas
+> `KING_PORTAL_ORC_*`. Login por bind no Active Directory, permissão por usuário
+> — ver [Acesso](#acesso).
 
 ## Executar
 
@@ -13,13 +14,14 @@ Requer Node.js 20 ou superior.
 
 ```bash
 npm install
-npm run dev      # sobe a API e o front juntos — é o comando do dia a dia
-npm test         # testes da camada de dados
-npm run build    # build de produção em dist/
+npm run dev        # sobe a API e o front juntos — é o comando do dia a dia
+npm test           # testes da camada de dados (sem banco, sem rede)
+npm run build      # build de produção em dist/
 
 # separados, se precisar:
-npm run api      # só a API, em http://localhost:3000 (precisa de .env)
-npm run dev:web  # só o front, em http://localhost:5173
+npm run api        # só a API, em http://localhost:3000 (precisa de .env)
+npm run dev:web    # só o front, em http://localhost:5173
+npm run integracao # roda contra o banco de verdade; ver Testes
 ```
 
 O Vite encaminha `/api/*` para a API, então dev e produção usam a mesma origem.
@@ -210,13 +212,88 @@ arrasta-se para cima ou para baixo e a faixa que vai ser preenchida fica marcada
 enquanto o botão está pressionado. Arrastar além de dezembro preenche até
 dezembro em vez de cancelar o gesto.
 
+## Acesso
+
+### Login
+
+**O portal não guarda senha.** Quem valida é o Active Directory, por bind: se o
+bind passa, a senha está certa. Não há hash, não há redefinição, não há senha
+padrão — trocar a senha do Windows troca a do portal.
+
+O login aceita as três formas que a pessoa já usa (`fulano`, `DOMINIO\fulano`,
+`fulano@dominio`) e todas viram um só login em `normalizarLogin`.
+
+Ter conta no AD **não** dá acesso: é preciso uma linha em
+`KING_IDENTIDADE_ACESSO` para o app `orcamento`. Quem concede é um administrador,
+pela tela de Usuários. `PORTAL_ADMINS` no `.env` existe só para destravar o
+primeiro — sem ele não haveria como criar o primeiro admin, porque a tela exige
+já ser admin.
+
+**A sessão** dura 8 horas e renova a cada uso. O cookie é `httpOnly` +
+`SameSite=Lax`; no banco fica o **SHA-256** do id, nunca o valor do cookie, para
+que um dump ou uma consulta de suporte não entreguem sessão viva. Revogar acesso
+apaga as sessões abertas na hora — revogação que só vale depois de expirar não é
+revogação.
+
+**Limite de tentativas** ([server/limite.js](server/limite.js)): 5 falhas no
+mesmo login param de ir ao AD por 5 minutos. O alvo não é adivinhação de senha —
+é impedir que o portal dispare a política de **bloqueio de conta** do AD, que
+tiraria a pessoa do Windows e do e-mail, não só daqui. Há também um limite por
+origem, que conta **logins distintos** e não tentativas: atrás de proxy ou NAT
+toda a empresa chega com o mesmo IP, e contar tentativas faria dele um fusível
+geral. Falha de rede/configuração (503) não conta como tentativa.
+
+### Permissão
+
+A concessão tem três dimensões — **módulo, filial, centro de custo** — e `null`
+em qualquer uma vale por *todas*. As linhas somam; vale a mais permissiva. A
+linha existir já dá o direito de **ver**; `PODE_EDITAR` diz se também lança.
+
+```
+{ modulo: null,             filial: null,     centro: null,  editar: true  }  tudo
+{ modulo: null,             filial: "000025", centro: null,  editar: true  }  uma filial
+{ modulo: "receita-vendas", filial: null,     centro: null,  editar: false }  só vê a receita
+```
+
+O recorte vale nos dois lados: a API recusa o que está fora dele, e a tela não
+mostra o que a pessoa não pode ver — nome de filial e de centro já diz o tamanho
+da operação. Em Configurações as filiais aparecem sem caixa de seleção, porque
+"quais filiais o portal usa" é decisão global de administrador.
+
+**Módulo sem centro de custo.** Receita de vendas não tem a dimensão centro, e a
+tela consulta com `SEM_CENTRO`. Uma concessão presa a um centro não casa com
+isso, de propósito: quem cuida do e-commerce não ganha a receita da empresa de
+brinde. Como Deduções e Custos calculam percentual **sobre a receita**, quem
+precisa desse cálculo recebe a linha explícita de leitura da receita — sem ela o
+percentual fica sem base e a coluna em reais zera.
+
+**O DRE exige todos os módulos.** Com um de fora, "margem bruta" e "resultado
+líquido" deixam de ser o resultado da empresa e viram números que não fecham com
+nada — então ele some da barra lateral em vez de mostrar meia consolidação.
+
+A avaliação é uma função pura em
+[src/dados/permissoes.js](src/dados/permissoes.js), usada pelo front e coberta
+por teste; a decisão de verdade é sempre a do servidor.
+
+### Identidade compartilhada entre portais
+
+As tabelas `KING_IDENTIDADE_*` são de todos os portais AKR, não deste. Cada um
+tem sua linha em `KING_IDENTIDADE_ACESSO` por `APP`, então desativar alguém aqui
+não mexe no Modelagem nem no Envio de Documentos. As permissões específicas do
+orçamento ficam à parte, em `KING_PORTAL_ORC_ACESSO`.
+
 ## Estrutura
 
 ```
 server/
 ├── index.js                 Express + rotas /api/*
 ├── sqlserver.js             pool mssql, query/queryOne/transaction
-└── consultas.js             SELECTs do ERP (views confirmadas)
+├── consultas.js             SELECTs do ERP (views confirmadas)
+├── repositorio.js           leitura e gravação do estado do portal
+├── ldap.js                  bind e busca no Active Directory
+├── identidade.js            sessão, middleware, quem-pode-o-quê
+├── limite.js                limite de tentativas de login
+└── usuarios.js              administração de acesso e permissão
 
 src/
 ├── main.jsx                 entrada; importa os CSS
@@ -228,12 +305,17 @@ src/
 │   ├── realizado.js         índice do realizado vindo da API
 │   ├── seeds.js             empresa e meses
 │   ├── calendario.js        até que mês existe "realizado"
+│   ├── mapeamentoPadrao.js  o que se sabe do Scoreplan, isolado num lugar só
+│   ├── permissoes.js        avaliação de acesso (pura, espelha o servidor)
+│   ├── dre.js               consolidação dos módulos em linhas de resultado
 │   └── plano.js             modelo do plano, agregações e cálculos
 ├── lib/
 │   ├── formato.js           moeda/percentual pt-BR e leitura de números
 │   ├── api.js               cliente das rotas /api/*
 │   ├── useErp.js            carga dos cadastros e do realizado
-│   ├── persistencia.js      localStorage (visões e planejado)
+│   ├── estado.js            visões, planos e planejado via API
+│   ├── persistencia.js      normalização + leitura do localStorage legado
+│   ├── useSessao.js         sessão do usuário no front
 │   └── tema.js              tema claro/escuro
 ├── componentes/             UI reutilizável (Sidebar, Modal, Tabela, …)
 ├── telas/                   uma tela por rota
@@ -250,8 +332,9 @@ src/
 | Filiais | `/api/filiais` — somente leitura |
 | Centros de custo | `/api/centros-de-custo` — somente leitura |
 | Realizado e ano anterior | `/api/realizado` |
-| Visões (módulo → contas) | portal, `localStorage` |
-| Valores planejados | portal, `localStorage` |
+| Visões (módulo → contas) | portal, `KING_PORTAL_ORC_VISAO*` |
+| Planos e valores planejados | portal, `KING_PORTAL_ORC_PLANO`/`_PLANEJADO` |
+| Usuários e permissões | `KING_IDENTIDADE_*` + `KING_PORTAL_ORC_ACESSO` |
 
 `plano.planejado` tem chave `modulo|filial|ano|mes`. **Célula sem valor digitado é
 zero**, não um número gerado — não existe planejamento que ninguém fez.
@@ -307,16 +390,37 @@ Copie [.env.example](.env.example) para `.env` e preencha as credenciais. O
 `.env` está no `.gitignore` e nunca deve ser commitado. Use uma **conta de
 serviço**, não uma conta pessoal, e não sysadmin.
 
+Além do SQL Server, o `.env` traz as chaves `LDAP_*` (conexão com o AD) e
+`PORTAL_ADMINS` (quem entra como administrador antes de existir o primeiro).
+
+### Criar as tabelas
+
+Os scripts em [sql/](sql/) rodam **na ordem**, uma vez, direto no SQL Server —
+a aplicação nunca executa DDL:
+
+| Script | O que cria |
+|---|---|
+| `001-identidade.sql` | `KING_IDENTIDADE_*`, compartilhado entre os portais AKR |
+| `002-orcamento-acesso.sql` | `KING_PORTAL_ORC_ACESSO`, permissão deste portal |
+| `003-orcamento-dados.sql` | visões, planos e planejado |
+
+São idempotentes (`IF OBJECT_ID … IS NULL`): rodar de novo não apaga nada.
+
+`PLANEJADO.VALOR` é `DECIMAL(18,6)` porque a mesma coluna guarda reais e
+percentuais — em módulo percentual, 38,959531% arredondado a duas casas vira uns
+R$ 500 de diferença sobre uma base de 133 milhões.
+
 Verificar:
 
 ```bash
 npm run api
 curl http://localhost:3000/api/health            # { ok: true, banco: "KINGEJOE" }
-curl http://localhost:3000/api/contas
-curl http://localhost:3000/api/filiais
-curl http://localhost:3000/api/centros-de-custo
-curl "http://localhost:3000/api/realizado?ano=2025"
 ```
+
+`/api/health` é a única rota aberta. Todas as outras exigem sessão — os dados do
+ERP são da empresa e não ficam à disposição de quem alcançar a porta. Para
+conferi-las, entre pelo navegador ou rode `npm run integracao`, que abre a
+própria sessão.
 
 ### Objetos usados (KINGEJOE)
 
@@ -369,31 +473,73 @@ tema claro e escuro, script de tema inline no `<head>` (evita o flash branco),
 modais em `<dialog>` com layout flex-column e botão desabilitado com aparência
 de desabilitado.
 
-Duas divergências conscientes:
-
-- **Sem card de usuário com "Sair"** no rodapé da sidebar. O portal ainda não
-  tem autenticação; o rodapé identifica a empresa em vez de simular um login.
-- **Stack React + Vite puro**, não TanStack Start + Tailwind.
+Uma divergência consciente: **stack React + Vite puro**, não TanStack Start +
+Tailwind.
 
 ## Testes
 
 `npm test` roda a camada de dados com o runner nativo do Node (`node --test`),
 sem dependência extra. A cobertura foca nos pontos onde um erro vira número
 errado na tela: leitura de número pt-BR, corte temporal do realizado, módulo sem
-contas, isolamento da edição por módulo/filial/ano, denominador das médias e
-limpeza de chaves órfãs.
+contas, isolamento da edição por módulo/filial/ano, denominador das médias,
+limpeza de chaves órfãs, avaliação de permissão, limite de tentativas de login e
+o aviso de sessão expirada.
+
+**Não depende de banco nem de rede** — e é por isso que os testes de integração
+ficam fora de `test/`: `node --test` varre aquela pasta inteira, e um `npm test`
+que precisa do KINGEJOE no ar deixa de ser executável.
+
+`npm run integracao` roda contra o banco de verdade (`scripts/integracao/`):
+sessão e middleware, leitura/gravação do estado, importação do legado e
+administração de usuários. Cria e apaga os próprios registros, todos com prefixo
+`__t`. Precisa de `.env` preenchido.
 
 Os componentes não têm teste automatizado — foram verificados por renderização.
 
 ## Pendências conhecidas
 
-- **Visões e valores planejados não têm tabela** — vivem no `localStorage` de
-  cada navegador, não são compartilhados nem sofrem backup. É o próximo passo:
-  tabelas `KING_PORTAL_*` no SQL Server (precisa de autorização para criar).
-- Sem autenticação nem RBAC (o padrão exige enforcement no backend).
-- Sem deploy: falta `deploy/setup.sh` e service systemd.
-- `localStorage` tem limite de ~5 MB; a aplicação avisa na tela se a gravação
-  falhar.
-- **Chave de armazenamento em `:v4`.** Versões anteriores usavam ids fictícios
-  (filial `akr`, conta `3.1.1.01.001`) que não existem no ERP; migrar deixaria
-  chaves órfãs, então dados locais antigos são ignorados.
+Em ordem de risco.
+
+**Infraestrutura — depende de quem administra AD e banco**
+
+- **LDAP sem TLS.** A conexão com o controlador de domínio usa `ldap://`, então
+  a senha de rede trafega sem cifra a cada login. `ldaps://` só passa a funcionar
+  quando o DC tiver certificado de Autenticação de Servidor instalado; hoje a
+  porta 636 aceita conexão e derruba o handshake em todas as versões de TLS.
+  Depois disso, `LDAP_TLS_REJECT_UNAUTHORIZED` volta a `true`.
+- **Conta de serviço do SQL Server.** A conexão ainda usa conta pessoal. O
+  portal escreve no banco: precisa de conta própria, com permissão só sobre as
+  `KING_*` e `SELECT` no resto.
+- **Backup das `KING_PORTAL_ORC_*`.** O orçamento agora só existe no SQL Server.
+  Confirmar que essas tabelas entram na rotina de backup do KINGEJOE.
+- **Sem deploy.** Roda por `npm run dev`. Falta serviço, build servido e
+  processo de atualização. Atrás de proxy reverso, `app.set("trust proxy", …)`
+  precisa ser configurado, senão `req.ip` vira o IP do proxy e o limite por
+  origem deixa de distinguir quem é quem.
+
+**Funcional**
+
+- **Sem aviso de edição concorrente.** Duas pessoas no mesmo plano: a última a
+  gravar vence, em silêncio.
+- **Auditoria sem tela.** `ALTERADO_POR`/`ALTERADO_EM` são gravados desde o
+  começo e não há como consultá-los pelo portal.
+- **Sessão expirada só some quando alguém tenta usá-la** — não há limpeza
+  periódica da tabela.
+- **Dois módulos sem mapeamento padrão**: Receitas não operacionais e Despesas
+  com pessoal. Configuráveis na mão; só não vêm prontos.
+
+**Cadastro do ERP**
+
+Duas correções vivem hoje em [src/dados/mapeamentoPadrao.js](src/dados/mapeamentoPadrao.js)
+e existem só porque o cadastro do ERP está incorreto. Arrumado o cadastro, o
+código sai:
+
+- `4.6.5.01` e `4.6.5.02` são receita cadastrada como `DF` (`CORRECOES_DE_SINAL`).
+- O lançamento não registra a qual receita o valor pertence, então 9 das 11
+  receitas ficam sem realizado e a atribuição é deduzida pelo centro de custo
+  (`RECEITA_DO_REALIZADO`).
+
+**Aberto com o negócio**
+
+- Falta confirmar se o Scoreplan deixa `3.1.1.01.005`, `3.1.1.01.060` e
+  `3.1.1.05.001` fora da Receita de vendas de propósito.
