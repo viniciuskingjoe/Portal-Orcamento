@@ -410,16 +410,40 @@ app.use((erro, _req, res, _next) => {
   res.status(status).json({ erro: erro.message ?? "Erro interno." });
 });
 
-const porta = Number(process.env.API_PORT ?? 3000);
+// `??` não serve aqui: uma chave presente e vazia no .env (`API_PORT=`) chega
+// como "", que não é nullish. `Number("")` é 0, e porta 0 no Node significa
+// "sorteie uma porta livre" — o processo sobe, o systemd diz `active`, e não há
+// nada na porta esperada. Falha silenciosa, cara de achar.
+const doAmbiente = (chave, padrao) => {
+  const valor = process.env[chave]?.trim();
+  return valor ? valor : padrao;
+};
+
+const porta = Number(doAmbiente("API_PORT", "3000"));
+if (!Number.isInteger(porta) || porta <= 0 || porta > 65535) {
+  console.error(`[api] API_PORT inválida: ${JSON.stringify(process.env.API_PORT)}`);
+  process.exit(1);
+}
 
 // Escuta só em loopback por padrão. Na VM quem conecta é o `cloudflared`, no
 // mesmo host, então nada precisa alcançar esta porta pela rede — e o que não é
 // alcançável não tem como ter o `X-Forwarded-For` forjado. Para expor na rede
 // (sem túnel), `API_HOST=0.0.0.0`.
-const host = process.env.API_HOST ?? "127.0.0.1";
+const host = doAmbiente("API_HOST", "127.0.0.1");
 
 const servidor = app.listen(porta, host, () => {
   console.log(`[api] ouvindo em http://${host}:${porta}${temBuild ? " (servindo dist/)" : ""}`);
+});
+
+// Porta ocupada é o erro mais provável aqui (cada portal tem a sua). Sem isto o
+// processo morre com stack trace de EADDRINUSE, que não diz o que fazer.
+servidor.on("error", (erro) => {
+  if (erro.code === "EADDRINUSE") {
+    console.error(`[api] a porta ${porta} já está em uso. Cada portal precisa da sua.`);
+  } else {
+    console.error("[api] não foi possível escutar:", erro.message);
+  }
+  process.exit(1);
 });
 
 for (const sinal of ["SIGINT", "SIGTERM"]) {

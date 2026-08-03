@@ -96,12 +96,28 @@ systemctl daemon-reload
 systemctl enable --now $APP
 systemctl restart $APP
 
-sleep 2
-systemctl is-active --quiet $APP || { journalctl -u $APP -n 30 --no-pager; erro "servico nao subiu."; }
-
 echo "==> conferindo"
-curl -fsS "http://127.0.0.1:$PORTA/api/health" && echo
-curl -fsSI "http://127.0.0.1:$PORTA/" | head -1
+
+# `systemctl is-active` nao basta: com Restart=always um processo que sobe e
+# morre em ciclo aparece como ativo. Quem diz que deu certo e a porta responder.
+diagnostico() {
+  echo
+  echo "--- systemctl ---"; systemctl status $APP --no-pager -n 0 || true
+  echo "--- ultimas linhas do log ---"; journalctl -u $APP -n 30 --no-pager || true
+  echo "--- quem esta escutando ---"; ss -lntp 2>/dev/null | grep -E ":$PORTA|node" || echo "  nada em :$PORTA"
+  echo "--- porta configurada no .env ---"; grep -E '^(API_PORT|API_HOST)=' "$DESTINO/.env" || echo "  API_PORT/API_HOST nao definidos (o padrao NAO e $PORTA)"
+}
+
+for tentativa in $(seq 1 15); do
+  if curl -fsS "http://127.0.0.1:$PORTA/api/health" >/tmp/orc-health 2>/dev/null; then
+    echo "    /api/health -> $(cat /tmp/orc-health)"
+    break
+  fi
+  [[ $tentativa -eq 15 ]] && { diagnostico; erro "nada respondendo em 127.0.0.1:$PORTA apos 15s."; }
+  sleep 1
+done
+
+curl -fsSI "http://127.0.0.1:$PORTA/" | head -1 || { diagnostico; erro "a raiz nao respondeu (o front pode nao ter sido buildado)."; }
 
 cat <<FIM
 
