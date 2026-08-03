@@ -1,7 +1,12 @@
 import { strict as assert } from "node:assert";
 import { test } from "node:test";
 
-import { carregarEstado, estadoInicial, salvarEstado } from "../src/lib/persistencia.js";
+import {
+  descartarEstadoLegado,
+  estadoInicial,
+  lerEstadoLegado,
+  normalizarEstado,
+} from "../src/lib/persistencia.js";
 
 const CHAVE = "portal-orcamento:estado:v5";
 
@@ -33,20 +38,22 @@ test("estado inicial é vazio; filiais ativas ainda não escolhidas", () => {
   });
 });
 
-test("sem nada gravado, carrega o estado inicial", () => {
+test("sem nada gravado, não há legado a importar", () => {
+  // `null` e não estado vazio: é a diferença entre "não tem nada para trazer" e
+  // "tem, e está vazio" — só o primeiro esconde o convite de importação.
   comArmazenamento(null, () => {
-    assert.deepEqual(carregarEstado(), estadoInicial());
+    assert.equal(lerEstadoLegado(), null);
   });
 });
 
 test("lista vazia de filiais ativas é preservada, não vira null", () => {
+  // Vazio quer dizer "desmarquei todas"; null quer dizer "ainda não escolhi".
   const estado = { configuracao: { filiaisAtivas: [] }, visoes: [], planos: [] };
-  comArmazenamento(JSON.stringify(estado), () => {
-    assert.deepEqual(carregarEstado().configuracao.filiaisAtivas, []);
-  });
+  assert.deepEqual(normalizarEstado(estado).configuracao.filiaisAtivas, []);
+  assert.equal(normalizarEstado({ visoes: [], planos: [] }).configuracao.filiaisAtivas, null);
 });
 
-test("ida e volta preserva visão, filiais ativas e planejado", () => {
+test("normalizar preserva visão, filiais ativas e planejado", () => {
   const estado = {
     configuracao: { filiaisAtivas: ["000001", "000025"] },
     visoes: [
@@ -74,9 +81,12 @@ test("ida e volta preserva visão, filiais ativas e planejado", () => {
     ],
   };
 
-  comArmazenamento(null, () => {
-    assert.deepEqual(salvarEstado(estado), { ok: true });
-    assert.deepEqual(carregarEstado(), estado);
+  // A peneira não pode alterar o que já está correto.
+  assert.deepEqual(normalizarEstado(estado), estado);
+
+  // E o mesmo vale saindo do navegador.
+  comArmazenamento(JSON.stringify(estado), () => {
+    assert.deepEqual(lerEstadoLegado(), estado);
   });
 });
 
@@ -104,7 +114,7 @@ test("o que o centro tem é o que vale, e a filial acompanha", () => {
   };
 
   comArmazenamento(JSON.stringify(estado), () => {
-    const daFilial = carregarEstado().visoes[0].modulos["despesas-operacionais"].filiais["000001"];
+    const daFilial = lerEstadoLegado().visoes[0].modulos["despesas-operacionais"].filiais["000001"];
     assert.deepEqual(daFilial.centros["002"], ["4.4.1.01", "9.9.9"]);
     assert.deepEqual(daFilial.contas, ["4.4.1.01", "9.9.9"]);
   });
@@ -125,13 +135,13 @@ test("módulo sem centro guarda a lista da filial como escolha", () => {
     planos: [],
   };
   comArmazenamento(JSON.stringify(estado), () => {
-    assert.deepEqual(carregarEstado().visoes[0].modulos.m.filiais.f.contas, ["A"]);
+    assert.deepEqual(lerEstadoLegado().visoes[0].modulos.m.filiais.f.contas, ["A"]);
   });
 });
 
-test("JSON corrompido cai no estado inicial em vez de estourar", () => {
+test("JSON corrompido não estoura nem vira convite de importação", () => {
   comArmazenamento("{isso nao e json", () => {
-    assert.deepEqual(carregarEstado(), estadoInicial());
+    assert.equal(lerEstadoLegado(), null);
   });
 });
 
@@ -142,12 +152,13 @@ test("versão anterior é ignorada: os ids não casam", () => {
     visoes: [{ id: "v1", nome: "DRE", modulos: { "receita-vendas": ["3.1.1.01.001"] } }],
     planos: [{ id: "velho", nome: "Velho", inicio: 2024, fim: 2026, planejado: { "x|y|2025|1": 9 } }],
   });
-  comArmazenamento(v4, () => assert.deepEqual(carregarEstado(), estadoInicial()), "portal-orcamento:estado:v4");
+  // Gravado sob outra chave: a leitura nem enxerga.
+  comArmazenamento(v4, () => assert.equal(lerEstadoLegado(), null), "portal-orcamento:estado:v4");
 });
 
 test("array solto (formato v1) é ignorado", () => {
   comArmazenamento(JSON.stringify([{ id: "velho", nome: "Velho" }]), () => {
-    assert.deepEqual(carregarEstado(), estadoInicial());
+    assert.equal(lerEstadoLegado(), null);
   });
 });
 
@@ -157,7 +168,7 @@ test("plano sem ano é descartado", () => {
   const ruim = { id: "p2", nome: "Ruim" };
   comArmazenamento(JSON.stringify({ planos: [bom, ruim], visoes: [] }), () => {
     assert.deepEqual(
-      carregarEstado().planos.map((p) => p.id),
+      lerEstadoLegado().planos.map((p) => p.id),
       ["p1"]
     );
   });
@@ -175,7 +186,7 @@ test("campos estranhos no plano são descartados na leitura", () => {
     filiais: [{ id: "akr" }],
   };
   comArmazenamento(JSON.stringify({ planos: [plano], visoes: [] }), () => {
-    const [carregado] = carregarEstado().planos;
+    const [carregado] = lerEstadoLegado().planos;
     assert.equal(carregado.inicio, undefined);
     assert.equal(carregado.filiais, undefined);
   });
@@ -190,36 +201,46 @@ test("valor planejado não numérico é descartado", () => {
     planejado: { "m|f||c|1": 10, "m|f||c|2": "abc", "m|f||c|3": null },
   };
   comArmazenamento(JSON.stringify({ planos: [plano], visoes: [] }), () => {
-    assert.deepEqual(carregarEstado().planos[0].planejado, { "m|f||c|1": 10 });
+    assert.deepEqual(lerEstadoLegado().planos[0].planejado, { "m|f||c|1": 10 });
   });
 });
 
 test("visão sem módulos vira objeto vazio, não undefined", () => {
   comArmazenamento(JSON.stringify({ planos: [], visoes: [{ id: "v1", nome: "X" }] }), () => {
-    const [visao] = carregarEstado().visoes;
+    const [visao] = lerEstadoLegado().visoes;
     assert.deepEqual(visao.modulos, {});
     assert.equal(visao.visaoContabil, null);
   });
 });
 
-test("falha de gravação vira resultado, não exceção", () => {
-  const original = globalThis.localStorage;
-  globalThis.localStorage = {
-    getItem: () => null,
-    setItem: () => {
-      const erro = new Error("cheio");
-      erro.name = "QuotaExceededError";
-      throw erro;
-    },
-  };
-  try {
-    const resultado = salvarEstado(estadoInicial());
-    assert.equal(resultado.ok, false);
-    assert.equal(resultado.erro, "QuotaExceededError");
-  } finally {
-    if (original === undefined) delete globalThis.localStorage;
-    else globalThis.localStorage = original;
-  }
+test("normalizarEstado vale para o que vem da API, não só do navegador", () => {
+  // Mesma peneira nas duas origens: linha estranha no banco não pode virar NaN
+  // numa soma de dinheiro.
+  const daApi = normalizarEstado({
+    configuracao: { filiaisAtivas: ["000001"] },
+    visoes: [{ id: "v1", nome: "DRE", visaoContabil: "25", modulos: {} }],
+    planos: [{ id: "p1", nome: "P", ano: 2026, planejado: { "m|f||c|1": "texto", "m|f||c|2": 10 } }],
+  });
+
+  assert.deepEqual(daApi.configuracao.filiaisAtivas, ["000001"]);
+  assert.deepEqual(daApi.planos[0].planejado, { "m|f||c|2": 10 });
+});
+
+test("resposta sem as listas cai no estado inicial", () => {
+  assert.deepEqual(normalizarEstado(null), estadoInicial());
+  assert.deepEqual(normalizarEstado({ visoes: [] }), estadoInicial());
+});
+
+test("descartar o legado impede o convite de aparecer de novo", () => {
+  const conteudo = JSON.stringify({
+    visoes: [{ id: "v1", nome: "X", modulos: {} }],
+    planos: [],
+  });
+  comArmazenamento(conteudo, () => {
+    assert.ok(lerEstadoLegado());
+    descartarEstadoLegado();
+    assert.equal(lerEstadoLegado(), null);
+  });
 });
 
 test("centro em uso sem conta sobrevive à recarga", () => {
@@ -243,7 +264,7 @@ test("centro em uso sem conta sobrevive à recarga", () => {
     planos: [],
   };
 
-  const [visao] = comArmazenamento(JSON.stringify(estado), carregarEstado).visoes;
+  const [visao] = comArmazenamento(JSON.stringify(estado), lerEstadoLegado).visoes;
   const daFilial = visao.modulos["despesas-operacionais"].filiais["000001"];
 
   assert.deepEqual(Object.keys(daFilial.centros).sort(), ["002", "052"]);
@@ -274,6 +295,6 @@ test("contas da filial são recalculadas dos centros ao carregar", () => {
     planos: [],
   };
 
-  const [visao] = comArmazenamento(JSON.stringify(estado), carregarEstado).visoes;
+  const [visao] = comArmazenamento(JSON.stringify(estado), lerEstadoLegado).visoes;
   assert.deepEqual(visao.modulos["despesas-operacionais"].filiais["000001"].contas, ["4.4.1.01"]);
 });

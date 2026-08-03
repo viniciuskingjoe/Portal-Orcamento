@@ -44,7 +44,8 @@ import { conta as buscarConta } from "./dados/contas.js";
 import { filiaisForaDoUso } from "./dados/realizado.js";
 import { contasDoMapeamento, temMapeamentoPadrao } from "./dados/mapeamentoPadrao.js";
 import { MODULOS } from "./dados/modulos.js";
-import { carregarEstado, salvarEstado } from "./lib/persistencia.js";
+import { carregarEstado, celulaDaChave, estado as repo } from "./lib/estado.js";
+import { descartarEstadoLegado, estadoInicial, lerEstadoLegado } from "./lib/persistencia.js";
 import { formatarParaEdicao, parseNumeroPtBr } from "./lib/formato.js";
 import { aplicarTema, temaInicial } from "./lib/tema.js";
 import { useCadastrosDoErp, useContas, useRealizado } from "./lib/useErp.js";
@@ -80,11 +81,14 @@ export default function App() {
 }
 
 function PlanejamentoOrcamentario({ sessao, onSair }) {
-  const inicial = useMemo(carregarEstado, []);
-
-  const [configuracao, setConfiguracao] = useState(inicial.configuracao);
-  const [visoes, setVisoes] = useState(inicial.visoes);
-  const [planos, setPlanos] = useState(inicial.planos);
+  const [configuracao, setConfiguracao] = useState(estadoInicial().configuracao);
+  const [visoes, setVisoes] = useState([]);
+  const [planos, setPlanos] = useState([]);
+  const [carregandoEstado, setCarregandoEstado] = useState(true);
+  const [erroEstado, setErroEstado] = useState("");
+  // O que ficou no navegador de antes da migração, quando o banco ainda está
+  // vazio. Oferecido uma vez; importar é decisão de quem está vendo.
+  const [legado, setLegado] = useState(null);
 
   const [tela, setTela] = useState("planos");
   const [planoAtivoId, setPlanoAtivoId] = useState(null);
@@ -144,13 +148,49 @@ function PlanejamentoOrcamentario({ sessao, onSair }) {
   }, [tema]);
 
   useEffect(() => {
-    const resultado = salvarEstado({ configuracao, visoes, planos });
-    setAvisoPersistencia(
-      resultado.ok
-        ? ""
-        : "Não foi possível salvar neste navegador. As alterações valem só para esta sessão."
-    );
-  }, [configuracao, visoes, planos]);
+    let vivo = true;
+    carregarEstado()
+      .then((dados) => {
+        if (!vivo) return;
+        setConfiguracao(dados.configuracao);
+        setVisoes(dados.visoes);
+        setPlanos(dados.planos);
+        // Banco vazio e algo no navegador: é a migração pendente.
+        if (!dados.visoes.length && !dados.planos.length) setLegado(lerEstadoLegado());
+      })
+      .catch((erro) => vivo && setErroEstado(erro.message))
+      .finally(() => vivo && setCarregandoEstado(false));
+    return () => {
+      vivo = false;
+    };
+  }, []);
+
+  // A tela é otimista: aplica a mudança e grava em seguida. Quem digita doze
+  // meses seguidos não pode esperar ida e volta a cada tecla — mas se a gravação
+  // falhar, o aviso precisa aparecer, porque o que está na tela deixou de valer.
+  function gravar(promessa) {
+    Promise.resolve(promessa)
+      .then(() => setAvisoPersistencia(""))
+      .catch((erro) =>
+        setAvisoPersistencia(
+          `Não foi possível salvar: ${erro.message} Recarregue a página para ver o que está gravado.`
+        )
+      );
+  }
+
+  async function importarLegado() {
+    try {
+      await repo.importar(legado);
+      descartarEstadoLegado();
+      setLegado(null);
+      const dados = await carregarEstado();
+      setConfiguracao(dados.configuracao);
+      setVisoes(dados.visoes);
+      setPlanos(dados.planos);
+    } catch (erro) {
+      setAvisoPersistencia(`Não foi possível importar: ${erro.message}`);
+    }
+  }
 
   // --------------------------------------------------------------------------
   // Orçamento em tela
@@ -342,10 +382,9 @@ function PlanejamentoOrcamentario({ sessao, onSair }) {
       return setErroPlano("Informe um ano válido.");
     }
 
-    setPlanos((atuais) => [
-      ...atuais,
-      criarPlano(gerarId("plano"), novoPlano.nome.trim(), ano, novoPlano.visaoId),
-    ]);
+    const plano = criarPlano(gerarId("plano"), novoPlano.nome.trim(), ano, novoPlano.visaoId);
+    setPlanos((atuais) => [...atuais, plano]);
+    gravar(repo.plano.salvar(plano));
     setNovoPlano({ nome: "", ano: String(new Date().getFullYear() + 1), visaoId: null });
     setErroPlano("");
     setDrawerAberto(false);
@@ -369,6 +408,7 @@ function PlanejamentoOrcamentario({ sessao, onSair }) {
     if (!nome || !modalVisao.visaoContabil) return;
 
     if (modalVisao.id) {
+      gravar(repo.visao.salvar({ id: modalVisao.id, nome, visaoContabil: modalVisao.visaoContabil }));
       setVisoes((atuais) =>
         atuais.map((visao) => {
           if (visao.id !== modalVisao.id) return visao;
@@ -385,6 +425,7 @@ function PlanejamentoOrcamentario({ sessao, onSair }) {
       );
     } else {
       const nova = criarVisao(gerarId("visao"), nome, modalVisao.visaoContabil);
+      gravar(repo.visao.salvar(nova));
       setVisoes((atuais) => [...atuais, nova]);
       setVisaoAbertaId(nova.id);
       setTela("visao");
@@ -406,6 +447,14 @@ function PlanejamentoOrcamentario({ sessao, onSair }) {
         filiaisAtivas.forEach((filial) => {
           proxima = definirContasDaFilial(proxima, modulo.id, filial.id, codigos);
         });
+        // Um lote por módulo: filial a filial seriam 25 requisições cada.
+        gravar(
+          repo.visao.contasEmLote(
+            visaoAberta.id,
+            modulo.id,
+            filiaisAtivas.map((filial) => ({ filial: filial.id, centro: "", contas: codigos }))
+          )
+        );
       });
       return proxima;
     });
@@ -420,14 +469,17 @@ function PlanejamentoOrcamentario({ sessao, onSair }) {
   // Configuração: filiais ativas
   // --------------------------------------------------------------------------
 
+  function definirFiliaisAtivas(ids) {
+    setConfiguracao((atual) => ({ ...atual, filiaisAtivas: ids }));
+    gravar(repo.configuracao("filiaisAtivas", ids));
+  }
+
   function alternarFilialAtiva(filialId) {
-    setConfiguracao((atual) => {
-      const base = atual.filiaisAtivas ?? erp.filiais.map((filial) => filial.id);
-      const marcadas = new Set(base);
-      if (marcadas.has(filialId)) marcadas.delete(filialId);
-      else marcadas.add(filialId);
-      return { ...atual, filiaisAtivas: [...marcadas] };
-    });
+    const base = configuracao.filiaisAtivas ?? erp.filiais.map((filial) => filial.id);
+    const marcadas = new Set(base);
+    if (marcadas.has(filialId)) marcadas.delete(filialId);
+    else marcadas.add(filialId);
+    definirFiliaisAtivas([...marcadas]);
   }
 
   // --------------------------------------------------------------------------
@@ -453,9 +505,11 @@ function PlanejamentoOrcamentario({ sessao, onSair }) {
     if (!confirmacao) return;
     if (confirmacao.tipo === "plano") {
       setPlanos((atuais) => atuais.filter((plano) => plano.id !== confirmacao.id));
+      gravar(repo.plano.excluir(confirmacao.id));
       if (confirmacao.id === planoAtivoId) navegar("planos");
     } else {
       setVisoes((atuais) => atuais.filter((visao) => visao.id !== confirmacao.id));
+      gravar(repo.visao.excluir(confirmacao.id));
       if (confirmacao.id === visaoAbertaId) navegar("visoes");
     }
     setConfirmacao(null);
@@ -496,6 +550,14 @@ function PlanejamentoOrcamentario({ sessao, onSair }) {
         plano.id === planoAtivoId
           ? { ...plano, planejado: { ...plano.planejado, ...alteracoes } }
           : plano
+      )
+    );
+    // Um lote só: a alça e o Ctrl+Enter mexem em até doze meses de uma vez, e
+    // doze requisições dariam doze chances de gravar metade.
+    gravar(
+      repo.plano.planejado(
+        planoAtivoId,
+        Object.entries(alteracoes).map(([chave, valor]) => celulaDaChave(chave, valor))
       )
     );
   }
@@ -600,6 +662,23 @@ function PlanejamentoOrcamentario({ sessao, onSair }) {
   const nomeContabil = (id) => erp.visoesContabeis.find((item) => item.id === id)?.nome ?? null;
 
   function renderizarTela() {
+    // Sem o estado carregado, qualquer tela mostraria "nenhum plano" — que é
+    // exatamente o que assusta quem tem um plano gravado.
+    if (carregandoEstado) {
+      return (
+        <main className="conteudo">
+          <Carregando texto="Carregando o orçamento…" />
+        </main>
+      );
+    }
+    if (erroEstado) {
+      return (
+        <main className="conteudo">
+          <AvisoErro mensagem={erroEstado} onTentarDeNovo={() => window.location.reload()} />
+        </main>
+      );
+    }
+
     if (tela === "visoes") {
       return (
         <TelaVisoes
@@ -645,25 +724,30 @@ function PlanejamentoOrcamentario({ sessao, onSair }) {
           carregando={contas.carregando || erp.carregando}
           erro={contas.erro || erp.erro}
           onRecarregar={contas.recarregar}
-          onDefinirContasDaFilial={(moduloId, filialId, lista) =>
-            atualizarVisaoAberta((visao) => definirContasDaFilial(visao, moduloId, filialId, lista))
-          }
-          onDefinirContasDoCentro={(moduloId, filialId, centroId, lista) =>
+          onDefinirContasDaFilial={(moduloId, filialId, lista) => {
+            atualizarVisaoAberta((visao) => definirContasDaFilial(visao, moduloId, filialId, lista));
+            gravar(repo.visao.contas(visaoAberta.id, moduloId, filialId, "", lista));
+          }}
+          onDefinirContasDoCentro={(moduloId, filialId, centroId, lista) => {
             atualizarVisaoAberta((visao) =>
               definirContasDoCentro(visao, moduloId, filialId, centroId, lista)
-            )
-          }
-          onDefinirUsoDoCentro={(moduloId, filialId, centroId, usa) =>
+            );
+            gravar(repo.visao.contas(visaoAberta.id, moduloId, filialId, centroId, lista));
+          }}
+          onDefinirUsoDoCentro={(moduloId, filialId, centroId, usa) => {
             atualizarVisaoAberta((visao) =>
               definirUsoDoCentro(visao, moduloId, filialId, centroId, usa)
-            )
-          }
-          onAlternarUsaCentro={(moduloId, usa) =>
-            atualizarVisaoAberta((visao) => definirUsaCentroDeCusto(visao, moduloId, usa))
-          }
-          onDefinirSinal={(moduloId, codigo, tipo) =>
-            atualizarVisaoAberta((visao) => definirSinalDaConta(visao, moduloId, codigo, tipo))
-          }
+            );
+            gravar(repo.visao.usoDoCentro(visaoAberta.id, moduloId, filialId, centroId, usa));
+          }}
+          onAlternarUsaCentro={(moduloId, usa) => {
+            atualizarVisaoAberta((visao) => definirUsaCentroDeCusto(visao, moduloId, usa));
+            gravar(repo.visao.usaCentro(visaoAberta.id, moduloId, usa));
+          }}
+          onDefinirSinal={(moduloId, codigo, tipo) => {
+            atualizarVisaoAberta((visao) => definirSinalDaConta(visao, moduloId, codigo, tipo));
+            gravar(repo.visao.sinal(visaoAberta.id, moduloId, codigo, tipo));
+          }}
           onVoltar={voltar}
         />
       );
@@ -688,7 +772,7 @@ function PlanejamentoOrcamentario({ sessao, onSair }) {
           lista={tela === "filiais" ? erp.filiais : erp.centros}
           ativas={configuracao.filiaisAtivas}
           onAlternarAtiva={alternarFilialAtiva}
-          onDefinirAtivas={(ids) => setConfiguracao((atual) => ({ ...atual, filiaisAtivas: ids }))}
+          onDefinirAtivas={definirFiliaisAtivas}
           onVoltar={voltar}
         />
       );
@@ -778,6 +862,27 @@ function PlanejamentoOrcamentario({ sessao, onSair }) {
         {avisoPersistencia ? (
           <p className="aviso-fixo" role="status">
             {avisoPersistencia}
+          </p>
+        ) : null}
+        {/* O que ficou no navegador antes de o portal ter banco. Importar é
+            decisão de quem está vendo: pode ser rascunho de outra pessoa na
+            mesma máquina. */}
+        {legado ? (
+          <p className="aviso-fixo aviso-fixo--acao" role="status">
+            <span>
+              Este navegador tem {legado.visoes.length}{" "}
+              {legado.visoes.length === 1 ? "visão" : "visões"} e {legado.planos.length}{" "}
+              {legado.planos.length === 1 ? "plano" : "planos"} de antes da migração, que ainda não
+              estão no banco.
+            </span>
+            <span className="aviso-fixo__botoes">
+              <button type="button" className="botao botao--primario botao--compacto" onClick={importarLegado}>
+                Importar para o banco
+              </button>
+              <button type="button" className="botao botao--secundario botao--compacto" onClick={() => setLegado(null)}>
+                Agora não
+              </button>
+            </span>
           </p>
         ) : null}
         {realizado.erro ? (

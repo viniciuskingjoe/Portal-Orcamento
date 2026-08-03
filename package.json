@@ -13,7 +13,7 @@
     "build": "vite build",
     "preview": "vite preview",
     "test": "node --test",
-    "integracao": "node --env-file=.env scripts/integracao/sessao.mjs && node --env-file=.env scripts/integracao/estado.mjs"
+    "integracao": "node --env-file=.env scripts/integracao/sessao.mjs && node --env-file=.env scripts/integracao/estado.mjs && node --env-file=.env scripts/integracao/importacao.mjs"
   },
   "dependencies": {
     "express": "^5.2.1",

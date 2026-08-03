@@ -1,23 +1,20 @@
-// Estado que pertence ao portal: visões, planos, valores planejados e quais
-// filiais aparecem. Filiais, centros de custo, plano de contas e realizado NÃO
-// passam por aqui — vêm do ERP a cada carga.
+// Normalização do estado do portal e leitura do localStorage LEGADO.
 //
-// PLANO DE MIGRAÇÃO PARA O SQL SERVER
-// Quando sair do localStorage, o desenho previsto é (prefixo KING_PORTAL_ para
-// não se confundir com tabela do ERP, conforme PADRAO §5):
+// O estado agora vive no banco (ver lib/estado.js). Este arquivo continua por
+// dois motivos:
 //
-//   KING_PORTAL_CONFIGURACAO   (CHAVE, VALOR)                     filiais ativas
-//   KING_PORTAL_VISAO          (ID, NOME, VISAO_CONTABIL)
-//   KING_PORTAL_VISAO_MODULO   (VISAO_ID, MODULO, USA_CENTRO)
-//   KING_PORTAL_VISAO_CONTA    (VISAO_ID, MODULO, COD_FILIAL, CENTRO_CUSTO,
-//                               CLASSIFICACAO)
-//   KING_PORTAL_PLANO          (ID, NOME, ANO, VISAO_ID)
-//   KING_PORTAL_PLANEJADO      (PLANO_ID, MODULO, COD_FILIAL, CENTRO_CUSTO,
-//                               CLASSIFICACAO, MES, VALOR)
+//   1. `normalizarEstado` vale para o que vem da API também — linha estranha no
+//      banco não pode virar NaN numa soma de dinheiro;
+//   2. `lerEstadoLegado` lê o que ficou gravado no navegador antes da migração,
+//      para o portal oferecer a importação uma única vez.
 //
-// As chaves aqui (`modulo|filial|centro|conta|mes`) já são as colunas dessa
-// última tabela, então a troca é de camada, não de modelo. Só este arquivo muda:
-// vira fetch/save contra rotas novas da API.
+// Filiais, centros de custo, plano de contas e realizado NÃO passam por aqui —
+// vêm do ERP a cada carga.
+//
+// A migração para o SQL Server foi feita: as tabelas estão em sql/003 e o
+// acesso, em lib/estado.js. A chave usada aqui (`modulo|filial|centro|conta|mes`)
+// virou as colunas de KING_PORTAL_ORC_PLANEJADO — a troca foi de camada, não de
+// modelo.
 const CHAVE = "portal-orcamento:estado:v5";
 
 export function estadoInicial() {
@@ -112,36 +109,42 @@ function normalizarPlano(plano) {
   };
 }
 
-export function carregarEstado() {
+// Aplica as mesmas regras a qualquer origem: API ou localStorage.
+export function normalizarEstado(dados) {
+  if (!dados || !Array.isArray(dados.planos) || !Array.isArray(dados.visoes)) {
+    return estadoInicial();
+  }
+  // Listas vazias são estado legítimo: o usuário excluiu tudo.
+  return {
+    configuracao: normalizarConfiguracao(dados.configuracao),
+    visoes: dados.visoes.filter(visaoValida).map(normalizarVisao),
+    planos: dados.planos.filter(planoValido).map(normalizarPlano),
+  };
+}
+
+// O que sobrou no navegador de antes da migração. `null` quando não há nada.
+export function lerEstadoLegado() {
   let bruto = null;
   try {
     bruto = localStorage.getItem(CHAVE);
   } catch {
-    return estadoInicial();
+    return null;
   }
-  if (!bruto) return estadoInicial();
+  if (!bruto) return null;
 
   try {
-    const dados = JSON.parse(bruto);
-    if (!dados || !Array.isArray(dados.planos) || !Array.isArray(dados.visoes)) {
-      return estadoInicial();
-    }
-    // Listas vazias são estado legítimo: o usuário excluiu tudo.
-    return {
-      configuracao: normalizarConfiguracao(dados.configuracao),
-      visoes: dados.visoes.filter(visaoValida).map(normalizarVisao),
-      planos: dados.planos.filter(planoValido).map(normalizarPlano),
-    };
+    const dados = normalizarEstado(JSON.parse(bruto));
+    return dados.visoes.length || dados.planos.length ? dados : null;
   } catch {
-    return estadoInicial();
+    return null;
   }
 }
 
-export function salvarEstado(estado) {
+// Some com o legado depois de importado, para o portal não oferecer de novo.
+export function descartarEstadoLegado() {
   try {
-    localStorage.setItem(CHAVE, JSON.stringify(estado));
-    return { ok: true };
-  } catch (erro) {
-    return { ok: false, erro: String(erro?.name ?? erro) };
+    localStorage.removeItem(CHAVE);
+  } catch {
+    // Navegador sem localStorage: não há legado para descartar.
   }
 }

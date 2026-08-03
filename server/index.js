@@ -23,8 +23,10 @@ import {
   definirSinal,
   definirUsaCentro,
   definirUsoDoCentro,
+  bancoVazio,
   excluirPlano,
   excluirVisao,
+  importar,
   gravarPlanejado,
   salvarConfiguracao,
   salvarPlano,
@@ -154,6 +156,19 @@ app.get(
   rota(async (_req, res) => res.json(await carregarEstado()))
 );
 
+// Diz se o portal ainda não tem nada — é o que decide se vale oferecer a
+// importação do que ficou no navegador.
+app.get(
+  "/api/estado/vazio",
+  rota(async (_req, res) => res.json({ vazio: await bancoVazio() }))
+);
+
+app.post(
+  "/api/estado/importar",
+  exigirAdmin,
+  rota(async (req, res) => res.json(await importar(req.body, req.sessao.login)))
+);
+
 app.put(
   "/api/configuracao/:chave",
   exigirAdmin,
@@ -185,10 +200,15 @@ app.put(
   "/api/visoes/:id/modulos/:modulo",
   exigirAdmin,
   rota(async (req, res) => {
-    const { usaCentro, filial, centro, contas, usoDoCentro, sinal } = req.body ?? {};
+    const { usaCentro, filial, centro, contas, lotes, usoDoCentro, sinal } = req.body ?? {};
 
     if (usaCentro !== undefined) {
       await definirUsaCentro(req.params.id, req.params.modulo, usaCentro);
+    }
+    // Lote existe para o mapeamento padrão, que aplica as mesmas contas em todas
+    // as filiais de uma vez — sem ele seriam 25 requisições por módulo.
+    for (const lote of lotes ?? []) {
+      await definirContas(req.params.id, req.params.modulo, lote.filial, lote.centro, lote.contas);
     }
     if (usoDoCentro !== undefined) {
       await definirUsoDoCentro(req.params.id, req.params.modulo, filial, centro, usoDoCentro);

@@ -151,14 +151,35 @@ export async function salvarConfiguracao(chave, valor, login) {
 // --------------------------------------------------------------------------
 
 export async function salvarVisao({ id, nome, visaoContabil }, login) {
-  await query(
-    `MERGE dbo.KING_PORTAL_ORC_VISAO AS destino
-     USING (SELECT @id AS ID) AS origem ON destino.ID = origem.ID
-     WHEN MATCHED THEN UPDATE SET NOME = @nome, VISAO_CONTABIL = @contabil
-     WHEN NOT MATCHED THEN INSERT (ID, NOME, VISAO_CONTABIL, CRIADO_POR)
-       VALUES (@id, @nome, @contabil, @por);`,
-    { id, nome, contabil: visaoContabil ?? null, por: login ?? null }
-  );
+  await transaction(async ({ query: q }) => {
+    const atual = await q("SELECT VISAO_CONTABIL FROM dbo.KING_PORTAL_ORC_VISAO WHERE ID = @id", {
+      id,
+    });
+
+    // Trocar a visão contábil invalida tudo que estava escolhido: os códigos de
+    // uma não existem na outra. A regra vive aqui, e não só na tela, senão
+    // sobrariam contas órfãs apontando para classificações inexistentes.
+    const trocou = atual.length > 0 && atual[0].VISAO_CONTABIL !== (visaoContabil ?? null);
+
+    await q(
+      `MERGE dbo.KING_PORTAL_ORC_VISAO AS destino
+       USING (SELECT @id AS ID) AS origem ON destino.ID = origem.ID
+       WHEN MATCHED THEN UPDATE SET NOME = @nome, VISAO_CONTABIL = @contabil
+       WHEN NOT MATCHED THEN INSERT (ID, NOME, VISAO_CONTABIL, CRIADO_POR)
+         VALUES (@id, @nome, @contabil, @por);`,
+      { id, nome, contabil: visaoContabil ?? null, por: login ?? null }
+    );
+
+    if (!trocou) return;
+    for (const tabela of [
+      "dbo.KING_PORTAL_ORC_VISAO_CONTA",
+      "dbo.KING_PORTAL_ORC_VISAO_CENTRO",
+      "dbo.KING_PORTAL_ORC_VISAO_SINAL",
+      "dbo.KING_PORTAL_ORC_VISAO_MODULO",
+    ]) {
+      await q(`DELETE FROM ${tabela} WHERE VISAO_ID = @id`, { id });
+    }
+  });
 }
 
 export async function excluirVisao(id) {
@@ -322,6 +343,85 @@ export async function gravarPlanejado(planoId, celulas, login) {
       );
     }
   });
+}
+
+// --------------------------------------------------------------------------
+// Importação do que ficou no navegador
+//
+// Uma vez só, e apenas com o banco vazio: isto não é "sincronizar", é trazer o
+// que já existia antes da migração. Com dado no banco, uma segunda importação
+// sobrescreveria o trabalho de outra pessoa.
+// --------------------------------------------------------------------------
+
+export async function bancoVazio() {
+  const linha = await query(
+    `SELECT (SELECT COUNT(*) FROM dbo.KING_PORTAL_ORC_VISAO)
+          + (SELECT COUNT(*) FROM dbo.KING_PORTAL_ORC_PLANO) AS total`
+  );
+  return linha[0]?.total === 0;
+}
+
+export async function importar(estado, login) {
+  if (!(await bancoVazio())) {
+    const erro = new Error("Já existem visões ou planos no banco — a importação só vale uma vez.");
+    erro.status = 409;
+    throw erro;
+  }
+
+  if (estado?.configuracao?.filiaisAtivas !== undefined) {
+    await salvarConfiguracao("filiaisAtivas", estado.configuracao.filiaisAtivas, login);
+  }
+
+  for (const visao of estado?.visoes ?? []) {
+    await salvarVisao(visao, login);
+
+    for (const [moduloId, modulo] of Object.entries(visao.modulos ?? {})) {
+      await definirUsaCentro(visao.id, moduloId, modulo.usaCentro);
+
+      for (const [conta, tipo] of Object.entries(modulo.sinais ?? {})) {
+        await definirSinal(visao.id, moduloId, conta, tipo);
+      }
+
+      for (const [filialId, daFilial] of Object.entries(modulo.filiais ?? {})) {
+        // Com centro, quem manda são os centros e a lista da filial é derivada:
+        // gravá-la também criaria linhas que a leitura ignora.
+        if (!modulo.usaCentro) {
+          await definirContas(visao.id, moduloId, filialId, SEM_CENTRO, daFilial.contas);
+          continue;
+        }
+        for (const [centroId, doCentro] of Object.entries(daFilial.centros ?? {})) {
+          await definirUsoDoCentro(visao.id, moduloId, filialId, centroId, true);
+          if (doCentro.length) {
+            await definirContas(visao.id, moduloId, filialId, centroId, doCentro);
+          }
+        }
+      }
+    }
+  }
+
+  for (const plano of estado?.planos ?? []) {
+    await salvarPlano(plano, login);
+
+    const celulas = Object.entries(plano.planejado ?? {}).map(([chave, valor]) => {
+      const [modulo, filial, centro, conta, mes, receita] = chave.split("|");
+      return { modulo, filial, centro, conta, receita: receita ?? "", mes: Number(mes), valor };
+    });
+
+    // Em lotes: um plano preenchido tem milhares de células, e uma transação
+    // única desse tamanho segura o banco por tempo demais.
+    for (let inicio = 0; inicio < celulas.length; inicio += 200) {
+      await gravarPlanejado(plano.id, celulas.slice(inicio, inicio + 200), login);
+    }
+  }
+
+  return {
+    visoes: estado?.visoes?.length ?? 0,
+    planos: estado?.planos?.length ?? 0,
+    celulas: (estado?.planos ?? []).reduce(
+      (total, plano) => total + Object.keys(plano.planejado ?? {}).length,
+      0
+    ),
+  };
 }
 
 // Filial que sai do ERP deixa edições órfãs em todos os planos.

@@ -2854,3 +2854,18 @@ dialog::backdrop {
   border-color: var(--danger);
   color: var(--danger);
 }
+
+/* Aviso que pede uma decisão, e não só informa. */
+.aviso-fixo--acao {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.aviso-fixo__botoes {
+  display: flex;
+  gap: 8px;
+  flex: 0 0 auto;
+}

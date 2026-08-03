@@ -18,11 +18,12 @@ async function buscar(caminho, parametros, opcoes = {}) {
     if (valor != null) url.searchParams.set(chave, String(valor));
   });
 
+  // DELETE não leva corpo, mas precisa do método explícito.
   const corpoEnviado = opcoes.corpo;
   let resposta;
   try {
     resposta = await fetch(url, {
-      method: corpoEnviado ? "POST" : "GET",
+      method: opcoes.metodo ?? (corpoEnviado ? "POST" : "GET"),
       // O cookie de sessão é httpOnly: o JavaScript não o lê, mas precisa
       // pedir que ele vá junto.
       credentials: "same-origin",
@@ -75,6 +76,31 @@ export const api = {
   filiais: () => buscar("/api/filiais"),
   centrosDeCusto: () => buscar("/api/centros-de-custo"),
   realizado: (ano, visao, filialId) => buscar("/api/realizado", { ano, visao, filial: filialId }),
+
+  // --- estado do portal ----------------------------------------------------
+  estado: () => buscar("/api/estado"),
+  estadoVazio: () => buscar("/api/estado/vazio"),
+  importarEstado: (dados) => buscar("/api/estado/importar", null, { corpo: dados }),
+  salvarConfiguracao: (chave, valor) =>
+    buscar(`/api/configuracao/${encodeURIComponent(chave)}`, null, { metodo: "PUT", corpo: { valor } }),
+
+  salvarVisao: (visao) =>
+    buscar(`/api/visoes/${encodeURIComponent(visao.id)}`, null, { metodo: "PUT", corpo: visao }),
+  excluirVisao: (id) => buscar(`/api/visoes/${encodeURIComponent(id)}`, null, { metodo: "DELETE" }),
+  salvarModulo: (visaoId, modulo, mudanca) =>
+    buscar(`/api/visoes/${encodeURIComponent(visaoId)}/modulos/${encodeURIComponent(modulo)}`, null, {
+      metodo: "PUT",
+      corpo: mudanca,
+    }),
+
+  salvarPlano: (plano) =>
+    buscar(`/api/planos/${encodeURIComponent(plano.id)}`, null, { metodo: "PUT", corpo: plano }),
+  excluirPlano: (id) => buscar(`/api/planos/${encodeURIComponent(id)}`, null, { metodo: "DELETE" }),
+  salvarPlanejado: (planoId, celulas) =>
+    buscar(`/api/planos/${encodeURIComponent(planoId)}/planejado`, null, {
+      metodo: "PUT",
+      corpo: { celulas },
+    }),
 };
 
 export { ErroDaApi };
