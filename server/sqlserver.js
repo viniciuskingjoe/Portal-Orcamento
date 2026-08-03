@@ -43,7 +43,28 @@ function numero(nomes, padrao) {
   return Number.isFinite(valor) && valor > 0 ? valor : padrao;
 }
 
+// Reclama de TODAS as que faltam de uma vez. Parando na primeira, quem está
+// configurando descobre uma por vez — preenche, reinicia, descobre a próxima —
+// e são quatro rodadas para chegar ao mesmo lugar.
+function conferirObrigatorias() {
+  const faltando = [
+    ["SQLSERVER_HOST", "DB_HOST"],
+    ["SQLSERVER_DATABASE", "DB_NAME"],
+    ["SQLSERVER_USER", "DB_USER"],
+    ["SQLSERVER_PASSWORD", "DB_PASS"],
+  ].filter((nomes) => ler(nomes) == null);
+
+  if (!faltando.length) return;
+
+  throw new Error(
+    `Faltam variáveis de ambiente no .env: ${faltando.map(([nome]) => nome).join(", ")}. ` +
+      `Copie .env.example para .env e preencha.`
+  );
+}
+
 function configuracao() {
+  conferirObrigatorias();
+
   return {
     server: obrigatorio(["SQLSERVER_HOST", "DB_HOST"]),
     database: obrigatorio(["SQLSERVER_DATABASE", "DB_NAME"]),
