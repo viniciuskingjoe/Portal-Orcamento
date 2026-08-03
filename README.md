@@ -588,8 +588,9 @@ Tailwind.
 sem dependência extra. A cobertura foca nos pontos onde um erro vira número
 errado na tela: leitura de número pt-BR, corte temporal do realizado, módulo sem
 contas, isolamento da edição por módulo/filial/ano, denominador das médias,
-limpeza de chaves órfãs, avaliação de permissão, limite de tentativas de login e
-o aviso de sessão expirada.
+limpeza de chaves órfãs, divisor da linha Média, o que fica gravado a partir do
+que foi digitado, avaliação de permissão, limite de tentativas de login e o
+aviso de sessão expirada.
 
 **Não depende de banco nem de rede** — e é por isso que os testes de integração
 ficam fora de `test/`: `node --test` varre aquela pasta inteira, e um `npm test`

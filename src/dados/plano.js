@@ -182,11 +182,18 @@ function calcularVariacao(realizado, anterior) {
   };
 }
 
-// A média divide pelos meses que realmente têm dado, não por 12 fixo. Com 12
-// fixo a média de realizado ficava diluída pelos meses que ainda nem chegaram.
-function linhaMedia(meses, ano) {
-  const comRealizado = MESES.filter((mes) => mesTemRealizado(ano, mes)).length;
-  const comAnterior = MESES.filter((mes) => mesTemRealizado(ano - 1, mes)).length;
+// Todas as colunas dividem por 12 — o mesmo divisor, sempre.
+//
+// Antes o realizado dividia pelos meses com dado e o planejado por 12, para a
+// média do realizado não ficar diluída pelos meses que ainda nem chegaram. A
+// intenção era boa e o resultado, errado: a Variação da linha passava a comparar
+// uma média de 8 meses com uma de 12, e esse número não significa nada — ainda
+// por cima aparecia em verde, como ganho, quando o ano estava atrás.
+//
+// Uma média só é comparável coluna a coluna se as colunas dividirem pelo mesmo
+// número, e é o que o Scoreplan faz. O custo é conhecido e está na nota da tela:
+// no meio do ano isto é "um doze avos do ano", não "o ritmo mensal".
+function linhaMedia(meses) {
   const somar = (campo) => meses.reduce((total, linha) => total + linha[campo], 0);
 
   const media = {
@@ -199,10 +206,10 @@ function linhaMedia(meses, ano) {
     planejadoPercentual: null,
     realizadoPercentual: null,
     base: somar("base") / 12,
-    baseRealizada: comRealizado ? somar("baseRealizada") / comRealizado : 0,
-    realizado: comRealizado ? somar("realizado") / comRealizado : 0,
-    anterior: comAnterior ? somar("anterior") / comAnterior : 0,
-    nota: `Planejado ÷ 12 · Realizado ÷ ${comRealizado || 0} · Ano anterior ÷ ${comAnterior || 0} (meses com dado)`,
+    baseRealizada: somar("baseRealizada") / 12,
+    realizado: somar("realizado") / 12,
+    anterior: somar("anterior") / 12,
+    nota: "Total ÷ 12 em todas as colunas. Os meses que ainda não chegaram entram como zero, então no meio do ano a média do realizado fica abaixo do ritmo mensal.",
   };
   Object.assign(media, calcularVariacao(media.realizado, media.anterior));
   return media;
@@ -341,7 +348,7 @@ export function criarLinhasOrcamento({
   total.realizadoPercentual = percentual ? taxa(total.realizado, total.baseRealizada) : null;
   Object.assign(total, calcularVariacao(total.realizado, total.anterior));
 
-  return [...meses, total, linhaMedia(meses, ano)];
+  return [...meses, total, linhaMedia(meses)];
 }
 
 // Totais do ano de um módulo inteiro, em REAIS — a linha que a visão

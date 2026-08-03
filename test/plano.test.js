@@ -18,7 +18,6 @@ import {
   definirContasDoCentro,
   definirUsaCentroDeCusto,
 } from "../src/dados/visao.js";
-import { mesesComRealizado } from "../src/dados/calendario.js";
 import { indexarContas } from "../src/dados/contas.js";
 
 const ANO = 2025;
@@ -197,14 +196,41 @@ test("módulo de despesa lê o realizado invertido", () => {
   assert.equal(mes(lista, 1).realizado, 1500);
 });
 
-test("média divide pelos meses com dado, não por 12 fixo", () => {
+// A regressão que motivou estes testes: o realizado dividia pelos meses com
+// dado e o planejado por 12, então a Variação da linha Média comparava uma média
+// de 8 meses com uma de 12. O número não significava nada e ainda aparecia em
+// verde, como ganho, com o ano atrás do anterior.
+test("média divide TODAS as colunas por 12", () => {
   const lista = linhas();
   const total = totalDe(lista);
   const media = mediaDe(lista);
-  const comDado = mesesComRealizado(ANO);
 
   assert.equal(media.planejado, total.planejado / 12);
-  if (comDado > 0 && comDado < 12) assert.equal(media.realizado, total.realizado / comDado);
+  assert.equal(media.realizado, total.realizado / 12);
+  assert.equal(media.anterior, total.anterior / 12);
+});
+
+test("a variação da média compara colunas do mesmo divisor", () => {
+  const lista = linhas();
+  const total = totalDe(lista);
+  const media = mediaDe(lista);
+
+  // Se as três dividem igual, a variação da média é a do total ÷ 12 — e é isso
+  // que torna a linha comparável coluna a coluna.
+  assert.ok(Math.abs(media.variacao - total.variacao / 12) < 1e-9);
+  assert.equal(media.variacao, media.realizado - media.anterior);
+});
+
+// Um mês com realizado zero não pode "sumir" da conta: no meio do ano a média é
+// um doze avos do ano, e não o ritmo mensal. Achatada de propósito.
+test("meses que ainda não chegaram entram como zero na média", () => {
+  const lista = linhas();
+  const media = mediaDe(lista);
+  const soma = lista
+    .filter((linha) => typeof linha.id === "number")
+    .reduce((acumulado, linha) => acumulado + linha.realizado, 0);
+
+  assert.equal(media.realizado, soma / 12);
 });
 
 // ---------------------------------------------------------------------------
