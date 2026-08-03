@@ -28,15 +28,24 @@ command -v git  >/dev/null || erro "git nao encontrado."
 node -e 'const [a,b]=process.versions.node.split(".").map(Number);
          if (a<20 || (a===20 && b<6)) { console.error("Node 20.6+ necessario, achei "+process.versions.node); process.exit(1); }'
 
-echo "==> codigo em $DESTINO"
+# Branch a implantar. `git clone` sem isto traz a branch padrao do repositorio,
+# que pode nao ser a que tem o que se quer publicar -- e o portal subiria sem
+# reclamar, so faltando metade das funcionalidades.
+BRANCH=${BRANCH:-main}
+
+echo "==> codigo em $DESTINO (branch $BRANCH)"
 if [[ -d $DESTINO/.git ]]; then
-  sudo -u $DONO git -C "$DESTINO" pull --ff-only
+  sudo -u $DONO git -C "$DESTINO" fetch origin "$BRANCH"
+  sudo -u $DONO git -C "$DESTINO" checkout "$BRANCH"
+  sudo -u $DONO git -C "$DESTINO" pull --ff-only origin "$BRANCH"
 else
   mkdir -p "$DESTINO"
   chown $DONO:$DONO "$DESTINO"
-  [[ -n ${REPO:-} ]] || erro "primeira instalacao: informe o repositorio, ex.  REPO=git@github.com:... sudo -E bash deploy/setup.sh"
-  sudo -u $DONO git clone "$REPO" "$DESTINO"
+  [[ -n ${REPO:-} ]] || erro "primeira instalacao: informe o repositorio, ex.  REPO=https://github.com/... sudo -E bash deploy/setup.sh"
+  sudo -u $DONO git clone --branch "$BRANCH" "$REPO" "$DESTINO"
 fi
+
+echo "    commit: $(sudo -u $DONO git -C "$DESTINO" log --oneline -1)"
 
 # --- .env -------------------------------------------------------------------
 # Precisa existir ANTES do build: sem ele o servico sobe e morre no primeiro
