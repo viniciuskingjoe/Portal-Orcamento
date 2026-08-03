@@ -5,7 +5,11 @@ import Icone from "../componentes/Icone.jsx";
 import Seletor from "../componentes/Seletor.jsx";
 import { AvisoErro, Carregando } from "../componentes/Estados.jsx";
 import { MODULOS } from "../dados/modulos.js";
-import { descreverConcessao, resumirAcessos } from "../dados/permissoes.js";
+import {
+  concessoesRedundantes,
+  descreverConcessao,
+  resumirAcessos,
+} from "../dados/permissoes.js";
 import { api } from "../lib/api.js";
 
 // ============================================================================
@@ -20,18 +24,12 @@ import { api } from "../lib/api.js";
 // descobrir quem ficou sem permissão.
 // ============================================================================
 
-const TODOS = "";
-
-// Os três casos que cobrem quase tudo. Montar concessão campo a campo é para a
-// exceção, não para o comum.
-const ATALHOS = [
-  { rotulo: "Acesso total", acesso: { modulo: TODOS, filial: TODOS, centro: TODOS, podeEditar: true } },
-  { rotulo: "Somente leitura", acesso: { modulo: TODOS, filial: TODOS, centro: TODOS, podeEditar: false } },
-];
-
-function Concessao({ acesso, catalogos, onRevogar }) {
+function Concessao({ acesso, catalogos, redundante, onRevogar }) {
   return (
-    <li className="concessao">
+    <li
+      className={`concessao ${redundante ? "is-redundante" : ""}`}
+      title={redundante ? "Não muda nada: já existe uma concessão mais ampla" : undefined}
+    >
       <span className={`chip chip--${acesso.podeEditar ? "edicao" : "leitura"}`}>
         {acesso.podeEditar ? "edita" : "só vê"}
       </span>
@@ -61,14 +59,14 @@ function NovaConcessao({ catalogos, onConceder }) {
   const [modulos, setModulos] = useState([]);
   const [filiais, setFiliais] = useState([]);
   const [centros, setCentros] = useState([]);
-  const [podeEditar, setPodeEditar] = useState(true);
 
   // Marcar dois módulos e três centros são seis concessões. Dizer o número antes
   // de confirmar evita a surpresa de conceder mais do que se queria.
   const combinacoes = combinar(modulos, filiais, centros);
+  const irrestrita = combinacoes.length === 1 && !modulos.length && !filiais.length && !centros.length;
 
-  function conceder(lista) {
-    onConceder(lista);
+  function conceder(podeEditar) {
+    onConceder(combinacoes.map((combinacao) => ({ ...combinacao, podeEditar })));
     setModulos([]);
     setFiliais([]);
     setCentros([]);
@@ -76,26 +74,7 @@ function NovaConcessao({ catalogos, onConceder }) {
 
   return (
     <div className="nova-concessao">
-      <div className="nova-concessao__atalhos">
-        {ATALHOS.map((atalho) => (
-          <button
-            key={atalho.rotulo}
-            type="button"
-            className="botao botao--secundario botao--compacto"
-            onClick={() => conceder([atalho.acesso])}
-          >
-            {atalho.rotulo}
-          </button>
-        ))}
-      </div>
-
-      <form
-        className="nova-concessao__campos"
-        onSubmit={(evento) => {
-          evento.preventDefault();
-          conceder(combinacoes.map((combinacao) => ({ ...combinacao, podeEditar })));
-        }}
-      >
+      <div className="nova-concessao__campos">
         <label>
           <span>Módulo</span>
           <Seletor
@@ -135,32 +114,42 @@ function NovaConcessao({ catalogos, onConceder }) {
           />
         </label>
 
-        <label className="check-inline">
-          <input type="checkbox" checked={podeEditar} onChange={(e) => setPodeEditar(e.target.checked)} />
-          <span className="checkbox-visual">
-            <Icone nome="check" tamanho={13} />
-          </span>
-          Pode lançar
-        </label>
-
-        <button type="submit" className="botao botao--primario botao--compacto">
-          {combinacoes.length > 1 ? `Conceder ${combinacoes.length}` : "Conceder"}
-        </button>
-      </form>
+        {/* Os dois botões agem sobre o que está selecionado. Antes eram atalhos
+            que ignoravam a seleção: marcar três filiais e clicar "somente
+            leitura" concedia "tudo", diferente do que a prévia dizia. */}
+        <span className="nova-concessao__botoes">
+          <button
+            type="button"
+            className="botao botao--primario botao--compacto"
+            onClick={() => conceder(true)}
+          >
+            {combinacoes.length > 1 ? `Conceder edição (${combinacoes.length})` : "Conceder edição"}
+          </button>
+          <button
+            type="button"
+            className="botao botao--secundario botao--compacto"
+            onClick={() => conceder(false)}
+          >
+            {combinacoes.length > 1 ? `Conceder leitura (${combinacoes.length})` : "Conceder leitura"}
+          </button>
+        </span>
+      </div>
 
       {/* Prévia: ler três seletores e imaginar o resultado é onde se erra —
           ainda mais quando a escolha múltipla multiplica as linhas. */}
       {/* Uma combinação cabe na frase; várias viram lista. Quebrar a frase para
           pendurar uma etiqueta só embaixo fica pior que dizer de uma vez. */}
-      {combinacoes.length === 1 ? (
+      {irrestrita ? (
         <p className="nova-concessao__previa">
-          Vai conceder <strong>{podeEditar ? "editar" : "ver"}</strong>{" "}
-          {descreverConcessao(combinacoes[0], catalogos)}.
+          Nada selecionado: vai conceder sobre <strong>tudo</strong>.
+        </p>
+      ) : combinacoes.length === 1 ? (
+        <p className="nova-concessao__previa">
+          Vai conceder <strong>{descreverConcessao(combinacoes[0], catalogos)}</strong>.
         </p>
       ) : (
         <div className="nova-concessao__previa">
-          Vai conceder <strong>{podeEditar ? "editar" : "ver"}</strong> em{" "}
-          {combinacoes.length} combinações:
+          Vai conceder {combinacoes.length} combinações:
           <ul>
             {combinacoes.slice(0, 6).map((combinacao, indice) => (
               <li key={indice}>{descreverConcessao(combinacao, catalogos)}</li>
@@ -414,16 +403,38 @@ export default function TelaUsuarios({ filiais, centros, sessao, onVoltar }) {
                     </p>
                   ) : null}
 
-                  <ul className="lista-concessoes">
-                    {usuario.acessos.map((acesso) => (
-                      <Concessao
-                        key={acesso.id}
-                        acesso={acesso}
-                        catalogos={catalogos}
-                        onRevogar={(id) => executar(api.revogarAcesso(usuario.login, id))}
-                      />
-                    ))}
-                  </ul>
+                  {(() => {
+                    const redundantes = new Set(
+                      concessoesRedundantes(usuario.acessos).map((acesso) => acesso.id)
+                    );
+                    return (
+                      <>
+                        {/* Conceder três filiais a quem já vê tudo não muda
+                            nada, e faz o acesso parecer mais estreito do que é.
+                            Dizer isso evita a leitura errada. */}
+                        {redundantes.size ? (
+                          <p className="sem-contas">
+                            {redundantes.size === 1
+                              ? "Uma concessão não muda nada"
+                              : `${redundantes.size} concessões não mudam nada`}
+                            : já existe outra mais ampla cobrindo o mesmo.
+                          </p>
+                        ) : null}
+
+                        <ul className="lista-concessoes">
+                          {usuario.acessos.map((acesso) => (
+                            <Concessao
+                              key={acesso.id}
+                              acesso={acesso}
+                              catalogos={catalogos}
+                              redundante={redundantes.has(acesso.id)}
+                              onRevogar={(id) => executar(api.revogarAcesso(usuario.login, id))}
+                            />
+                          ))}
+                        </ul>
+                      </>
+                    );
+                  })()}
 
                   <NovaConcessao
                     catalogos={catalogos}

@@ -10,6 +10,7 @@ import {
   podeEditar,
   podeLancar,
   podeVer,
+  concessoesRedundantes,
   descreverConcessao,
   resumirAcessos,
   resumirEscopo,
@@ -235,4 +236,55 @@ test("admin não tem resumo de concessão: passa por cima delas", () => {
 test("sem concessão nenhuma o resumo diz isso", () => {
   // Entra no portal e não vê nada — é um estado que precisa gritar na tela.
   assert.equal(resumirAcessos({ admin: false, acessos: [] }, CATALOGOS), "sem acesso a nada");
+});
+
+// ---------------------------------------------------------------------------
+// Resumo longo e concessão redundante
+// ---------------------------------------------------------------------------
+
+test("o resumo corta a lista em vez de deixar o cartão crescer", () => {
+  const muitos = sessao(
+    ["020", "002", "003", "004", "005"].map((centro) => ({
+      modulo: null, filial: null, centro, podeEditar: true,
+    }))
+  );
+  const texto = resumirAcessos(muitos, CATALOGOS);
+  assert.ok(texto.endsWith("+2"), `esperava corte com +2, veio "${texto}"`);
+});
+
+test("uma concessão de 'tudo' resume como tudo, não como lista", () => {
+  // Somar "tudo" com três centros e listar os quatro faria o acesso parecer
+  // mais estreito do que é.
+  const misto = sessao([
+    { modulo: null, filial: null, centro: null, podeEditar: true },
+    { modulo: null, filial: null, centro: "020", podeEditar: true },
+  ]);
+  assert.equal(resumirAcessos(misto, CATALOGOS), "edita tudo");
+});
+
+test("concessão que não acrescenta nada é apontada", () => {
+  const lista = [
+    { id: 1, modulo: null, filial: null, centro: null, podeEditar: true },
+    { id: 2, modulo: null, filial: null, centro: "020", podeEditar: true },
+    { id: 3, modulo: "receita-vendas", filial: null, centro: null, podeEditar: false },
+  ];
+  // Quem edita tudo já vê tudo: as duas de baixo não mudam nada.
+  assert.deepEqual(concessoesRedundantes(lista).map((a) => a.id), [2, 3]);
+});
+
+test("sem uma concessão irrestrita nenhuma é redundante", () => {
+  const lista = [
+    { id: 1, modulo: null, filial: null, centro: "020", podeEditar: true },
+    { id: 2, modulo: null, filial: "000025", centro: null, podeEditar: false },
+  ];
+  assert.deepEqual(concessoesRedundantes(lista), []);
+});
+
+test("ver tudo não torna redundante quem edita um centro", () => {
+  // Editar é mais forte que ver: a concessão de edição continua valendo.
+  const lista = [
+    { id: 1, modulo: null, filial: null, centro: null, podeEditar: false },
+    { id: 2, modulo: null, filial: null, centro: "020", podeEditar: true },
+  ];
+  assert.deepEqual(concessoesRedundantes(lista).map((a) => a.id), []);
 });

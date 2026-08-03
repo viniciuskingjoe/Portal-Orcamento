@@ -3323,3 +3323,16 @@ dialog::backdrop {
   border-radius: 999px;
   color: var(--text-soft);
 }
+
+/* Concessão que não muda nada porque já existe outra mais ampla. Fica visível
+   mas apagada: continua sendo real e removível, só não tem efeito. */
+.concessao.is-redundante {
+  opacity: 0.55;
+  border-style: dashed;
+}
+
+.nova-concessao__botoes {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}

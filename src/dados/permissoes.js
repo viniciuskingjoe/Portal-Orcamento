@@ -139,6 +139,28 @@ export function descreverConcessao(acesso, { modulos, filiais, centros } = {}) {
   return partes.length ? partes.join(" · ") : "tudo";
 }
 
+// Concessão sem restrição nenhuma. Existindo uma destas, as outras do mesmo
+// poder não acrescentam nada — a mais permissiva vence.
+export function ehIrrestrita(acesso) {
+  return !acesso.modulo && !acesso.filial && !acesso.centro;
+}
+
+// Concessões que não mudam nada porque já existe uma irrestrita do mesmo poder
+// ou mais forte. Conceder três filiais para quem já vê tudo é ruído que faz
+// parecer que o acesso é mais estreito do que é.
+export function concessoesRedundantes(lista) {
+  const acessos = lista ?? [];
+  const editaTudo = acessos.some((acesso) => acesso.podeEditar && ehIrrestrita(acesso));
+  const veTudo = acessos.some((acesso) => ehIrrestrita(acesso));
+
+  return acessos.filter((acesso) => {
+    if (ehIrrestrita(acesso)) return editaTudo && !acesso.podeEditar;
+    return acesso.podeEditar ? editaTudo : veTudo;
+  });
+}
+
+const LIMITE_NO_RESUMO = 3;
+
 // Resumo de uma linha só, para o cartão fechado. Separa por poder: quem edita
 // alguma coisa e só vê o resto precisa enxergar as duas listas.
 export function resumirAcessos(usuario, catalogos = {}) {
@@ -147,8 +169,16 @@ export function resumirAcessos(usuario, catalogos = {}) {
   const lista = acessos(usuario);
   if (!lista.length) return "sem acesso a nada";
 
-  const descrever = (filtradas) =>
-    [...new Set(filtradas.map((acesso) => descreverConcessao(acesso, catalogos)))].join(", ");
+  // Corta a lista em vez de deixar o cartão crescer: com dez concessões o
+  // resumo deixaria de ser resumo.
+  const descrever = (filtradas) => {
+    const nomes = [...new Set(filtradas.map((acesso) => descreverConcessao(acesso, catalogos)))];
+    if (nomes.includes("tudo")) return "tudo";
+    const mostrados = nomes.slice(0, LIMITE_NO_RESUMO).join(", ");
+    return nomes.length > LIMITE_NO_RESUMO
+      ? `${mostrados} +${nomes.length - LIMITE_NO_RESUMO}`
+      : mostrados;
+  };
 
   const edita = lista.filter((acesso) => acesso.podeEditar === true);
   const soVe = lista.filter((acesso) => acesso.podeEditar !== true);
