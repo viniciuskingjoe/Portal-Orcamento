@@ -39,14 +39,21 @@ export default function TelaVisao({
   onAbrirModulo,
   onRenomear,
   onAplicarMapeamento,
+  modulosVisiveis,
+  somenteLeitura = false,
   onVoltar,
 }) {
   const resumo = resumoDaVisao(visao);
 
+  const permitido = (lista) =>
+    modulosVisiveis
+      ? lista.filter((modulo) => modulosVisiveis.some((item) => item.id === modulo.id))
+      : lista;
+
   const grupos = [
-    { titulo: "Receitas", modulos: MODULOS_RECEITA },
-    { titulo: "Despesas", modulos: MODULOS_DESPESA },
-  ];
+    { titulo: "Receitas", modulos: permitido(MODULOS_RECEITA) },
+    { titulo: "Despesas", modulos: permitido(MODULOS_DESPESA) },
+  ].filter((grupo) => grupo.modulos.length);
 
   return (
     <main className="conteudo">
@@ -60,16 +67,18 @@ export default function TelaVisao({
         onVoltar={onVoltar}
         acao={
           <span className="cabecalho-acoes">
-            {onAplicarMapeamento ? (
+            {onAplicarMapeamento && !somenteLeitura ? (
               <button type="button" className="botao botao--secundario" onClick={onAplicarMapeamento}>
                 <Icone nome="layers" tamanho={16} />
                 Preencher com o padrão
               </button>
             ) : null}
-            <button type="button" className="botao botao--secundario" onClick={onRenomear}>
-              <Icone nome="edit" tamanho={16} />
-              Editar
-            </button>
+            {somenteLeitura ? null : (
+              <button type="button" className="botao botao--secundario" onClick={onRenomear}>
+                <Icone nome="edit" tamanho={16} />
+                Editar
+              </button>
+            )}
           </span>
         }
       />

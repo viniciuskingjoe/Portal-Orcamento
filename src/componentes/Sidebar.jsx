@@ -33,6 +33,7 @@ export default function Sidebar({
   planoAtivo,
   visaoDoPlano,
   modulosVisiveis,
+  podeVerDre = true,
   tela,
   onNavegar,
   tema,
@@ -110,14 +111,18 @@ export default function Sidebar({
                 onNavegar={onNavegar}
               />
               {/* O DRE fecha os módulos, então vive ao lado deles e não dentro
-                  da lista — não é um módulo que se orça. */}
-              <ItemNav
-                id="dre"
-                titulo="DRE"
-                icone="chart"
-                ativo={tela === "dre"}
-                onNavegar={onNavegar}
-              />
+                  da lista — não é um módulo que se orça. Some para quem não vê
+                  todos: com um módulo de fora os subtotais deixam de ser o
+                  resultado da empresa. */}
+              {podeVerDre ? (
+                <ItemNav
+                  id="dre"
+                  titulo="DRE"
+                  icone="chart"
+                  ativo={tela === "dre"}
+                  onNavegar={onNavegar}
+                />
+              ) : null}
             </div>
 
             <div className="nav-grupo">

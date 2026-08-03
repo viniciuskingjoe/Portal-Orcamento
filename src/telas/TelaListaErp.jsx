@@ -19,10 +19,26 @@ const DESCRICAO = {
 
 // A lista vem do ERP e é somente leitura. O que o portal decide é quais filiais
 // participam — daí o checkbox só existir aqui.
-export default function TelaListaErp({ tela, lista, ativas, onAlternarAtiva, onDefinirAtivas, onVoltar }) {
+//
+// `somenteLeitura` vale para quem não administra: quais filiais o portal usa é
+// configuração GLOBAL, muda o que todo mundo vê. A lista aparece recortada pelo
+// que a pessoa pode ver, mas sem as caixas.
+export default function TelaListaErp({
+  tela,
+  lista,
+  ativas,
+  somenteLeitura = false,
+  onAlternarAtiva,
+  onDefinirAtivas,
+  onVoltar,
+}) {
   const [busca, setBusca] = useState("");
   const dados = DESCRICAO[tela];
-  const selecionavel = tela === "filiais";
+  const texto =
+    somenteLeitura && tela === "filiais"
+      ? "As filiais que você pode ver. Quem define quais o portal usa é um administrador."
+      : dados.texto;
+  const selecionavel = tela === "filiais" && !somenteLeitura;
 
   const visiveis = useMemo(() => {
     const termo = busca.trim().toLowerCase();
@@ -38,7 +54,7 @@ export default function TelaListaErp({ tela, lista, ativas, onAlternarAtiva, onD
 
   return (
     <main className="conteudo">
-      <Cabecalho titulo={dados.titulo} subtitulo={dados.texto} onVoltar={onVoltar} />
+      <Cabecalho titulo={dados.titulo} subtitulo={texto} onVoltar={onVoltar} />
 
       <div className="modulo-barra">
         <span className="chip chip--origem">

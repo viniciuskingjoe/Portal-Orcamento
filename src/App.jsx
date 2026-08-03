@@ -43,6 +43,7 @@ import {
 import { montarDre } from "./dados/dre.js";
 import {
   centrosPermitidos,
+  ehAdmin,
   filiaisPermitidas,
   modulosPermitidos,
   podeLancar,
@@ -156,6 +157,25 @@ function PlanejamentoOrcamentario({ sessao, onSair }) {
   const escopo = useMemo(
     () => resumirEscopo(sessao, { filiais: erp.filiais, centros: erp.centros }),
     [sessao, erp.filiais, erp.centros]
+  );
+
+  // Módulos que o escopo deixa ver — vale para a barra lateral, os cartões da
+  // visão geral e a configuração da visão.
+  const modulosVisiveis = useMemo(() => modulosPermitidos(sessao, MODULOS), [sessao]);
+
+  // O DRE só faz sentido inteiro: com um módulo de fora, os subtotais deixam de
+  // ser o resultado da empresa e viram um número que não fecha com nada.
+  const podeVerDre = modulosVisiveis.length === MODULOS.length;
+
+  // Cadastros do ERP recortados: mostrar filial ou centro que a pessoa não pode
+  // ver já é vazamento — o nome deles diz o tamanho da operação.
+  const filiaisDoErpVisiveis = useMemo(
+    () => filiaisPermitidas(sessao, erp.filiais),
+    [sessao, erp.filiais]
+  );
+  const centrosDoErpVisiveis = useMemo(
+    () => (ehAdmin(sessao) ? erp.centros : centrosPermitidos(sessao, erp.centros, { modulo: null })),
+    [sessao, erp.centros]
   );
 
   // A visão contábil em uso depende de onde se está: montando uma visão ou
@@ -718,6 +738,8 @@ function PlanejamentoOrcamentario({ sessao, onSair }) {
     if (tela === "visao" && visaoAberta) {
       return (
         <TelaVisao
+          modulosVisiveis={modulosVisiveis}
+          somenteLeitura={!ehAdmin(sessao)}
           visao={visaoAberta}
           nomeContabil={nomeContabil(visaoAberta.visaoContabil)}
           onAbrirModulo={(moduloId) => {
@@ -779,9 +801,9 @@ function PlanejamentoOrcamentario({ sessao, onSair }) {
     if (tela === "configuracoes") {
       return exigirErp(
         <TelaConfiguracoes
-          filiais={erp.filiais}
+          filiais={filiaisDoErpVisiveis}
           filiaisAtivas={filiaisAtivas}
-          centros={erp.centros}
+          centros={centrosDoErpVisiveis}
           visoesContabeis={erp.visoesContabeis}
           onAbrir={(id) => navegar(id)}
         />
@@ -803,7 +825,10 @@ function PlanejamentoOrcamentario({ sessao, onSair }) {
       return exigirErp(
         <TelaListaErp
           tela={tela}
-          lista={tela === "filiais" ? erp.filiais : erp.centros}
+          lista={tela === "filiais" ? filiaisDoErpVisiveis : centrosDoErpVisiveis}
+          // Quais filiais o portal usa é configuração GLOBAL: muda o que todo
+          // mundo vê. Quem não administra enxerga a lista e não mexe nela.
+          somenteLeitura={!ehAdmin(sessao)}
           ativas={configuracao.filiaisAtivas}
           onAlternarAtiva={alternarFilialAtiva}
           onDefinirAtivas={definirFiliaisAtivas}
@@ -875,6 +900,8 @@ function PlanejamentoOrcamentario({ sessao, onSair }) {
       <TelaHome
         plano={planoAtivo}
         visao={visaoDoPlano}
+        modulosVisiveis={modulosVisiveis}
+        podeVerDre={podeVerDre}
         onAbrirModulo={abrirModulo}
         onAbrirDre={() => abrirModulo("dre")}
         onVoltar={voltar}
@@ -887,11 +914,14 @@ function PlanejamentoOrcamentario({ sessao, onSair }) {
       <Sidebar
         empresa={EMPRESA}
         badgeConfiguracoes={
-          erp.carregando || erp.erro ? undefined : filiaisAtivas.length + erp.centros.length
+          erp.carregando || erp.erro
+            ? undefined
+            : filiaisDoErpVisiveis.length + centrosDoErpVisiveis.length
         }
         planoAtivo={planoAtivo}
         visaoDoPlano={visaoDoPlano}
         modulosVisiveis={(lista) => modulosPermitidos(sessao, lista)}
+        podeVerDre={podeVerDre}
         sessao={sessao}
         onSair={onSair}
         tela={tela}

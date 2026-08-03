@@ -33,11 +33,26 @@ function CardModulo({ modulo, visao, onAbrir }) {
   );
 }
 
-export default function TelaHome({ plano, visao, onAbrirModulo, onAbrirDre, onVoltar }) {
+export default function TelaHome({
+  plano,
+  visao,
+  modulosVisiveis,
+  podeVerDre = true,
+  onAbrirModulo,
+  onAbrirDre,
+  onVoltar,
+}) {
+  // Recorta pelo que a permissão deixa ver. Mostrar o cartão de um módulo que a
+  // pessoa não abre é oferecer uma porta trancada.
+  const permitido = (lista) =>
+    modulosVisiveis
+      ? lista.filter((modulo) => modulosVisiveis.some((item) => item.id === modulo.id))
+      : lista;
+
   const grupos = [
-    { numero: "01", titulo: "Receitas", modulos: MODULOS_RECEITA },
-    { numero: "02", titulo: "Despesas", modulos: MODULOS_DESPESA },
-  ];
+    { numero: "01", titulo: "Receitas", modulos: permitido(MODULOS_RECEITA) },
+    { numero: "02", titulo: "Despesas", modulos: permitido(MODULOS_DESPESA) },
+  ].filter((grupo) => grupo.modulos.length);
 
   return (
     <main className="conteudo">
@@ -72,7 +87,10 @@ export default function TelaHome({ plano, visao, onAbrirModulo, onAbrirDre, onVo
           ))}
 
           {/* O DRE não é um módulo que se orça: é onde os outros fecham. Fica
-              como seção própria, no fim, que é a ordem em que se usa. */}
+              como seção própria, no fim, que é a ordem em que se usa. Some para
+              quem não vê todos os módulos: sem um deles, os subtotais deixam de
+              ser o resultado da empresa. */}
+          {podeVerDre ? (
           <section className="secao-modulos">
             <div className="secao-modulos__cabecalho">
               <div>
@@ -94,6 +112,7 @@ export default function TelaHome({ plano, visao, onAbrirModulo, onAbrirDre, onVo
               </button>
             </div>
           </section>
+          ) : null}
         </>
       ) : (
         <p className="modulo-aviso">
