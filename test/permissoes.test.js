@@ -10,6 +10,8 @@ import {
   podeEditar,
   podeLancar,
   podeVer,
+  descreverConcessao,
+  resumirAcessos,
   resumirEscopo,
 } from "../src/dados/permissoes.js";
 import { SEM_CENTRO } from "../src/dados/visao.js";
@@ -186,4 +188,51 @@ test("escopo parcial vira o nome do que se está vendo", () => {
 
 test("sem acesso nenhum o escopo diz isso", () => {
   assert.equal(resumirEscopo(SESSAO_VAZIA), "sem acesso");
+});
+
+// ---------------------------------------------------------------------------
+// Concessão em palavras
+//
+// "todos os módulos · todas as filiais · 020" é ilegível. A tela de
+// administração precisa dizer o que a linha significa em uma frase.
+// ---------------------------------------------------------------------------
+
+const CATALOGOS = {
+  modulos: [{ id: "receita-vendas", nome: "Receita de vendas" }],
+  filiais: FILIAIS,
+  centros: CENTROS,
+};
+
+test("concessão sem restrição nenhuma é 'tudo'", () => {
+  assert.equal(descreverConcessao({ modulo: null, filial: null, centro: null }, CATALOGOS), "tudo");
+});
+
+test("só as dimensões restritas aparecem", () => {
+  assert.equal(descreverConcessao({ modulo: null, filial: null, centro: "020" }, CATALOGOS), "E-COMMERCE");
+  assert.equal(descreverConcessao({ modulo: null, filial: "000025", centro: null }, CATALOGOS), "MEN HUB");
+  assert.equal(
+    descreverConcessao({ modulo: "receita-vendas", filial: "000025", centro: null }, CATALOGOS),
+    "Receita de vendas · MEN HUB"
+  );
+});
+
+test("id sem nome no catálogo aparece como id, não some", () => {
+  assert.equal(descreverConcessao({ modulo: null, filial: "000099", centro: null }, CATALOGOS), "000099");
+});
+
+test("o resumo separa o que edita do que só vê", () => {
+  assert.equal(resumirAcessos(ecommerce, CATALOGOS), "edita E-COMMERCE · vê Receita de vendas");
+});
+
+test("admin não tem resumo de concessão: passa por cima delas", () => {
+  assert.equal(resumirAcessos({ admin: true, acessos: [] }, CATALOGOS), "vê e edita tudo");
+  assert.equal(
+    resumirAcessos({ admin: true, acessos: [{ modulo: null, filial: null, centro: "020" }] }, CATALOGOS),
+    "vê e edita tudo"
+  );
+});
+
+test("sem concessão nenhuma o resumo diz isso", () => {
+  // Entra no portal e não vê nada — é um estado que precisa gritar na tela.
+  assert.equal(resumirAcessos({ admin: false, acessos: [] }, CATALOGOS), "sem acesso a nada");
 });

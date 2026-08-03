@@ -119,6 +119,49 @@ export function resumirEscopo(sessao, { filiais, centros } = {}) {
 }
 
 // --------------------------------------------------------------------------
+// Concessão em palavras
+//
+// A tela de administração precisa dizer o que uma linha significa sem obrigar
+// ninguém a interpretar três colunas com `null` no meio. "todos os módulos ·
+// todas as filiais · 020" é ilegível; "E-COMMERCE" é o que a pessoa quer saber.
+// --------------------------------------------------------------------------
+
+export function descreverConcessao(acesso, { modulos, filiais, centros } = {}) {
+  const nomeDe = (lista, id) => (lista ?? []).find((item) => item.id === id)?.nome ?? id;
+
+  const partes = [
+    acesso.modulo ? nomeDe(modulos, acesso.modulo) : null,
+    acesso.filial ? nomeDe(filiais, acesso.filial) : null,
+    acesso.centro ? nomeDe(centros, acesso.centro) : null,
+  ].filter(Boolean);
+
+  // Nenhuma dimensão restrita é a concessão mais forte que existe.
+  return partes.length ? partes.join(" · ") : "tudo";
+}
+
+// Resumo de uma linha só, para o cartão fechado. Separa por poder: quem edita
+// alguma coisa e só vê o resto precisa enxergar as duas listas.
+export function resumirAcessos(usuario, catalogos = {}) {
+  if (usuario?.admin) return "vê e edita tudo";
+
+  const lista = acessos(usuario);
+  if (!lista.length) return "sem acesso a nada";
+
+  const descrever = (filtradas) =>
+    [...new Set(filtradas.map((acesso) => descreverConcessao(acesso, catalogos)))].join(", ");
+
+  const edita = lista.filter((acesso) => acesso.podeEditar === true);
+  const soVe = lista.filter((acesso) => acesso.podeEditar !== true);
+
+  return [
+    edita.length ? `edita ${descrever(edita)}` : null,
+    soVe.length ? `vê ${descrever(soVe)}` : null,
+  ]
+    .filter(Boolean)
+    .join(" · ");
+}
+
+// --------------------------------------------------------------------------
 // Onde a tela do plano pode lançar
 //
 // Reúne as três perguntas que TelaOrcamento já faz (filial escolhida, centro
