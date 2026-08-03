@@ -1,3 +1,7 @@
+import { existsSync } from "node:fs";
+import { join } from "node:path";
+import { fileURLToPath } from "node:url";
+
 import express from "express";
 
 import { encerrar, queryOne } from "./sqlserver.js";
@@ -64,7 +68,16 @@ function exigirEdicao(req, _res, next) {
 
 const app = express();
 app.disable("x-powered-by");
-app.set("trust proxy", 1); // roda atrás do Cloudflare Tunnel em produção
+
+// Em produção quem fala com o Express é o `cloudflared`, no mesmo host, e o IP
+// real do visitante vem no `X-Forwarded-For`. Sem isto toda requisição chega
+// como 127.0.0.1 e o limite por origem passa a ver a empresa inteira como uma
+// origem só.
+//
+// `loopback` e não `1`: assim o cabeçalho só é aceito quando quem conecta é o
+// próprio host. Confiando em qualquer peer, bastaria alcançar a porta na rede e
+// mandar um `X-Forwarded-For` inventado para escapar do limite a cada tentativa.
+app.set("trust proxy", process.env.TRUST_PROXY ?? "loopback");
 app.use(express.json({ limit: "1mb" }));
 
 // Envolve handler async para que rejeição vire resposta de erro, não crash.
@@ -352,6 +365,40 @@ app.delete(
   })
 );
 
+// --------------------------------------------------------------------------
+// O front, em produção
+//
+// Em desenvolvimento quem entrega o React é o Vite, que ainda faz proxy de
+// /api para cá. Na VM não existe Vite: se ninguém servir o `dist/`, a porta
+// responde /api/* e devolve 404 para o navegador — tela branca.
+//
+// Só liga quando o build existe, então rodar `npm run api` sozinho em
+// desenvolvimento continua se comportando como API pura.
+// --------------------------------------------------------------------------
+
+const dist = fileURLToPath(new URL("../dist", import.meta.url));
+const temBuild = existsSync(join(dist, "index.html"));
+
+if (temBuild) {
+  // `index: false` para o fallback abaixo ser o único a servir o index.html —
+  // com uma regra só, o cache dele fica num lugar só.
+  app.use(express.static(dist, { index: false, maxAge: "1h" }));
+}
+
+// 404 de API é JSON: quem chama espera JSON e engolir isso num HTML de SPA
+// transformaria erro de rota em "resposta inesperada: não era JSON".
+app.use("/api", (_req, res) => res.status(404).json({ erro: "Rota não encontrada." }));
+
+if (temBuild) {
+  // Fallback de SPA: as rotas do portal existem só no navegador, então recarregar
+  // a página numa delas precisa devolver o index.html. Sem `maxAge`: o HTML
+  // aponta para os assets com hash e não pode ficar velho em cache.
+  app.use((req, res, next) => {
+    if (req.method !== "GET" && req.method !== "HEAD") return next();
+    res.sendFile(join(dist, "index.html"));
+  });
+}
+
 app.use((_req, res) => res.status(404).json({ erro: "Rota não encontrada." }));
 
 // Detalhe do erro fica no log do servidor; o cliente recebe só a mensagem.
@@ -364,8 +411,15 @@ app.use((erro, _req, res, _next) => {
 });
 
 const porta = Number(process.env.API_PORT ?? 3000);
-const servidor = app.listen(porta, () => {
-  console.log(`[api] ouvindo em http://localhost:${porta}`);
+
+// Escuta só em loopback por padrão. Na VM quem conecta é o `cloudflared`, no
+// mesmo host, então nada precisa alcançar esta porta pela rede — e o que não é
+// alcançável não tem como ter o `X-Forwarded-For` forjado. Para expor na rede
+// (sem túnel), `API_HOST=0.0.0.0`.
+const host = process.env.API_HOST ?? "127.0.0.1";
+
+const servidor = app.listen(porta, host, () => {
+  console.log(`[api] ouvindo em http://${host}:${porta}${temBuild ? " (servindo dist/)" : ""}`);
 });
 
 for (const sinal of ["SIGINT", "SIGTERM"]) {

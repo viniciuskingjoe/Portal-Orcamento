@@ -465,6 +465,62 @@ Regras que não podem ser afrouxadas (PADRAO §5): parâmetro sempre por bind,
 `Date` tipado como `DateTime2(3)`, ERP só por `SELECT`, nunca alterar tabela do
 ERP.
 
+## Deploy
+
+Roda na VM de portais AKR (Ubuntu, usuário `king`), como serviço systemd em
+`/opt/portal-orcamento`, na **porta 3004** — 3000 a 3003 são dos outros portais.
+Fica público por rota no Cloudflare Tunnel; app Node não usa Apache nem
+certificado próprio.
+
+```bash
+# primeira vez
+REPO=<url do repo> sudo -E bash deploy/setup.sh
+# o script para e pede o .env; preencha e rode de novo
+
+# atualizar
+sudo bash deploy/setup.sh          # git pull + build + testes + restart
+```
+
+O script é idempotente e **nunca cria nem sobrescreve o `.env`** — credencial não
+vem do repositório, e sobrescrever derrubaria o portal.
+
+**Não há migração de dados.** É o mesmo banco `KINGEJOE` usado em
+desenvolvimento, com as tabelas já criadas; subir na VM é apontar outro processo
+para o mesmo lugar.
+
+O Node do sistema (v20.x) basta: este portal não usa `node:sqlite`, então não
+depende do Node 24 do nvm como o portal-bi e o portal-envio-documentos.
+
+### O front em produção
+
+Em desenvolvimento quem entrega o React é o Vite, que ainda faz proxy de `/api`.
+Na VM não existe Vite: o próprio Express serve o `dist/`, com fallback de SPA
+para as rotas que só existem no navegador. O `express.static` só liga quando o
+build existe, então `npm run api` sozinho continua sendo API pura.
+
+### Rede
+
+| Variável | Na VM | Por quê |
+|---|---|---|
+| `API_PORT` | `3004` | 3000–3003 ocupadas |
+| `API_HOST` | `127.0.0.1` | só o `cloudflared`, no mesmo host, precisa alcançar |
+| `TRUST_PROXY` | (padrão `loopback`) | ler o IP real do visitante no `X-Forwarded-For` |
+
+`API_HOST` e `TRUST_PROXY` andam juntos e não são detalhe: atrás do túnel, toda
+requisição chega como `127.0.0.1`, e sem `trust proxy` o limite por origem
+passaria a ver a empresa inteira como uma origem só. Mas confiar no cabeçalho é
+seguro **apenas** porque nada além do próprio host alcança a porta — daí o bind
+em loopback. Trocar um sem o outro abre o caminho para forjar `X-Forwarded-For` e
+escapar do limite a cada tentativa.
+
+### Cloudflare
+
+Rota no túnel `portal-modelagem` → `orcamento.akrbrands.com.br` →
+`http://localhost:3004`, e **Cloudflare Access na frente**. O portal expõe um
+formulário que valida senha de rede do AD; sem o Access ele fica alcançável por
+qualquer um na internet, que é exatamente o cenário de bloqueio de contas em
+massa que o limite de tentativas existe para conter.
+
 ## Padrão visual
 
 Segue o [PADRAO-PROJETOS-AKR.md](PADRAO-PROJETOS-AKR.md): sidebar preta de 256px
@@ -512,10 +568,8 @@ Em ordem de risco.
   `KING_*` e `SELECT` no resto.
 - **Backup das `KING_PORTAL_ORC_*`.** O orçamento agora só existe no SQL Server.
   Confirmar que essas tabelas entram na rotina de backup do KINGEJOE.
-- **Sem deploy.** Roda por `npm run dev`. Falta serviço, build servido e
-  processo de atualização. Atrás de proxy reverso, `app.set("trust proxy", …)`
-  precisa ser configurado, senão `req.ip` vira o IP do proxy e o limite por
-  origem deixa de distinguir quem é quem.
+- **Rota no Cloudflare e card no hub** são passos manuais no painel, ainda não
+  feitos — ver [Deploy](#deploy).
 
 **Funcional**
 

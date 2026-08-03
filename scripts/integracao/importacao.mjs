@@ -103,11 +103,28 @@ try {
   const admin = await criar(ADMIN, 1);
   const comum = await criar(COMUM, 0);
 
-  ok((await (await req("/api/estado/vazio", admin)).json()).vazio === true, "banco começa vazio");
   ok(
     (await req("/api/estado/importar", { ...comum, metodo: "POST", corpo: legado })).status === 403,
     "só admin importa"
   );
+
+  // A importação do legado só roda uma vez, com o portal ainda vazio. Depois que
+  // alguém importou de verdade — que é o caso de qualquer banco em uso — esse
+  // caminho não existe mais, e esvaziar o banco para testá-lo apagaria o
+  // orçamento da empresa. Então: com dados, o que se verifica é a TRAVA.
+  const vazio = (await (await req("/api/estado/vazio", admin)).json()).vazio === true;
+
+  if (!vazio) {
+    ok(
+      (await req("/api/estado/importar", { ...admin, metodo: "POST", corpo: legado })).status === 409,
+      "banco em uso: a importação é recusada em vez de sobrescrever"
+    );
+    console.log("  --  o resto exige banco vazio e foi pulado (o portal já tem dados)");
+    console.log(falhas.length ? "\nFALHAS:\n  " + falhas.join("\n  ") : "\ntudo ok");
+    await limpar();
+    await encerrar();
+    process.exit(falhas.length ? 1 : 0);
+  }
 
   const resumo = await (await req("/api/estado/importar", { ...admin, metodo: "POST", corpo: legado })).json();
   ok(resumo.visoes === 1 && resumo.planos === 1 && resumo.celulas === 2, "importação relata o que trouxe");

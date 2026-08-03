@@ -1,0 +1,30 @@
+[Unit]
+Description=Portal Orcamento (Planejamento Orcamentario AKR)
+After=network.target
+
+[Service]
+Type=simple
+User=king
+WorkingDirectory=/opt/portal-orcamento
+
+# `--env-file` do Node, e nao `EnvironmentFile=` do systemd, de proposito: o
+# parser do systemd trata `#` como comentario e lida com aspas de outro jeito,
+# entao uma senha com caractere especial chegaria truncada e o erro apareceria
+# como "login failed", longe da causa. Assim o .env e lido pelo mesmo parser em
+# desenvolvimento (`npm run api`) e aqui.
+#
+# Node do sistema basta: este portal nao usa `node:sqlite`, entao nao depende do
+# Node 24 do nvm como o portal-bi e o portal-envio-documentos.
+ExecStart=/usr/bin/node --env-file=.env server/index.js
+
+Restart=always
+RestartSec=3
+
+# O processo le o proprio diretorio e fala com a rede; nao escreve em disco.
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectHome=true
+
+[Install]
+WantedBy=multi-user.target
