@@ -997,6 +997,18 @@ button {
   color: var(--danger);
 }
 
+/* Poder de uma concessão. Vermelho para "só vê" leria como erro — ver não é
+   problema, é o acesso mais comum que existe. */
+.chip--edicao {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.chip--leitura {
+  background: var(--surface-hover);
+  color: var(--text-soft);
+}
+
 /* Marca de onde o dado vem — estes cadastros são do ERP, não do portal. */
 .chip--origem {
   display: inline-flex;
@@ -2933,7 +2945,7 @@ dialog::backdrop {
 
 .cartao-usuario > header {
   display: grid;
-  grid-template-columns: minmax(180px, 1.2fr) minmax(0, 2fr) auto auto;
+  grid-template-columns: minmax(180px, 260px) minmax(0, 1fr) auto auto;
   align-items: center;
   gap: 14px;
   padding: 12px 16px;
@@ -2959,8 +2971,11 @@ dialog::backdrop {
 
 /* O que a pessoa pode, em uma linha — é a informação principal do cartão
    fechado, então tem espaço e não é a menor coisa da linha. */
+/* Limitado em largura de texto: numa tela larga a coluna sobraria e a frase
+   ficaria boiando no meio do cartão, longe do nome a que se refere. */
 .cartao-usuario__resumo {
   min-width: 0;
+  max-width: 52ch;
   color: var(--text-soft);
   font-size: 12.5px;
   line-height: 1.35;
@@ -2988,9 +3003,15 @@ dialog::backdrop {
   background: var(--surface-soft);
 }
 
+/* O conteúdo não acompanha a largura da tela: uma concessão que diz "tudo"
+   esticada por 1400px vira uma faixa vazia com duas palavras nas pontas. */
+.cartao-usuario__permissoes > * {
+  max-width: 760px;
+}
+
 .lista-concessoes {
   display: flex;
-  flex-direction: column;
+  flex-wrap: wrap;
   gap: 6px;
   margin: 0;
   padding: 0;
@@ -3001,20 +3022,31 @@ dialog::backdrop {
   display: none;
 }
 
+/* Cada concessão é uma etiqueta do tamanho do que diz, não uma linha de tabela:
+   elas são curtas ("tudo", "E-COMMERCE") e cabem várias por linha. */
 .concessao {
-  display: flex;
+  display: inline-flex;
   align-items: center;
-  gap: 10px;
-  padding: 6px 10px;
+  gap: 8px;
+  padding: 5px 6px 5px 5px;
   border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
+  border-radius: 999px;
   background: var(--surface);
   font-size: 12.5px;
 }
 
 .concessao__texto {
-  flex: 1;
   min-width: 0;
+}
+
+/* O "remover" só ganha peso quando a etiqueta está sob o ponteiro — com uma
+   dúzia de concessões, doze links vermelhos competem com o conteúdo. */
+.concessao .botao-texto {
+  color: var(--muted);
+}
+
+.concessao:hover .botao-texto {
+  color: var(--danger);
 }
 
 .nova-concessao {

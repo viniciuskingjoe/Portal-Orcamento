@@ -32,7 +32,7 @@ const ATALHOS = [
 function Concessao({ acesso, catalogos, onRevogar }) {
   return (
     <li className="concessao">
-      <span className={`chip chip--${acesso.podeEditar ? "receita" : "despesa"}`}>
+      <span className={`chip chip--${acesso.podeEditar ? "edicao" : "leitura"}`}>
         {acesso.podeEditar ? "edita" : "só vê"}
       </span>
       <span className="concessao__texto">{descreverConcessao(acesso, catalogos)}</span>
@@ -150,16 +150,25 @@ function NovaConcessao({ catalogos, onConceder }) {
 
       {/* Prévia: ler três seletores e imaginar o resultado é onde se erra —
           ainda mais quando a escolha múltipla multiplica as linhas. */}
-      <div className="nova-concessao__previa">
-        Vai conceder <strong>{podeEditar ? "editar" : "ver"}</strong> em{" "}
-        {combinacoes.length === 1 ? "" : `${combinacoes.length} combinações: `}
-        <ul>
-          {combinacoes.slice(0, 6).map((combinacao, indice) => (
-            <li key={indice}>{descreverConcessao(combinacao, catalogos)}</li>
-          ))}
-          {combinacoes.length > 6 ? <li>e mais {combinacoes.length - 6}…</li> : null}
-        </ul>
-      </div>
+      {/* Uma combinação cabe na frase; várias viram lista. Quebrar a frase para
+          pendurar uma etiqueta só embaixo fica pior que dizer de uma vez. */}
+      {combinacoes.length === 1 ? (
+        <p className="nova-concessao__previa">
+          Vai conceder <strong>{podeEditar ? "editar" : "ver"}</strong>{" "}
+          {descreverConcessao(combinacoes[0], catalogos)}.
+        </p>
+      ) : (
+        <div className="nova-concessao__previa">
+          Vai conceder <strong>{podeEditar ? "editar" : "ver"}</strong> em{" "}
+          {combinacoes.length} combinações:
+          <ul>
+            {combinacoes.slice(0, 6).map((combinacao, indice) => (
+              <li key={indice}>{descreverConcessao(combinacao, catalogos)}</li>
+            ))}
+            {combinacoes.length > 6 ? <li>e mais {combinacoes.length - 6}…</li> : null}
+          </ul>
+        </div>
+      )}
     </div>
   );
 }
