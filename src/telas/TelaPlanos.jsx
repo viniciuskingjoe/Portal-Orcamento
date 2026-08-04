@@ -3,7 +3,33 @@ import Cabecalho from "../componentes/Cabecalho.jsx";
 import EstadoVazio from "../componentes/EstadoVazio.jsx";
 import Icone from "../componentes/Icone.jsx";
 
-export default function TelaPlanos({ planos, visoes, onAbrir, onNovo, onExcluir }) {
+// "há 3 minutos", "ontem" — quem publicou há pouco quer saber se foi ANTES ou
+// DEPOIS da última alteração, e uma data completa obriga a fazer essa conta de
+// cabeça.
+function quandoFoi(iso) {
+  if (!iso) return null;
+  const minutos = Math.floor((Date.now() - new Date(iso).getTime()) / 60000);
+
+  if (minutos < 1) return "agora";
+  if (minutos < 60) return `há ${minutos} min`;
+  if (minutos < 60 * 24) return `há ${Math.floor(minutos / 60)} h`;
+
+  const dias = Math.floor(minutos / (60 * 24));
+  if (dias === 1) return "ontem";
+  if (dias < 30) return `há ${dias} dias`;
+  return new Date(iso).toLocaleDateString("pt-BR");
+}
+
+export default function TelaPlanos({
+  planos,
+  visoes,
+  podePublicar = false,
+  publicando = null,
+  onAbrir,
+  onNovo,
+  onExcluir,
+  onPublicar,
+}) {
   const nomeDaVisao = (visaoId) =>
     visoes.find((visao) => visao.id === visaoId)?.nome ?? "sem visão";
 
@@ -50,6 +76,38 @@ export default function TelaPlanos({ planos, visoes, onAbrir, onNovo, onExcluir 
                   <Icone nome="chevron" tamanho={18} />
                 </span>
               </button>
+
+              {/* Publicar manda o planejado para o orçamento do Linx, que é de
+                  onde o Power BI lê. Fica fora do botão de abrir para o clique
+                  não ser ambíguo, e só para quem administra: o efeito sai do
+                  portal e passa a valer para quem consulta o BI. */}
+              {podePublicar ? (
+                <div className="card-plano__publicacao">
+                  <span className="card-plano__publicado">
+                    {plano.publicadoEm ? (
+                      <>
+                        <Icone nome="check" tamanho={13} />
+                        Publicado {quandoFoi(plano.publicadoEm)}
+                        {plano.publicadoLinhas != null ? ` · ${plano.publicadoLinhas} linhas` : ""}
+                      </>
+                    ) : (
+                      <>
+                        <Icone nome="info" tamanho={13} />
+                        Nunca publicado no Linx
+                      </>
+                    )}
+                  </span>
+                  <button
+                    type="button"
+                    className="botao-texto"
+                    onClick={() => onPublicar(plano)}
+                    disabled={publicando === plano.id}
+                  >
+                    {publicando === plano.id ? "Publicando…" : "Publicar no Linx"}
+                  </button>
+                </div>
+              ) : null}
+
               <button
                 type="button"
                 className="card-plano__excluir"

@@ -127,6 +127,8 @@ function PlanejamentoOrcamentario({ sessao, onSair }) {
   const [filtros, setFiltros] = useState(FILTROS_PADRAO);
   const [editingCell, setEditingCell] = useState(null);
   const [avisoPersistencia, setAvisoPersistencia] = useState("");
+  const [avisoPublicacao, setAvisoPublicacao] = useState("");
+  const [publicando, setPublicando] = useState(null);
 
   // Guardas da atualização de fundo — ver o efeito mais abaixo.
   const gravacoesEmVoo = useRef(0);
@@ -626,7 +628,48 @@ function PlanejamentoOrcamentario({ sessao, onSair }) {
   const pedirExclusao = (tipo) => (item) =>
     setConfirmacao({ tipo, id: item.id, nome: item.nome });
 
+  // --------------------------------------------------------------------------
+  // Publicar no orçamento do Linx
+  //
+  // Passa por confirmação porque o efeito SAI do portal: o número vai para a
+  // tabela que o Power BI lê, e a partir dali é ele que a diretoria enxerga.
+  // --------------------------------------------------------------------------
+
+  const pedirPublicacao = (plano) =>
+    setConfirmacao({ tipo: "publicar", id: plano.id, nome: plano.nome });
+
+  async function publicarNoLinx(planoId) {
+    setPublicando(planoId);
+    setAvisoPersistencia("");
+    try {
+      const { linhas } = await repo.plano.publicar(planoId);
+      // Relê para a data de publicação vir do servidor, não de um relógio local
+      // que pode estar adiantado em relação ao banco.
+      const dados = await carregarEstado();
+      setPlanos(dados.planos);
+      setAvisoPublicacao(
+        linhas
+          ? `Publicado no Linx: ${linhas} ${linhas === 1 ? "linha" : "linhas"}.`
+          : "Nada a publicar — este plano ainda não tem valor lançado."
+      );
+    } catch (erro) {
+      // Erro aqui é do ERP e precisa aparecer inteiro: a mensagem do servidor
+      // diz se foi o status do orçamento, o exercício que falta no Linx ou
+      // outra coisa, e cada uma tem um dono diferente para resolver.
+      setAvisoPersistencia(`Não foi possível publicar: ${erro.message}`);
+    } finally {
+      setPublicando(null);
+    }
+  }
+
   function descricaoDaConfirmacao() {
+    if (confirmacao?.tipo === "publicar") {
+      return (
+        "O planejado deste plano substitui o que estiver no orcamento dele no Linx. " +
+        "E de la que o Power BI le, entao o numero passa a valer para quem consulta o BI. " +
+        "Orcamento de outro plano nao e tocado."
+      );
+    }
     if (confirmacao?.tipo === "plano") {
       return "O plano e todos os valores planejados nele serão removidos.";
     }
@@ -640,6 +683,13 @@ function PlanejamentoOrcamentario({ sessao, onSair }) {
 
   function confirmarExclusao() {
     if (!confirmacao) return;
+    // Publicar nao e exclusao; compartilha o modal porque a pergunta e a mesma
+    // -- "tem certeza?" -- e o efeito tambem sai do portal.
+    if (confirmacao.tipo === "publicar") {
+      publicarNoLinx(confirmacao.id);
+      setConfirmacao(null);
+      return;
+    }
     if (confirmacao.tipo === "plano") {
       setPlanos((atuais) => atuais.filter((plano) => plano.id !== confirmacao.id));
       gravar(repo.plano.excluir(confirmacao.id));
@@ -928,9 +978,12 @@ function PlanejamentoOrcamentario({ sessao, onSair }) {
         <TelaPlanos
           planos={planos}
           visoes={visoes}
+          podePublicar={ehAdmin(sessao)}
+          publicando={publicando}
           onAbrir={abrirPlano}
           onNovo={() => setDrawerAberto(true)}
           onExcluir={pedirExclusao("plano")}
+          onPublicar={pedirPublicacao}
         />
       );
     }
@@ -1022,6 +1075,16 @@ function PlanejamentoOrcamentario({ sessao, onSair }) {
             {avisoPersistencia}
           </p>
         ) : null}
+        {/* Some ao fechar: publicar é ação pontual, e um aviso de sucesso que
+            fica na tela vira ruído na próxima vez que alguém abrir os planos. */}
+        {avisoPublicacao ? (
+          <p className="aviso-fixo aviso-fixo--ok" role="status">
+            {avisoPublicacao}
+            <button type="button" className="botao-texto" onClick={() => setAvisoPublicacao("")}>
+              Fechar
+            </button>
+          </p>
+        ) : null}
         {/* O que ficou no navegador antes de o portal ter banco. Importar é
             decisão de quem está vendo: pode ser rascunho de outra pessoa na
             mesma máquina. */}
@@ -1087,6 +1150,8 @@ function PlanejamentoOrcamentario({ sessao, onSair }) {
         <ModalConfirmacao
           nome={confirmacao.nome}
           descricao={descricaoDaConfirmacao()}
+          titulo={confirmacao.tipo === "publicar" ? "Publicar no Linx" : undefined}
+          rotuloConfirmar={confirmacao.tipo === "publicar" ? "Publicar" : undefined}
           onConfirmar={confirmarExclusao}
           onFechar={() => setConfirmacao(null)}
         />

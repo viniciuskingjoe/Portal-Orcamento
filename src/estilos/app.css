@@ -3439,3 +3439,36 @@ dialog::backdrop {
   background: var(--danger-soft);
   color: var(--danger);
 }
+
+/* ---------------------------------------------------------------------------
+   Publicação no orçamento do Linx
+   --------------------------------------------------------------------------- */
+
+/* Ocupa a largura do cartão, abaixo do botão de abrir: publicar não é abrir, e
+   os dois cliques não podem competir pela mesma área. */
+.card-plano__publicacao {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 16px;
+  border-top: 1px solid var(--border);
+  font-size: 12.5px;
+}
+
+.card-plano__publicado {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--muted);
+}
+
+.aviso-fixo--ok {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  color: var(--text);
+}

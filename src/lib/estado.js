@@ -44,6 +44,8 @@ export const estado = {
     salvar: (plano) => api.salvarPlano(plano),
     excluir: (id) => api.excluirPlano(id),
     planejado: (planoId, celulas) => api.salvarPlanejado(planoId, celulas),
+    // Manda o planejado para o orçamento do Linx, de onde o Power BI lê.
+    publicar: (planoId) => api.publicarPlano(planoId),
   },
 };
 

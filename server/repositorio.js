@@ -19,6 +19,26 @@ import { chavePlanejado } from "../src/dados/plano.js";
 
 const SEM_CENTRO = "";
 
+// As colunas de publicação no Linx vêm do sql/004, que pode não ter sido rodado
+// ainda — é o caso de um banco que ficou em 003. Selecioná-las sem conferir
+// derrubaria `carregarEstado`, que é a leitura principal do portal: a tela
+// inteira ficaria fora do ar por causa de um recurso que ninguém está usando.
+//
+// A resposta é guardada porque isto é esquema, não dado: consultar a cada carga
+// custaria uma ida ao banco por uma resposta que não muda enquanto o processo
+// vive. Reiniciar o serviço é o que faz o portal enxergar o 004 recém-rodado.
+let publicacaoDisponivel = null;
+
+async function temPublicacao() {
+  if (publicacaoDisponivel === null) {
+    const [linha] = await query(
+      "SELECT COL_LENGTH('dbo.KING_PORTAL_ORC_PLANO', 'PUBLICADO_EM') AS tem"
+    );
+    publicacaoDisponivel = linha?.tem != null;
+  }
+  return publicacaoDisponivel;
+}
+
 // --------------------------------------------------------------------------
 // Leitura
 // --------------------------------------------------------------------------
@@ -34,7 +54,14 @@ export async function carregarEstado() {
          FROM dbo.KING_PORTAL_ORC_VISAO_CONTA ORDER BY CLASSIFICACAO`
     ),
     query("SELECT VISAO_ID, MODULO, CLASSIFICACAO, TIPO FROM dbo.KING_PORTAL_ORC_VISAO_SINAL"),
-    query("SELECT ID, NOME, ANO, VISAO_ID FROM dbo.KING_PORTAL_ORC_PLANO ORDER BY ANO DESC, NOME"),
+    query(
+      `SELECT ID, NOME, ANO, VISAO_ID${
+        await temPublicacao()
+          ? ", ID_ORCAMENTO, PUBLICADO_EM, PUBLICADO_LINHAS"
+          : ""
+      }
+         FROM dbo.KING_PORTAL_ORC_PLANO ORDER BY ANO DESC, NOME`
+    ),
     query(
       `SELECT PLANO_ID, MODULO, COD_FILIAL, CENTRO_CUSTO, CLASSIFICACAO, RECEITA, MES, VALOR
          FROM dbo.KING_PORTAL_ORC_PLANEJADO`
@@ -96,7 +123,18 @@ export async function carregarEstado() {
   const porPlano = new Map(
     planos.map((linha) => [
       linha.ID,
-      { id: linha.ID, nome: linha.NOME, ano: linha.ANO, visaoId: linha.VISAO_ID, planejado: {} },
+      {
+        id: linha.ID,
+        nome: linha.NOME,
+        ano: linha.ANO,
+        visaoId: linha.VISAO_ID,
+        // `undefined` num banco sem o sql/004 — a tela trata como "nunca
+        // publicado", que é a verdade nesse caso.
+        idOrcamento: linha.ID_ORCAMENTO ?? null,
+        publicadoEm: linha.PUBLICADO_EM ?? null,
+        publicadoLinhas: linha.PUBLICADO_LINHAS ?? null,
+        planejado: {},
+      },
     ])
   );
 
