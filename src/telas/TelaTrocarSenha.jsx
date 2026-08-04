@@ -48,12 +48,13 @@ export default function TelaTrocarSenha({ sessao, obrigatoria = false, onTrocar,
 
   return (
     <main className="tela-login">
-      <form className="cartao-login" onSubmit={enviar}>
-        <div className="cartao-login__marca">
-          <strong>AKR</strong>
-          <span>BRANDS</span>
-        </div>
+      <div className="login-marca">
+        <strong>AKR</strong>
+        <span className="login-marca__divisor" />
+        <span>BRANDS</span>
+      </div>
 
+      <form className="cartao-login" onSubmit={enviar}>
         <div className="cartao-login__titulo">
           <h1>{obrigatoria ? "Defina a senha do portal" : "Trocar senha"}</h1>
           <p>
@@ -124,8 +125,9 @@ export default function TelaTrocarSenha({ sessao, obrigatoria = false, onTrocar,
           </button>
         ) : null}
 
-        <p className="cartao-login__rodape">{EMPRESA}</p>
       </form>
+
+      <p className="login-rodape">{EMPRESA}</p>
     </main>
   );
 }

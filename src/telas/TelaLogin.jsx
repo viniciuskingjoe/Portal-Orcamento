@@ -30,15 +30,31 @@ export default function TelaLogin({ onEntrar, carregando, erro }) {
 
   return (
     <main className="tela-login">
+      {/* A marca fica ACIMA do cartão, como nos outros portais AKR: identifica a
+          casa antes de o cartão identificar qual portal é. */}
+      <div className="login-marca">
+        <strong>AKR</strong>
+        <span className="login-marca__divisor" />
+        <span>BRANDS</span>
+      </div>
+
       <form className="cartao-login" onSubmit={enviar}>
-        <div className="cartao-login__marca">
-          <strong>AKR</strong>
-          <span>BRANDS</span>
+        {/* Ícone + nome do portal, separados por uma linha do formulário. É o
+            mesmo bloco do Fluxo Fiscal: quem usa os dois reconhece onde está
+            sem ler. */}
+        <div className="cartao-login__portal">
+          <span className="cartao-login__icone">
+            <Icone nome="chart" tamanho={22} />
+          </span>
+          <div>
+            <strong>Planejamento Orçamentário</strong>
+            <small>Orçamento por filial e centro de custo</small>
+          </div>
         </div>
 
         <div className="cartao-login__titulo">
-          <h1>Planejamento Orçamentário</h1>
-          <p>Entre com o seu usuário e a senha do portal.</p>
+          <h1>Entrar</h1>
+          <p>Use seu usuário do domínio e sua senha do portal.</p>
         </div>
 
         <label className="campo-login">
@@ -55,7 +71,7 @@ export default function TelaLogin({ onEntrar, carregando, erro }) {
         </label>
 
         <label className="campo-login">
-          <span>Senha</span>
+          <span>Senha do portal</span>
           <input
             type="password"
             value={senha}
@@ -76,8 +92,12 @@ export default function TelaLogin({ onEntrar, carregando, erro }) {
           {carregando ? "Entrando…" : "Entrar"}
         </button>
 
-        <p className="cartao-login__rodape">{EMPRESA}</p>
       </form>
+
+      {/* Fora do cartão, como no Fluxo Fiscal. Só a empresa: o resto daquele
+          rodapé fala de como o login funciona, e isso não é o que quem entra
+          precisa ler todo dia. */}
+      <p className="login-rodape">{EMPRESA}</p>
     </main>
   );
 }
