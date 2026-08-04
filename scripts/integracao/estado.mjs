@@ -82,11 +82,15 @@ try {
   );
 
   const modDesp = "/api/visoes/" + VISAO + "/modulos/despesas-operacionais";
-  await req(modDesp, { ...admin, metodo: "PUT", corpo: { usaCentro: true } });
+  // Todo módulo é orçado por centro: marcar o centro é o que registra o módulo
+  // na visão — não existe mais um `usaCentro` para ligar antes.
   await req(modDesp, { ...admin, metodo: "PUT", corpo: { filial: "000001", centro: "020", usoDoCentro: true } });
   await req(modDesp, { ...admin, metodo: "PUT", corpo: { filial: "000001", centro: "020", contas: ["4.4.1.01.001", "4.4.1.01.002"] } });
   await req("/api/visoes/" + VISAO + "/modulos/receita-vendas", {
-    ...admin, metodo: "PUT", corpo: { filial: "000001", centro: "", contas: ["3.1.1.01.001"] },
+    ...admin, metodo: "PUT", corpo: { filial: "000001", centro: "020", usoDoCentro: true },
+  });
+  await req("/api/visoes/" + VISAO + "/modulos/receita-vendas", {
+    ...admin, metodo: "PUT", corpo: { filial: "000001", centro: "020", contas: ["3.1.1.01.001"] },
   });
   await req("/api/planos/" + PLANO, { ...admin, metodo: "PUT", corpo: { nome: "Plano teste", ano: 2026, visaoId: VISAO } });
 
@@ -94,13 +98,16 @@ try {
   const estado = await estadoAtual(admin);
   const v = estado.visoes.find((x) => x.id === VISAO);
   const mod = v && v.modulos["despesas-operacionais"];
-  ok(mod && mod.usaCentro === true, "usaCentro volta do banco");
   ok(mod && mod.filiais["000001"].centros["020"].length === 2, "contas do centro voltam");
   ok(
     mod && mod.filiais["000001"].contas.join() === "4.4.1.01.001,4.4.1.01.002",
     "com centro, a lista da filial é o consolidado derivado"
   );
-  ok(v.modulos["receita-vendas"].filiais["000001"].contas.length === 1, "módulo sem centro guarda a lista da filial");
+  // A lista da filial é SEMPRE derivada dos centros, em qualquer módulo.
+  ok(
+    v.modulos["receita-vendas"].filiais["000001"].contas.join() === "3.1.1.01.001",
+    "a lista da filial é o consolidado dos centros, também na receita"
+  );
 
   await req(modDesp, { ...admin, metodo: "PUT", corpo: { filial: "000001", centro: "002", usoDoCentro: true } });
   const centros = (await estadoAtual(admin)).visoes.find((x) => x.id === VISAO)

@@ -1,3 +1,5 @@
+import { useMemo } from "react";
+
 import Cabecalho from "../componentes/Cabecalho.jsx";
 import TabelaOrcamento from "../componentes/TabelaOrcamento.jsx";
 import Icone from "../componentes/Icone.jsx";
@@ -6,7 +8,7 @@ import { Carregando } from "../componentes/Estados.jsx";
 import { DicaEdicao } from "../componentes/FiltrosOrcamento.jsx";
 import { conta as buscarConta } from "../dados/contas.js";
 import { GRUPOS } from "../dados/modulos.js";
-import { SEM_CENTRO, usaCentroDeCusto } from "../dados/visao.js";
+import { SEM_CENTRO, centrosDaFilial } from "../dados/visao.js";
 import { formatarMoeda } from "../lib/formato.js";
 
 export const TODAS_AS_CONTAS = "__todas";
@@ -77,7 +79,6 @@ export default function TelaOrcamento({
   edicao,
   onVoltar,
 }) {
-  const usaCentro = usaCentroDeCusto(visao, modulo.id);
   const grupo = GRUPOS[modulo.grupo];
   const percentual = modulo.percentual === true;
 
@@ -106,7 +107,7 @@ export default function TelaOrcamento({
     filtros.filial !== "total" &&
     filtros.conta !== TODAS_AS_CONTAS &&
     contasDisponiveis.length > 0 &&
-    (!usaCentro || filtros.centro !== SEM_CENTRO) &&
+    filtros.centro !== SEM_CENTRO &&
     (!percentual || (filtros.receita !== TODAS_AS_CONTAS && receitas.length > 0));
 
   const motivo = !podeLancar && filtros.filial !== "total"
@@ -117,30 +118,40 @@ export default function TelaOrcamento({
       ? "Nenhuma conta de receita configurada nesta filial. Ajuste Receita de vendas na visão."
       : filtros.filial === "total"
         ? "Para lançar, escolha uma filial específica."
-        : usaCentro && filtros.centro === SEM_CENTRO
-          ? "Este módulo usa centro de custo: escolha um para lançar."
-          : filtros.conta === TODAS_AS_CONTAS
-            ? "Escolha uma conta na lista à esquerda para lançar o planejado."
-            : percentual && filtros.receita === TODAS_AS_CONTAS
-              ? "Escolha também a receita sobre a qual o percentual incide."
-              : `${percentual ? "Digite o percentual ou o valor em reais — as duas colunas aceitam" : "Digite na coluna Planejado"} — Enter grava e desce · arraste o canto da célula (ou Ctrl+Enter) para repetir nos outros meses · Ctrl+D copia o mês de cima · Esc cancela.`;
+        : !centrosDaVisao.length
+          ? "Esta filial não tem centro de custo nesta visão. Marque os centros dela em Visões."
+          : filtros.centro === SEM_CENTRO
+            ? "Escolha um centro de custo acima — o Total é só leitura."
+            : filtros.conta === TODAS_AS_CONTAS
+              ? "Escolha uma conta na lista à esquerda para lançar o planejado."
+              : percentual && filtros.receita === TODAS_AS_CONTAS
+                ? "Escolha também a receita sobre a qual o percentual incide."
+                : `${percentual ? "Digite o percentual ou o valor em reais — as duas colunas aceitam" : "Digite na coluna Planejado"} — Enter grava e desce · arraste o canto da célula (ou Ctrl+Enter) para repetir nos outros meses · Ctrl+D copia o mês de cima · Esc cancela.`;
 
-  // As dimensões que compõem a célula, na ordem em que se escolhe: onde (centro),
-  // sobre o quê (receita) e o quê (conta do módulo).
+  // Centros que a VISÃO deu a esta filial neste módulo — não os 37 do ERP.
+  // Oferecer centro que a visão não configurou leva a escolher um e encontrar a
+  // tela vazia, sem dizer por quê.
+  //
+  // Em "Total" é a união dos centros das filiais em uso: ver um centro em todas
+  // as filiais de uma vez é leitura legítima.
+  const centrosDaVisao = useMemo(() => {
+    const doModulo = new Set();
+    const alvo =
+      filtros.filial === "total" ? filiais.map((filial) => filial.id) : [filtros.filial];
+
+    alvo.forEach((filialId) =>
+      centrosDaFilial(visao, modulo.id, filialId).forEach((centro) => doModulo.add(centro))
+    );
+
+    // Percorre `centros` (já recortado pela permissão) para herdar a ordem e o
+    // nome do ERP em vez de mostrar códigos soltos.
+    return centros.filter((centro) => doModulo.has(centro.id));
+  }, [visao, modulo.id, filtros.filial, filiais, centros]);
+
+  // As dimensões que compõem a célula, na ordem em que se escolhe: sobre o quê
+  // (receita) e o quê (conta do módulo). Filial e centro ficam nos seletores do
+  // topo — são o recorte, não o conteúdo.
   const paineis = [];
-
-  if (usaCentro) {
-    paineis.push({
-      titulo: "Centro de custo",
-      descricao: "Este módulo é orçado por centro; escolha um para lançar.",
-      rotuloTotal: "Total — todos os centros",
-      valorTotal: SEM_CENTRO,
-      itens: centros.map((centro) => ({ codigo: centro.id, descricao: centro.nome })),
-      selecionado: filtros.centro,
-      aoSelecionar: (codigo) => onAlterarFiltro({ centro: codigo }),
-      vazio: "Nenhum centro de custo ativo no ERP.",
-    });
-  }
 
   if (percentual) {
     paineis.push({
@@ -169,7 +180,7 @@ export default function TelaOrcamento({
     })),
     selecionado: filtros.conta,
     aoSelecionar: (codigo) => onAlterarFiltro({ conta: codigo }),
-    vazio: `Nenhuma conta para esta filial${usaCentro ? " e centro" : ""}.`,
+    vazio: "Nenhuma conta neste centro. Escolha as contas dele em Visões.",
   });
 
   return (
@@ -197,6 +208,31 @@ export default function TelaOrcamento({
             ]}
             aoEscolher={(valor) => onAlterarFiltro({ filial: valor })}
             buscaVazia="Nenhuma filial com esse nome."
+          />
+        </label>
+
+        {/* Ao lado da filial porque é a mesma natureza de escolha: recortar o
+            que a tabela mostra. Só os centros que a visão deu a esta filial —
+            oferecer os 37 do ERP levaria a escolher um e achar a tela vazia. */}
+        <label>
+          <span>Centro de custo</span>
+          <Seletor
+            valor={filtros.centro}
+            opcoes={[
+              {
+                valor: SEM_CENTRO,
+                rotulo: centrosDaVisao.length
+                  ? `Total — ${centrosDaVisao.length} ${centrosDaVisao.length === 1 ? "centro" : "centros"}`
+                  : "Nenhum centro nesta filial",
+              },
+              ...centrosDaVisao.map((centro) => ({
+                valor: centro.id,
+                rotulo: centro.nome,
+                detalhe: centro.id,
+              })),
+            ]}
+            aoEscolher={(valor) => onAlterarFiltro({ centro: valor })}
+            buscaVazia="Nenhum centro com esse nome."
           />
         </label>
 
