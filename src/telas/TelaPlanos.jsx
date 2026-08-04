@@ -93,25 +93,16 @@ export default function TelaPlanos({
                 </span>
               </button>
 
-              {/* Publicar manda o planejado para o orçamento do Linx, que é de
-                  onde o Power BI lê. Fica fora do botão de abrir para o clique
-                  não ser ambíguo, e só para quem administra: o efeito sai do
-                  portal e passa a valer para quem consulta o BI. */}
-              {podePublicar ? (
+              {/* Só quando JÁ houve sincronização. "Nunca sincronizado" era uma
+                  linha ocupando espaço para anunciar uma ausência — e em plano
+                  novo é o estado de todos. Quem sincroniza faz isso dentro do
+                  módulo; aqui é só o retrato de quando foi. */}
+              {podePublicar && plano.publicadoEm ? (
                 <div className="card-plano__publicacao">
                   <span className="card-plano__publicado">
-                    {plano.publicadoEm ? (
-                      <>
-                        <Icone nome="check" tamanho={13} />
-                        Sincronizado {quandoFoi(plano.publicadoEm)}
-                        {plano.publicadoLinhas != null ? ` · ${plano.publicadoLinhas} linhas` : ""}
-                      </>
-                    ) : (
-                      <>
-                        <Icone nome="info" tamanho={13} />
-                        Nunca sincronizado com o Linx
-                      </>
-                    )}
+                    <Icone nome="check" tamanho={13} />
+                    Sincronizado {quandoFoi(plano.publicadoEm)}
+                    {plano.publicadoLinhas != null ? ` · ${plano.publicadoLinhas} linhas` : ""}
                   </span>
                 </div>
               ) : null}
