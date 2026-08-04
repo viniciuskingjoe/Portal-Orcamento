@@ -111,6 +111,11 @@ export const api = {
   salvarPlano: (plano) =>
     buscar(`/api/planos/${encodeURIComponent(plano.id)}`, null, { metodo: "PUT", corpo: plano }),
   excluirPlano: (id) => buscar(`/api/planos/${encodeURIComponent(id)}`, null, { metodo: "DELETE" }),
+  situacaoDoPlano: (id, situacao) =>
+    buscar(`/api/planos/${encodeURIComponent(id)}/situacao`, null, {
+      metodo: "PUT",
+      corpo: { situacao },
+    }),
   publicarPlano: (id) =>
     buscar(`/api/planos/${encodeURIComponent(id)}/publicar`, null, { corpo: {} }),
   // --- usuários (admin) ----------------------------------------------------

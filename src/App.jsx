@@ -70,6 +70,10 @@ const FILTROS_PADRAO = {
 };
 const TELAS_ERP = new Set(["filiais", "centros"]);
 
+// `undefined` cai no padrao do modal, que fala em exclusao.
+const TITULO_CONFIRMACAO = { publicar: "Sincronizar com o Linx", desativar: "Desativar plano" };
+const ROTULO_CONFIRMACAO = { publicar: "Sincronizar", desativar: "Desativar" };
+
 // Portão: sem sessão não se renderiza o portal. O componente inteiro fica
 // desmontado, então nem os dados do ERP chegam a ser pedidos.
 export default function App() {
@@ -129,6 +133,7 @@ function PlanejamentoOrcamentario({ sessao, onSair }) {
   const [avisoPersistencia, setAvisoPersistencia] = useState("");
   const [avisoPublicacao, setAvisoPublicacao] = useState("");
   const [publicando, setPublicando] = useState(null);
+  const [mostrarInativos, setMostrarInativos] = useState(false);
 
   // Guardas da atualização de fundo — ver o efeito mais abaixo.
   const gravacoesEmVoo = useRef(0);
@@ -638,6 +643,21 @@ function PlanejamentoOrcamentario({ sessao, onSair }) {
   const pedirPublicacao = (plano) =>
     setConfirmacao({ tipo: "publicar", id: plano.id, nome: plano.nome });
 
+  // Reativar nao precisa de confirmacao: nao destroi nada e se desfaz com outro
+  // clique. Desativar tira o plano da lista, entao pergunta.
+  const pedirSituacao = (plano) => {
+    if (plano.situacao === "inativo") return alterarSituacao(plano.id, "ativo");
+    setConfirmacao({ tipo: "desativar", id: plano.id, nome: plano.nome });
+  };
+
+  function alterarSituacao(planoId, situacao) {
+    setPlanos((atuais) =>
+      atuais.map((plano) => (plano.id === planoId ? { ...plano, situacao } : plano))
+    );
+    gravar(repo.plano.situacao(planoId, situacao));
+    if (situacao === "inativo" && planoId === planoAtivoId) navegar("planos");
+  }
+
   async function publicarNoLinx(planoId) {
     setPublicando(planoId);
     setAvisoPersistencia("");
@@ -649,8 +669,8 @@ function PlanejamentoOrcamentario({ sessao, onSair }) {
       setPlanos(dados.planos);
       setAvisoPublicacao(
         linhas
-          ? `Publicado no Linx: ${linhas} ${linhas === 1 ? "linha" : "linhas"}.`
-          : "Nada a publicar — este plano ainda não tem valor lançado."
+          ? `Sincronizado com o Linx: ${linhas} ${linhas === 1 ? "linha" : "linhas"}.`
+          : "Nada a sincronizar — este plano ainda não tem valor lançado."
       );
     } catch (erro) {
       // Erro aqui é do ERP e precisa aparecer inteiro: a mensagem do servidor
@@ -663,11 +683,17 @@ function PlanejamentoOrcamentario({ sessao, onSair }) {
   }
 
   function descricaoDaConfirmacao() {
+    if (confirmacao?.tipo === "desativar") {
+      return (
+        "O plano sai da lista, mas nada e apagado: o planejado continua guardado e " +
+        "da para reativar depois. No Linx o orcamento dele fica marcado como inativo."
+      );
+    }
     if (confirmacao?.tipo === "publicar") {
       return (
-        "O planejado deste plano substitui o que estiver no orcamento dele no Linx. " +
-        "E de la que o Power BI le, entao o numero passa a valer para quem consulta o BI. " +
-        "Orcamento de outro plano nao e tocado."
+        "O orcamento deste plano no Linx passa a ser igual ao que esta aqui: o que " +
+        "estiver la e substituido. E de la que o Power BI le, entao o numero passa a " +
+        "valer para quem consulta o BI. Orcamento de outro plano nao e tocado."
       );
     }
     if (confirmacao?.tipo === "plano") {
@@ -687,6 +713,11 @@ function PlanejamentoOrcamentario({ sessao, onSair }) {
     // -- "tem certeza?" -- e o efeito tambem sai do portal.
     if (confirmacao.tipo === "publicar") {
       publicarNoLinx(confirmacao.id);
+      setConfirmacao(null);
+      return;
+    }
+    if (confirmacao.tipo === "desativar") {
+      alterarSituacao(confirmacao.id, "inativo");
       setConfirmacao(null);
       return;
     }
@@ -979,11 +1010,11 @@ function PlanejamentoOrcamentario({ sessao, onSair }) {
           planos={planos}
           visoes={visoes}
           podePublicar={ehAdmin(sessao)}
-          publicando={publicando}
+          mostrarInativos={mostrarInativos}
           onAbrir={abrirPlano}
           onNovo={() => setDrawerAberto(true)}
-          onExcluir={pedirExclusao("plano")}
-          onPublicar={pedirPublicacao}
+          onAlternarSituacao={pedirSituacao}
+          onAlternarInativos={() => setMostrarInativos((atual) => !atual)}
         />
       );
     }
@@ -1006,6 +1037,9 @@ function PlanejamentoOrcamentario({ sessao, onSair }) {
           linhas={linhasOrcamento}
           carregandoRealizado={realizado.carregando || contas.carregando}
           escopo={escopo}
+          podeSincronizar={ehAdmin(sessao)}
+          sincronizando={publicando === planoAtivo.id}
+          onSincronizar={() => pedirPublicacao(planoAtivo)}
           podeLancar={podeLancar(sessao, {
             modulo: moduloDaTela.id,
             filial: filtros.filial,
@@ -1150,8 +1184,8 @@ function PlanejamentoOrcamentario({ sessao, onSair }) {
         <ModalConfirmacao
           nome={confirmacao.nome}
           descricao={descricaoDaConfirmacao()}
-          titulo={confirmacao.tipo === "publicar" ? "Publicar no Linx" : undefined}
-          rotuloConfirmar={confirmacao.tipo === "publicar" ? "Publicar" : undefined}
+          titulo={TITULO_CONFIRMACAO[confirmacao.tipo]}
+          rotuloConfirmar={ROTULO_CONFIRMACAO[confirmacao.tipo]}
           onConfirmar={confirmarExclusao}
           onFechar={() => setConfirmacao(null)}
         />

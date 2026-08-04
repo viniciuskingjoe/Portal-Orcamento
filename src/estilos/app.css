@@ -3472,3 +3472,16 @@ dialog::backdrop {
   background: var(--accent-soft);
   color: var(--text);
 }
+
+/* Plano desativado: continua legível — é referência, não lixo — mas recuado
+   para não competir com os que valem. */
+.card-plano.is-inativo {
+  opacity: 0.55;
+}
+
+.card-plano.is-inativo .card-plano__abrir strong::after {
+  content: " · inativo";
+  color: var(--muted);
+  font-weight: 400;
+  font-size: 12px;
+}

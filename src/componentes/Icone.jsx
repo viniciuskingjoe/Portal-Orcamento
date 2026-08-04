@@ -75,6 +75,20 @@ const DESENHOS = {
     </>
   ),
   close: <path d="m6 6 12 12M18 6 6 18" />,
+  sincronizar: (
+    <>
+      <path d="M20 11a8 8 0 0 0-14-4.5L4 9" />
+      <path d="M4 13a8 8 0 0 0 14 4.5l2-2.5" />
+      <path d="M4 5v4h4M20 19v-4h-4" />
+    </>
+  ),
+  archive: (
+    <>
+      <rect x="3" y="4" width="18" height="4" rx="1" />
+      <path d="M5 8v11a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V8" />
+      <path d="M10 12h4" />
+    </>
+  ),
   check: <path d="m5 12 4 4L19 6" />,
   copy: (
     <>

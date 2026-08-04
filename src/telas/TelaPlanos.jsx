@@ -24,14 +24,21 @@ export default function TelaPlanos({
   planos,
   visoes,
   podePublicar = false,
-  publicando = null,
+  mostrarInativos = false,
   onAbrir,
   onNovo,
-  onExcluir,
-  onPublicar,
+  onAlternarSituacao,
+  onAlternarInativos,
 }) {
   const nomeDaVisao = (visaoId) =>
     visoes.find((visao) => visao.id === visaoId)?.nome ?? "sem visão";
+
+  // Inativo fica fora do caminho por padrão: quem abre esta tela quer o cenário
+  // que vale, não o histórico. O interruptor traz de volta quando for preciso.
+  const inativos = planos.filter((plano) => plano.situacao === "inativo").length;
+  const visiveis = mostrarInativos
+    ? planos
+    : planos.filter((plano) => plano.situacao !== "inativo");
 
   return (
     <main className="conteudo conteudo--planos">
@@ -47,14 +54,23 @@ export default function TelaPlanos({
       />
       <div className="planos-meta">
         <span>
-          {planos.length} {planos.length === 1 ? "plano" : "planos"}
+          {visiveis.length} {visiveis.length === 1 ? "plano" : "planos"}
         </span>
         <span>Selecione um plano para acessar seus módulos</span>
+        {inativos ? (
+          <button type="button" className="botao-texto" onClick={onAlternarInativos}>
+            {mostrarInativos
+              ? "Ocultar inativos"
+              : `Mostrar ${inativos} ${inativos === 1 ? "inativo" : "inativos"}`}
+          </button>
+        ) : null}
       </div>
-      {planos.length ? (
+      {visiveis.length ? (
         <div className="grid-planos">
-          {planos.map((plano) => (
-            <article className="card-plano" key={plano.id}>
+          {visiveis.map((plano) => {
+            const inativo = plano.situacao === "inativo";
+            return (
+            <article className={`card-plano ${inativo ? "is-inativo" : ""}`} key={plano.id}>
               <button
                 type="button"
                 className="card-plano__abrir"
@@ -87,37 +103,33 @@ export default function TelaPlanos({
                     {plano.publicadoEm ? (
                       <>
                         <Icone nome="check" tamanho={13} />
-                        Publicado {quandoFoi(plano.publicadoEm)}
+                        Sincronizado {quandoFoi(plano.publicadoEm)}
                         {plano.publicadoLinhas != null ? ` · ${plano.publicadoLinhas} linhas` : ""}
                       </>
                     ) : (
                       <>
                         <Icone nome="info" tamanho={13} />
-                        Nunca publicado no Linx
+                        Nunca sincronizado com o Linx
                       </>
                     )}
                   </span>
-                  <button
-                    type="button"
-                    className="botao-texto"
-                    onClick={() => onPublicar(plano)}
-                    disabled={publicando === plano.id}
-                  >
-                    {publicando === plano.id ? "Publicando…" : "Publicar no Linx"}
-                  </button>
                 </div>
               ) : null}
 
+              {/* Desativar, nao excluir: orcamento antigo e referencia, e um
+                  clique nao pode levar o trabalho de quem montou o cenario. */}
               <button
                 type="button"
                 className="card-plano__excluir"
-                onClick={() => onExcluir(plano)}
-                aria-label={`Excluir ${plano.nome}`}
+                onClick={() => onAlternarSituacao(plano)}
+                aria-label={`${inativo ? "Reativar" : "Desativar"} ${plano.nome}`}
+                title={inativo ? "Reativar este plano" : "Desativar — o planejado continua guardado"}
               >
-                <Icone nome="trash" tamanho={18} />
+                <Icone nome={inativo ? "check" : "archive"} tamanho={18} />
               </button>
             </article>
-          ))}
+            );
+          })}
         </div>
       ) : (
         <EstadoVazio texto="Adicione um plano para começar seu planejamento." />

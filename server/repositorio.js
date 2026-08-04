@@ -27,17 +27,19 @@ const SEM_CENTRO = "";
 // A resposta é guardada porque isto é esquema, não dado: consultar a cada carga
 // custaria uma ida ao banco por uma resposta que não muda enquanto o processo
 // vive. Reiniciar o serviço é o que faz o portal enxergar o 004 recém-rodado.
-let publicacaoDisponivel = null;
+const colunasConhecidas = new Map();
 
-async function temPublicacao() {
-  if (publicacaoDisponivel === null) {
-    const [linha] = await query(
-      "SELECT COL_LENGTH('dbo.KING_PORTAL_ORC_PLANO', 'PUBLICADO_EM') AS tem"
-    );
-    publicacaoDisponivel = linha?.tem != null;
+async function temColuna(tabela, coluna) {
+  const chave = tabela + "." + coluna;
+  if (!colunasConhecidas.has(chave)) {
+    const [linha] = await query("SELECT COL_LENGTH(@t, @c) AS tem", { t: tabela, c: coluna });
+    colunasConhecidas.set(chave, linha?.tem != null);
   }
-  return publicacaoDisponivel;
+  return colunasConhecidas.get(chave);
 }
+
+const temPublicacao = () => temColuna("dbo.KING_PORTAL_ORC_PLANO", "PUBLICADO_EM");
+const temSituacao = () => temColuna("dbo.KING_PORTAL_ORC_PLANO", "SITUACAO");
 
 // --------------------------------------------------------------------------
 // Leitura
@@ -56,10 +58,8 @@ export async function carregarEstado() {
     query("SELECT VISAO_ID, MODULO, CLASSIFICACAO, TIPO FROM dbo.KING_PORTAL_ORC_VISAO_SINAL"),
     query(
       `SELECT ID, NOME, ANO, VISAO_ID${
-        await temPublicacao()
-          ? ", ID_ORCAMENTO, PUBLICADO_EM, PUBLICADO_LINHAS"
-          : ""
-      }
+        (await temPublicacao()) ? ", ID_ORCAMENTO, PUBLICADO_EM, PUBLICADO_LINHAS" : ""
+      }${(await temSituacao()) ? ", SITUACAO" : ""}
          FROM dbo.KING_PORTAL_ORC_PLANO ORDER BY ANO DESC, NOME`
     ),
     query(
@@ -133,6 +133,9 @@ export async function carregarEstado() {
         idOrcamento: linha.ID_ORCAMENTO ?? null,
         publicadoEm: linha.PUBLICADO_EM ?? null,
         publicadoLinhas: linha.PUBLICADO_LINHAS ?? null,
+        // Sem a coluna (banco no 004 ou antes), todo plano e ativo -- que e o
+        // que ele era antes de existir situacao.
+        situacao: linha.SITUACAO ?? "ativo",
         planejado: {},
       },
     ])
@@ -330,6 +333,42 @@ export async function salvarPlano({ id, nome, ano, visaoId }, login) {
   );
 }
 
+// Desativar em vez de excluir: orçamento antigo é referência. Sai da lista mas
+// segue respondendo "quanto a gente tinha previsto?", e o planejado de quem o
+// montou não vira pó por um clique.
+//
+// O orçamento no Linx acompanha, marcado como INATIVO — senão o Power BI
+// continuaria mostrando um cenário que o portal já aposentou.
+export async function definirSituacaoDoPlano(id, situacao, login) {
+  if (!["ativo", "inativo"].includes(situacao)) {
+    const erro = new Error("Situação inválida.");
+    erro.status = 400;
+    throw erro;
+  }
+
+  await transaction(async ({ query: q }) => {
+    await q(
+      `UPDATE dbo.KING_PORTAL_ORC_PLANO
+          SET SITUACAO = @situacao, SITUACAO_EM = SYSUTCDATETIME(), SITUACAO_POR = @por
+        WHERE ID = @id`,
+      { id, situacao, por: login ?? null }
+    );
+
+    const [plano] = await q(
+      "SELECT ID_ORCAMENTO FROM dbo.KING_PORTAL_ORC_PLANO WHERE ID = @id",
+      { id }
+    );
+    if (plano?.ID_ORCAMENTO) {
+      await q("UPDATE dbo.CTB_ORCAMENTO SET INATIVO = @inativo WHERE ID_ORCAMENTO = @orc", {
+        orc: plano.ID_ORCAMENTO,
+        inativo: situacao === "inativo",
+      });
+    }
+  });
+}
+
+// Continua existindo para o caso de alguém precisar apagar de verdade — um plano
+// criado por engano, sem nada dentro. Não é o que a tela oferece.
 export async function excluirPlano(id) {
   await query("DELETE FROM dbo.KING_PORTAL_ORC_PLANO WHERE ID = @id", { id });
 }

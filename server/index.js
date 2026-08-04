@@ -28,6 +28,7 @@ import {
   definirSinal,
   definirUsoDoCentro,
   bancoVazio,
+  definirSituacaoDoPlano,
   excluirPlano,
   excluirVisao,
   importar,
@@ -279,6 +280,16 @@ app.delete(
   exigirAdmin,
   rota(async (req, res) => {
     await excluirPlano(req.params.id);
+    res.json({ ok: true });
+  })
+);
+
+// Desativar em vez de excluir: o planejado fica, o plano sai da lista.
+app.put(
+  "/api/planos/:id/situacao",
+  exigirAdmin,
+  rota(async (req, res) => {
+    await definirSituacaoDoPlano(req.params.id, req.body?.situacao, req.sessao.login);
     res.json({ ok: true });
   })
 );

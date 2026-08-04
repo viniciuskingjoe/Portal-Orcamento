@@ -74,6 +74,9 @@ export default function TelaOrcamento({
   onAlterarFiltro,
   escopo,
   podeLancar = true,
+  podeSincronizar = false,
+  sincronizando = false,
+  onSincronizar,
   linhas,
   carregandoRealizado,
   edicao,
@@ -260,6 +263,28 @@ export default function TelaOrcamento({
 
         {/* A dica fecha a linha dos filtros: é sobre o que falta escolher neles. */}
         <DicaEdicao pronta={podeEditar}>{motivo}</DicaEdicao>
+
+        {/* Digitar já grava no portal — este botão é outra coisa: manda o
+            planejado para o orçamento do Linx, de onde o Power BI lê. Daí o
+            nome dizer "no Linx" e não "salvar", que faria parecer que sem
+            clicar se perde o que foi digitado.
+
+            Grava o PLANO INTEIRO, não só este módulo: a tabela do ERP tem
+            chave filial · centro · classificação · mês e não guarda de que
+            módulo a linha veio, então publicação parcial não é expressável
+            lá. A confirmação diz isso. */}
+        {podeSincronizar ? (
+          <button
+            type="button"
+            className="botao botao--secundario botao--compacto"
+            onClick={onSincronizar}
+            disabled={sincronizando}
+            title="Deixa o orçamento deste plano no Linx igual ao que está aqui"
+          >
+            <Icone nome="sincronizar" tamanho={15} />
+            {sincronizando ? "Sincronizando…" : "Sincronizar com o Linx"}
+          </button>
+        ) : null}
       </div>
 
       {carregandoRealizado ? <Carregando texto="Carregando realizado do ERP…" /> : null}
