@@ -71,8 +71,8 @@ const FILTROS_PADRAO = {
 const TELAS_ERP = new Set(["filiais", "centros"]);
 
 // `undefined` cai no padrao do modal, que fala em exclusao.
-const TITULO_CONFIRMACAO = { publicar: "Sincronizar com o Linx", desativar: "Desativar plano" };
-const ROTULO_CONFIRMACAO = { publicar: "Sincronizar", desativar: "Desativar" };
+const TITULO_CONFIRMACAO = { desativar: "Desativar plano" };
+const ROTULO_CONFIRMACAO = { desativar: "Desativar" };
 
 // Portão: sem sessão não se renderiza o portal. O componente inteiro fica
 // desmontado, então nem os dados do ERP chegam a ser pedidos.
@@ -640,9 +640,6 @@ function PlanejamentoOrcamentario({ sessao, onSair }) {
   // tabela que o Power BI lê, e a partir dali é ele que a diretoria enxerga.
   // --------------------------------------------------------------------------
 
-  const pedirPublicacao = (plano) =>
-    setConfirmacao({ tipo: "publicar", id: plano.id, nome: plano.nome });
-
   // Reativar nao precisa de confirmacao: nao destroi nada e se desfaz com outro
   // clique. Desativar tira o plano da lista, entao pergunta.
   const pedirSituacao = (plano) => {
@@ -662,21 +659,24 @@ function PlanejamentoOrcamentario({ sessao, onSair }) {
     setPublicando(planoId);
     setAvisoPersistencia("");
     try {
-      const { linhas } = await repo.plano.publicar(planoId);
+      const { linhas, idOrcamento } = await repo.plano.publicar(planoId);
       // Relê para a data de publicação vir do servidor, não de um relógio local
       // que pode estar adiantado em relação ao banco.
       const dados = await carregarEstado();
       setPlanos(dados.planos);
+      // Diz o número do orçamento porque é por ele que se confere no SSMS e é
+      // por ele que o Power BI filtra — sem isso a pessoa sabe que "deu certo"
+      // e não sabe onde olhar.
       setAvisoPublicacao(
         linhas
-          ? `Sincronizado com o Linx: ${linhas} ${linhas === 1 ? "linha" : "linhas"}.`
+          ? `Sincronizado: ${linhas} ${linhas === 1 ? "linha" : "linhas"} no orçamento ${idOrcamento} do Linx.`
           : "Nada a sincronizar — este plano ainda não tem valor lançado."
       );
     } catch (erro) {
       // Erro aqui é do ERP e precisa aparecer inteiro: a mensagem do servidor
       // diz se foi o status do orçamento, o exercício que falta no Linx ou
       // outra coisa, e cada uma tem um dono diferente para resolver.
-      setAvisoPersistencia(`Não foi possível publicar: ${erro.message}`);
+      setAvisoPersistencia(`Não foi possível sincronizar: ${erro.message}`);
     } finally {
       setPublicando(null);
     }
@@ -687,13 +687,6 @@ function PlanejamentoOrcamentario({ sessao, onSair }) {
       return (
         "O plano sai da lista, mas nada e apagado: o planejado continua guardado e " +
         "da para reativar depois. No Linx o orcamento dele fica marcado como inativo."
-      );
-    }
-    if (confirmacao?.tipo === "publicar") {
-      return (
-        "O orcamento deste plano no Linx passa a ser igual ao que esta aqui: o que " +
-        "estiver la e substituido. E de la que o Power BI le, entao o numero passa a " +
-        "valer para quem consulta o BI. Orcamento de outro plano nao e tocado."
       );
     }
     if (confirmacao?.tipo === "plano") {
@@ -711,11 +704,6 @@ function PlanejamentoOrcamentario({ sessao, onSair }) {
     if (!confirmacao) return;
     // Publicar nao e exclusao; compartilha o modal porque a pergunta e a mesma
     // -- "tem certeza?" -- e o efeito tambem sai do portal.
-    if (confirmacao.tipo === "publicar") {
-      publicarNoLinx(confirmacao.id);
-      setConfirmacao(null);
-      return;
-    }
     if (confirmacao.tipo === "desativar") {
       alterarSituacao(confirmacao.id, "inativo");
       setConfirmacao(null);
@@ -1039,7 +1027,7 @@ function PlanejamentoOrcamentario({ sessao, onSair }) {
           escopo={escopo}
           podeSincronizar={ehAdmin(sessao)}
           sincronizando={publicando === planoAtivo.id}
-          onSincronizar={() => pedirPublicacao(planoAtivo)}
+          onSincronizar={() => publicarNoLinx(planoAtivo.id)}
           podeLancar={podeLancar(sessao, {
             modulo: moduloDaTela.id,
             filial: filtros.filial,
@@ -1186,6 +1174,9 @@ function PlanejamentoOrcamentario({ sessao, onSair }) {
           descricao={descricaoDaConfirmacao()}
           titulo={TITULO_CONFIRMACAO[confirmacao.tipo]}
           rotuloConfirmar={ROTULO_CONFIRMACAO[confirmacao.tipo]}
+          verbo={confirmacao.tipo === "desativar" ? "desativar" : "excluir"}
+          icone={confirmacao.tipo === "desativar" ? "archive" : "trash"}
+          perigo={confirmacao.tipo !== "desativar"}
           onConfirmar={confirmarExclusao}
           onFechar={() => setConfirmacao(null)}
         />

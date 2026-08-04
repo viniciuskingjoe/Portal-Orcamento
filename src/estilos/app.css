@@ -3485,3 +3485,10 @@ dialog::backdrop {
   font-weight: 400;
   font-size: 12px;
 }
+
+/* Confirmação que não destrói nada — desativar, por exemplo. Sem o vermelho da
+   exclusão, que faria a pessoa hesitar em algo reversível. */
+.confirmacao__icone--neutro {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
