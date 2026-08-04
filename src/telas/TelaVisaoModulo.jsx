@@ -21,7 +21,6 @@ import {
   sinaisDoModulo,
   contasDaFilial,
   contasDoCentro,
-  usaCentroDeCusto,
 } from "../dados/visao.js";
 
 function useIndeterminado(parcial) {
@@ -133,15 +132,11 @@ export default function TelaVisaoModulo({
   carregando,
   erro,
   onRecarregar,
-  onDefinirContasDaFilial,
   onDefinirContasDoCentro,
   onDefinirUsoDoCentro,
-  onAlternarUsaCentro,
   onDefinirSinal,
   onVoltar,
 }) {
-  const usaCentro = usaCentroDeCusto(visao, modulo.id);
-
   const [filialId, setFilialId] = useState(() => filiais[0]?.id ?? null);
   const [centroId, setCentroId] = useState(SEM_CENTRO);
   const [busca, setBusca] = useState("");
@@ -151,22 +146,18 @@ export default function TelaVisaoModulo({
     if (!filiais.some((filial) => filial.id === filialId)) setFilialId(filiais[0]?.id ?? null);
   }, [filiais, filialId]);
 
-  useEffect(() => {
-    if (!usaCentro) setCentroId(SEM_CENTRO);
-  }, [usaCentro]);
-
   // Centro escolhido que a filial atual não usa não pode continuar em edição —
   // acontece ao trocar de filial com um centro selecionado.
   useEffect(() => {
-    if (!usaCentro || centroId === SEM_CENTRO || !filialId) return;
+    if (centroId === SEM_CENTRO || !filialId) return;
     if (!centroEmUso(visao, modulo.id, filialId, centroId)) setCentroId(SEM_CENTRO);
-  }, [usaCentro, centroId, filialId, visao, modulo.id]);
+  }, [centroId, filialId, visao, modulo.id]);
 
   const daFilial = filialId ? contasDaFilial(visao, modulo.id, filialId) : [];
-  const editandoCentro = usaCentro && centroId !== SEM_CENTRO;
-  // Com centro, marcar conta só faz sentido dentro de um centro: a lista da
-  // filial é o consolidado deles, não uma escolha.
-  const podeMarcar = !!filialId && (!usaCentro || editandoCentro);
+  const editandoCentro = centroId !== SEM_CENTRO;
+  // Marcar conta só faz sentido dentro de um centro: a lista da filial é o
+  // consolidado deles, não uma escolha.
+  const podeMarcar = !!filialId && editandoCentro;
 
   const catalogo = useMemo(
     () => filtrarPorGrupo(catalogoCompleto, modulo.grupo),
@@ -203,10 +194,9 @@ export default function TelaVisaoModulo({
       .map((item) => ({ ...item, nivel: 0, temFilhos: false, aberto: true }));
   }, [catalogo, expandidos, termo]);
 
-  const salvar = (proximas) => {
-    if (editandoCentro) onDefinirContasDoCentro(modulo.id, filialId, centroId, [...proximas]);
-    else onDefinirContasDaFilial(modulo.id, filialId, [...proximas]);
-  };
+  // Só há um destino: o centro escolhido. `podeMarcar` já garante que existe um.
+  const salvar = (proximas) =>
+    onDefinirContasDoCentro(modulo.id, filialId, centroId, [...proximas]);
 
   const alternar = (codigo, estado) =>
     salvar(
@@ -248,7 +238,7 @@ export default function TelaVisaoModulo({
     <main className="conteudo">
       <Cabecalho
         titulo={modulo.titulo}
-        subtitulo={`Visão ${visao.nome} · contas por filial${usaCentro ? " e centro de custo" : ""}`}
+        subtitulo={`Visão ${visao.nome} · contas por filial e centro de custo`}
         onVoltar={onVoltar}
       />
 
@@ -280,24 +270,13 @@ export default function TelaVisaoModulo({
         >
           Recolher
         </button>
-        <label className="check-inline">
-          <input
-            type="checkbox"
-            checked={usaCentro}
-            onChange={(e) => onAlternarUsaCentro(modulo.id, e.target.checked)}
-          />
-          <span className="checkbox-visual">
-            <Icone nome="check" tamanho={13} />
-          </span>
-          Usa centro de custo
-        </label>
       </div>
 
       {carregando ? <Carregando texto="Carregando plano de contas…" /> : null}
       {erro ? <AvisoErro mensagem={erro} onTentarDeNovo={onRecarregar} /> : null}
 
       {!carregando && !erro ? (
-        <div className="orcamento-layout" data-paineis={usaCentro ? 2 : 1}>
+        <div className="orcamento-layout" data-paineis={2}>
           {/* Filial e centro viram painéis à esquerda, como na tela do plano: a
               escolha fica sempre visível junto do que ela filtra.
 
@@ -330,9 +309,10 @@ export default function TelaVisaoModulo({
               )}
             </section>
 
-            {usaCentro ? (
-              <section className="painel-selecao">
-                <h3>Centros de custo</h3>
+            {/* Todo módulo é orçado por centro, então o painel é parte do fluxo
+                e não algo que se liga: filial → centros → contas de cada um. */}
+            <section className="painel-selecao">
+              <h3>Centros de custo</h3>
                 <p className="painel-selecao__descricao">
                   {filialId
                     ? "Marque os que esta filial usa; clique no nome para escolher as contas dele."
@@ -397,8 +377,7 @@ export default function TelaVisaoModulo({
                     </div>
                   );
                 })}
-              </section>
-            ) : null}
+            </section>
           </aside>
 
           <section className="orcamento-dados">
@@ -468,7 +447,7 @@ export default function TelaVisaoModulo({
               </p>
             )}
 
-            {usaCentro && centrosComContas.length ? (
+            {centrosComContas.length ? (
               <p className="modulo-aviso">
                 <Icone nome="info" tamanho={16} />
                 Centros em uso nesta filial: {centrosComContas.join(", ")} · {daFilial.length}{" "}

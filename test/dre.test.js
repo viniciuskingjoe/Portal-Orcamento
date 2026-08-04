@@ -6,7 +6,11 @@ import { MODULOS } from "../src/dados/modulos.js";
 import { chavePlanejado, criarPlano } from "../src/dados/plano.js";
 import { indexarContas } from "../src/dados/contas.js";
 import { indexarRealizado } from "../src/dados/realizado.js";
-import { SEM_CENTRO, criarVisao, definirContasDaFilial } from "../src/dados/visao.js";
+import { SEM_CENTRO, criarVisao, definirContasDoCentro } from "../src/dados/visao.js";
+
+// Todo módulo é orçado por centro: a lista da filial é a união deles, então o
+// teste monta pelo centro e lê pela filial, como a tela faz.
+const CENTRO = "002";
 
 const ANO = 2025; // ano fechado: todos os meses têm realizado
 const FILIAIS = [{ id: "000001", nome: "KING&JOE" }];
@@ -25,19 +29,19 @@ const catalogo = indexarContas([
 
 function visaoCompleta() {
   let visao = criarVisao("v1", "DRE", "25");
-  visao = definirContasDaFilial(visao, "receita-vendas", "000001", [RECEITA]);
-  visao = definirContasDaFilial(visao, "deducoes-vendas", "000001", [DEDUCAO]);
-  visao = definirContasDaFilial(visao, "custos-variaveis", "000001", [CUSTO]);
-  visao = definirContasDaFilial(visao, "despesas-operacionais", "000001", [DESPESA_OP]);
+  visao = definirContasDoCentro(visao, "receita-vendas", "000001", CENTRO, [RECEITA]);
+  visao = definirContasDoCentro(visao, "deducoes-vendas", "000001", CENTRO, [DEDUCAO]);
+  visao = definirContasDoCentro(visao, "custos-variaveis", "000001", CENTRO, [CUSTO]);
+  visao = definirContasDoCentro(visao, "despesas-operacionais", "000001", CENTRO, [DESPESA_OP]);
   return visao;
 }
 
 // Receita 1.000 em janeiro; dedução de 10% e custo de 40% sobre ela.
 const planejado = {
-  [chavePlanejado("receita-vendas", "000001", SEM_CENTRO, RECEITA, 1)]: 1000,
-  [chavePlanejado("deducoes-vendas", "000001", SEM_CENTRO, DEDUCAO, 1, RECEITA)]: 10,
-  [chavePlanejado("custos-variaveis", "000001", SEM_CENTRO, CUSTO, 1, RECEITA)]: 40,
-  [chavePlanejado("despesas-operacionais", "000001", SEM_CENTRO, DESPESA_OP, 1)]: 150,
+  [chavePlanejado("receita-vendas", "000001", CENTRO, RECEITA, 1)]: 1000,
+  [chavePlanejado("deducoes-vendas", "000001", CENTRO, DEDUCAO, 1, RECEITA)]: 10,
+  [chavePlanejado("custos-variaveis", "000001", CENTRO, CUSTO, 1, RECEITA)]: 40,
+  [chavePlanejado("despesas-operacionais", "000001", CENTRO, DESPESA_OP, 1)]: 150,
 };
 
 const realizado = indexarRealizado(

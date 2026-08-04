@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import Sidebar from "./componentes/Sidebar.jsx";
 import DrawerNovoPlano from "./componentes/DrawerNovoPlano.jsx";
@@ -32,13 +32,12 @@ import {
 } from "./dados/plano.js";
 import {
   SEM_CENTRO,
+  centrosDaFilial,
   contasEfetivasDoModulo,
   criarVisao,
   definirSinalDaConta,
   sinaisDoModulo,
-  definirContasDaFilial,
   definirContasDoCentro,
-  definirUsaCentroDeCusto,
   definirUsoDoCentro,
   usaCentroDeCusto,
 } from "./dados/visao.js";
@@ -129,6 +128,10 @@ function PlanejamentoOrcamentario({ sessao, onSair }) {
   const [editingCell, setEditingCell] = useState(null);
   const [avisoPersistencia, setAvisoPersistencia] = useState("");
 
+  // Guardas da atualização de fundo — ver o efeito mais abaixo.
+  const gravacoesEmVoo = useRef(0);
+  const editandoAgora = useRef(false);
+
   const erp = useCadastrosDoErp();
 
   const planoAtivo = useMemo(
@@ -217,17 +220,77 @@ function PlanejamentoOrcamentario({ sessao, onSair }) {
     };
   }, []);
 
+  // --------------------------------------------------------------------------
+  // Manter a tela em dia com o que os outros fizeram
+  //
+  // Visão e plano são de todo mundo, mas o estado era lido uma vez só, no login.
+  // Quem deixava a tela aberta não via a configuração que outro administrador
+  // acabou de fazer — e, pior, gravava por cima achando que estava atualizado.
+  //
+  // Recarrega quando a aba volta ao foco, que é o caso comum (a pessoa foi ver
+  // outra coisa e voltou), e a cada minuto enquanto está visível.
+  //
+  // NUNCA durante uma edição ou com gravação em voo: a tela é otimista, e uma
+  // leitura que chegue entre o "aplica local" e o "gravou" traz o valor antigo
+  // de volta e desfaz o que a pessoa acabou de digitar.
+  // --------------------------------------------------------------------------
+  useEffect(() => {
+    editandoAgora.current = Boolean(editingCell);
+  }, [editingCell]);
+
+  useEffect(() => {
+    let vivo = true;
+
+    async function atualizar() {
+      if (!vivo || document.hidden) return;
+      if (editandoAgora.current || gravacoesEmVoo.current > 0) return;
+
+      try {
+        const dados = await carregarEstado();
+        if (!vivo) return;
+        setConfiguracao(dados.configuracao);
+        setVisoes(dados.visoes);
+        setPlanos(dados.planos);
+      } catch {
+        // Silêncio de propósito: isto é atualização de fundo, e uma faixa
+        // vermelha por causa de uma falha de rede que ninguém pediu assusta sem
+        // motivo. O erro de quem está GRAVANDO continua aparecendo.
+      }
+    }
+
+    const aoMudarVisibilidade = () => {
+      if (!document.hidden) atualizar();
+    };
+
+    document.addEventListener("visibilitychange", aoMudarVisibilidade);
+    window.addEventListener("focus", atualizar);
+    const relogio = setInterval(atualizar, 60_000);
+
+    return () => {
+      vivo = false;
+      document.removeEventListener("visibilitychange", aoMudarVisibilidade);
+      window.removeEventListener("focus", atualizar);
+      clearInterval(relogio);
+    };
+  }, []);
+
   // A tela é otimista: aplica a mudança e grava em seguida. Quem digita doze
   // meses seguidos não pode esperar ida e volta a cada tecla — mas se a gravação
   // falhar, o aviso precisa aparecer, porque o que está na tela deixou de valer.
   function gravar(promessa) {
+    // Conta as gravações em voo para a atualização de fundo não ler o banco no
+    // meio de uma e trazer o valor antigo de volta.
+    gravacoesEmVoo.current += 1;
     Promise.resolve(promessa)
       .then(() => setAvisoPersistencia(""))
       .catch((erro) =>
         setAvisoPersistencia(
           `Não foi possível salvar: ${erro.message} Recarregue a página para ver o que está gravado.`
         )
-      );
+      )
+      .finally(() => {
+        gravacoesEmVoo.current -= 1;
+      });
   }
 
   async function importarLegado() {
@@ -487,30 +550,52 @@ function PlanejamentoOrcamentario({ sessao, onSair }) {
   }
 
   // Ponto de partida: preenche os módulos com as faixas que o Scoreplan usa na
-  // visão contábil 25. Aplica nas filiais ativas e o usuário ajusta depois — a
-  // visão continua sendo escolha de quem monta.
+  // visão contábil 25. O usuário ajusta depois — a visão continua sendo escolha
+  // de quem monta.
+  //
+  // Como todo módulo é orçado por centro, o padrão vai para os CENTROS que cada
+  // filial já marcou. Filial sem centro marcado não recebe nada: não há onde pôr
+  // a conta, e inventar um centro seria decidir orçamento no lugar de alguém.
   function aplicarMapeamentoPadrao() {
     if (!visaoAberta || !temMapeamentoPadrao(visaoAberta.visaoContabil)) return;
+
     atualizarVisaoAberta((visao) => {
       let proxima = visao;
+
       MODULOS.forEach((modulo) => {
         const codigos = contasDoMapeamento(contas.catalogo, modulo.id);
         if (!codigos.length) return;
+
+        const lote = [];
         filiaisAtivas.forEach((filial) => {
-          proxima = definirContasDaFilial(proxima, modulo.id, filial.id, codigos);
+          centrosDaFilial(visao, modulo.id, filial.id).forEach((centro) => {
+            proxima = definirContasDoCentro(proxima, modulo.id, filial.id, centro, codigos);
+            lote.push({ filial: filial.id, centro, contas: codigos });
+          });
         });
-        // Um lote por módulo: filial a filial seriam 25 requisições cada.
-        gravar(
-          repo.visao.contasEmLote(
-            visaoAberta.id,
-            modulo.id,
-            filiaisAtivas.map((filial) => ({ filial: filial.id, centro: "", contas: codigos }))
-          )
-        );
+
+        // Um lote por módulo: centro a centro seriam centenas de requisições.
+        if (lote.length) gravar(repo.visao.contasEmLote(visaoAberta.id, modulo.id, lote));
       });
+
       return proxima;
     });
   }
+
+  // Quantos centros o padrão alcançaria — é o que a tela precisa dizer antes de
+  // alguém clicar e achar que não funcionou.
+  const centrosParaOPadrao = useMemo(() => {
+    if (!visaoAberta) return 0;
+    return MODULOS.reduce(
+      (total, modulo) =>
+        total +
+        filiaisAtivas.reduce(
+          (soma, filial) => soma + centrosDaFilial(visaoAberta, modulo.id, filial.id).length,
+          0
+        ),
+      0
+    );
+  }, [visaoAberta, filiaisAtivas]);
 
   const atualizarVisaoAberta = (transformar) =>
     setVisoes((atuais) =>
@@ -778,10 +863,6 @@ function PlanejamentoOrcamentario({ sessao, onSair }) {
           carregando={contas.carregando || erp.carregando}
           erro={contas.erro || erp.erro}
           onRecarregar={contas.recarregar}
-          onDefinirContasDaFilial={(moduloId, filialId, lista) => {
-            atualizarVisaoAberta((visao) => definirContasDaFilial(visao, moduloId, filialId, lista));
-            gravar(repo.visao.contas(visaoAberta.id, moduloId, filialId, "", lista));
-          }}
           onDefinirContasDoCentro={(moduloId, filialId, centroId, lista) => {
             atualizarVisaoAberta((visao) =>
               definirContasDoCentro(visao, moduloId, filialId, centroId, lista)
@@ -793,10 +874,6 @@ function PlanejamentoOrcamentario({ sessao, onSair }) {
               definirUsoDoCentro(visao, moduloId, filialId, centroId, usa)
             );
             gravar(repo.visao.usoDoCentro(visaoAberta.id, moduloId, filialId, centroId, usa));
-          }}
-          onAlternarUsaCentro={(moduloId, usa) => {
-            atualizarVisaoAberta((visao) => definirUsaCentroDeCusto(visao, moduloId, usa));
-            gravar(repo.visao.usaCentro(visaoAberta.id, moduloId, usa));
           }}
           onDefinirSinal={(moduloId, codigo, tipo) => {
             atualizarVisaoAberta((visao) => definirSinalDaConta(visao, moduloId, codigo, tipo));

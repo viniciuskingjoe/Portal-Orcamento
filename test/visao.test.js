@@ -9,9 +9,7 @@ import {
   contasDoCentro,
   contasEfetivasDoModulo,
   criarVisao,
-  definirContasDaFilial,
   definirContasDoCentro,
-  definirUsaCentroDeCusto,
   definirUsoDoCentro,
   centroEmUso,
   filiaisDoModulo,
@@ -24,6 +22,8 @@ import {
 const MODULO = "receita-vendas";
 const DESPESA = "despesas-operacionais";
 const FILIAL = "000025";
+// Todo módulo é orçado por centro: montar a visão passa sempre por um.
+const CENTRO = "002";
 const OUTRA = "000001";
 
 const nova = () => criarVisao("v1", "DRE 2026", "25");
@@ -36,8 +36,8 @@ test("visão nova guarda a visão contábil e não tem módulo configurado", () 
 });
 
 test("contas são por filial, não do módulo inteiro", () => {
-  let visao = definirContasDaFilial(nova(), MODULO, FILIAL, ["3.1.1.01.001"]);
-  visao = definirContasDaFilial(visao, MODULO, OUTRA, ["3.1.1.01.002", "3.1.1.01.003"]);
+  let visao = definirContasDoCentro(nova(), MODULO, FILIAL, CENTRO, ["3.1.1.01.001"]);
+  visao = definirContasDoCentro(visao, MODULO, OUTRA, CENTRO, ["3.1.1.01.002", "3.1.1.01.003"]);
 
   assert.deepEqual(contasDaFilial(visao, MODULO, FILIAL), ["3.1.1.01.001"]);
   assert.deepEqual(contasDaFilial(visao, MODULO, OUTRA), ["3.1.1.01.002", "3.1.1.01.003"]);
@@ -45,14 +45,14 @@ test("contas são por filial, não do módulo inteiro", () => {
 });
 
 test("filial sem conta não conta como configurada", () => {
-  const visao = definirContasDaFilial(nova(), MODULO, FILIAL, []);
+  const visao = definirContasDoCentro(nova(), MODULO, FILIAL, CENTRO, []);
   assert.deepEqual(filiaisDoModulo(visao, MODULO), []);
   assert.equal(moduloConfigurado(visao, MODULO), false);
 });
 
 test("definir contas não muta a visão original", () => {
   const original = nova();
-  const proxima = definirContasDaFilial(original, MODULO, FILIAL, ["3.1.1.01.001"]);
+  const proxima = definirContasDoCentro(original, MODULO, FILIAL, CENTRO, ["3.1.1.01.001"]);
   assert.deepEqual(original.modulos, {});
   assert.notEqual(original, proxima);
 });
@@ -61,17 +61,21 @@ test("definir contas não muta a visão original", () => {
 // Centro de custo
 // ---------------------------------------------------------------------------
 
-test("centro de custo é opcional por módulo", () => {
+// Já foi opcional, com um interruptor por módulo na tela. O resultado era que
+// "de qual centro é esta despesa?" tinha resposta em alguns módulos e não em
+// outros, o que impedia qualquer leitura por centro atravessando o DRE.
+test("todo módulo é orçado por centro de custo", () => {
   const visao = nova();
-  assert.equal(usaCentroDeCusto(visao, MODULO), false);
-  assert.equal(usaCentroDeCusto(definirUsaCentroDeCusto(visao, DESPESA, true), DESPESA), true);
+  MODULOS.forEach((modulo) => {
+    assert.equal(usaCentroDeCusto(visao, modulo.id), true, modulo.id);
+  });
 });
 
 test("com centro, as contas da filial são a união dos centros", () => {
   // A ordem de uso é filial -> centros -> contas de cada centro. A lista da
   // filial deixa de ser escolha e vira o consolidado, que é o que a tela do
   // plano e o DRE leem.
-  let visao = definirUsaCentroDeCusto(nova(), DESPESA, true);
+  let visao = nova();
   visao = definirContasDoCentro(visao, DESPESA, FILIAL, "002", ["4.4.1.01", "4.4.1.02"]);
   visao = definirContasDoCentro(visao, DESPESA, FILIAL, "008", ["4.4.1.02", "4.4.1.09"]);
 
@@ -81,13 +85,13 @@ test("com centro, as contas da filial são a união dos centros", () => {
 
 test("o centro não é mais recortado pela filial", () => {
   // Antes o centro escolhia entre as contas da filial; agora é ele quem define.
-  let visao = definirUsaCentroDeCusto(nova(), DESPESA, true);
+  let visao = nova();
   visao = definirContasDoCentro(visao, DESPESA, FILIAL, "002", ["4.4.1.01"]);
   assert.deepEqual(contasDoCentro(visao, DESPESA, FILIAL, "002"), ["4.4.1.01"]);
 });
 
 test("marcar o centro coloca ele em uso ainda sem conta", () => {
-  let visao = definirUsaCentroDeCusto(nova(), DESPESA, true);
+  let visao = nova();
   visao = definirUsoDoCentro(visao, DESPESA, FILIAL, "002", true);
 
   assert.equal(centroEmUso(visao, DESPESA, FILIAL, "002"), true);
@@ -97,7 +101,7 @@ test("marcar o centro coloca ele em uso ainda sem conta", () => {
 });
 
 test("desmarcar o centro leva as contas dele embora", () => {
-  let visao = definirUsaCentroDeCusto(nova(), DESPESA, true);
+  let visao = nova();
   visao = definirContasDoCentro(visao, DESPESA, FILIAL, "002", ["4.4.1.01"]);
   visao = definirContasDoCentro(visao, DESPESA, FILIAL, "008", ["4.4.1.02"]);
 
@@ -108,18 +112,18 @@ test("desmarcar o centro leva as contas dele embora", () => {
 
 test("tirar conta da filial tira dos centros dela", () => {
   // Sem isso a soma do centro incluiria o que a filial não orça mais.
-  let visao = definirUsaCentroDeCusto(nova(), DESPESA, true);
-  visao = definirContasDaFilial(visao, DESPESA, FILIAL, ["4.4.1.01", "4.4.1.02"]);
+  let visao = nova();
+  visao = definirContasDoCentro(visao, DESPESA, FILIAL, CENTRO, ["4.4.1.01", "4.4.1.02"]);
   visao = definirContasDoCentro(visao, DESPESA, FILIAL, "002", ["4.4.1.01", "4.4.1.02"]);
 
-  visao = definirContasDaFilial(visao, DESPESA, FILIAL, ["4.4.1.02"]);
+  visao = definirContasDoCentro(visao, DESPESA, FILIAL, CENTRO, ["4.4.1.02"]);
   assert.deepEqual(contasDoCentro(visao, DESPESA, FILIAL, "002"), ["4.4.1.02"]);
 });
 
 test("centro esvaziado continua em uso", () => {
   // Vazio é um estado legítimo: o centro foi marcado e as contas ainda não.
   // Quem tira o centro do ar é a caixa de uso, não a falta de conta.
-  let visao = definirUsaCentroDeCusto(nova(), DESPESA, true);
+  let visao = nova();
   visao = definirContasDoCentro(visao, DESPESA, FILIAL, "002", ["4.4.1.01"]);
   visao = definirContasDoCentro(visao, DESPESA, FILIAL, "002", []);
 
@@ -128,7 +132,7 @@ test("centro esvaziado continua em uso", () => {
 });
 
 test("contas efetivas: sem centro é o consolidado, com centro é o do centro", () => {
-  let visao = definirUsaCentroDeCusto(nova(), DESPESA, true);
+  let visao = nova();
   visao = definirContasDoCentro(visao, DESPESA, FILIAL, "002", ["4.4.1.01"]);
   visao = definirContasDoCentro(visao, DESPESA, FILIAL, "008", ["4.4.1.02"]);
 
@@ -142,7 +146,7 @@ test("contas efetivas: sem centro é o consolidado, com centro é o do centro", 
 
 test("módulo que não usa centro ignora o centro pedido", () => {
   // Evita que um filtro de centro esvazie um módulo que não tem essa dimensão.
-  const visao = definirContasDaFilial(nova(), MODULO, FILIAL, ["3.1.1.01.001"]);
+  const visao = definirContasDoCentro(nova(), MODULO, FILIAL, CENTRO, ["3.1.1.01.001"]);
   assert.deepEqual(contasEfetivasDoModulo(visao, MODULO, FILIAL, "002"), ["3.1.1.01.001"]);
 });
 
@@ -151,9 +155,9 @@ test("módulo que não usa centro ignora o centro pedido", () => {
 // ---------------------------------------------------------------------------
 
 test("resumo conta módulos, filiais e contas", () => {
-  let visao = definirContasDaFilial(nova(), MODULO, FILIAL, ["3.1.1.01.001", "3.1.1.01.002"]);
-  visao = definirContasDaFilial(visao, MODULO, OUTRA, ["3.1.1.01.001"]);
-  visao = definirContasDaFilial(visao, DESPESA, FILIAL, ["4.4.1.01"]);
+  let visao = definirContasDoCentro(nova(), MODULO, FILIAL, CENTRO, ["3.1.1.01.001", "3.1.1.01.002"]);
+  visao = definirContasDoCentro(visao, MODULO, OUTRA, CENTRO, ["3.1.1.01.001"]);
+  visao = definirContasDoCentro(visao, DESPESA, FILIAL, CENTRO, ["4.4.1.01"]);
 
   const resumo = resumoDaVisao(visao);
   assert.equal(resumo.modulos, 2);

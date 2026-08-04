@@ -48,12 +48,10 @@ export async function carregarEstado() {
     ])
   );
 
-  // `usaCentro` precisa existir antes das contas: é ele que decide se a lista da
-  // filial é escolha ou consolidado dos centros.
   const moduloDe = (visaoId, moduloId) => {
     const visao = porVisao.get(visaoId);
     if (!visao) return null;
-    visao.modulos[moduloId] ??= { usaCentro: false, sinais: {}, filiais: {} };
+    visao.modulos[moduloId] ??= { sinais: {}, filiais: {} };
     return visao.modulos[moduloId];
   };
   const filialDe = (visaoId, moduloId, filialId) => {
@@ -63,10 +61,9 @@ export async function carregarEstado() {
     return modulo.filiais[filialId];
   };
 
-  modulos.forEach((linha) => {
-    const modulo = moduloDe(linha.VISAO_ID, linha.MODULO);
-    if (modulo) modulo.usaCentro = linha.USA_CENTRO === true;
-  });
+  // A linha em _VISAO_MODULO passou a servir só para o módulo existir na visão:
+  // todo módulo é orçado por centro, e USA_CENTRO ficou sem uso.
+  modulos.forEach((linha) => moduloDe(linha.VISAO_ID, linha.MODULO));
 
   centros.forEach((linha) => {
     const filial = filialDe(linha.VISAO_ID, linha.MODULO, linha.COD_FILIAL);
@@ -80,12 +77,11 @@ export async function carregarEstado() {
     else (filial.centros[linha.CENTRO_CUSTO] ??= []).push(linha.CLASSIFICACAO);
   });
 
-  // Com centro, a lista da filial é a união dos centros — mesma regra de
+  // A lista da filial é SEMPRE a união dos centros — mesma regra de
   // dados/visao.js. Derivar na leitura evita gravar a mesma informação duas
   // vezes e sair do ar quando as duas divergirem.
   porVisao.forEach((visao) => {
     Object.values(visao.modulos).forEach((modulo) => {
-      if (!modulo.usaCentro) return;
       Object.values(modulo.filiais).forEach((filial) => {
         filial.contas = [...new Set(Object.values(filial.centros).flat())].sort();
       });
@@ -187,20 +183,21 @@ export async function excluirVisao(id) {
   await query("DELETE FROM dbo.KING_PORTAL_ORC_VISAO WHERE ID = @id", { id });
 }
 
-export async function definirUsaCentro(visaoId, modulo, usa) {
+// Registra que o módulo existe nesta visão. `USA_CENTRO` fica em 1 porque a
+// coluna ainda existe e é NOT NULL; ela deixou de decidir alguma coisa quando
+// todo módulo passou a ser orçado por centro. Some no dia em que valer a pena
+// um script de DDL só para isso.
+export async function marcarModuloNaVisao(visaoId, modulo) {
   await query(
-    `MERGE dbo.KING_PORTAL_ORC_VISAO_MODULO AS destino
-     USING (SELECT @visao AS VISAO_ID, @modulo AS MODULO) AS origem
-        ON destino.VISAO_ID = origem.VISAO_ID AND destino.MODULO = origem.MODULO
-     WHEN MATCHED THEN UPDATE SET USA_CENTRO = @usa
-     WHEN NOT MATCHED THEN INSERT (VISAO_ID, MODULO, USA_CENTRO)
-       VALUES (@visao, @modulo, @usa);`,
-    { visao: visaoId, modulo, usa: usa === true }
+    `IF NOT EXISTS (SELECT 1 FROM dbo.KING_PORTAL_ORC_VISAO_MODULO
+                     WHERE VISAO_ID = @visao AND MODULO = @modulo)
+       INSERT INTO dbo.KING_PORTAL_ORC_VISAO_MODULO (VISAO_ID, MODULO, USA_CENTRO)
+       VALUES (@visao, @modulo, 1)`,
+    { visao: visaoId, modulo }
   );
 }
 
-// Substitui as contas de uma combinação. `centro` vazio = contas da filial nos
-// módulos sem centro de custo.
+// Substitui as contas de uma combinação filial × centro.
 export async function definirContas(visaoId, modulo, filial, centro, contas) {
   await transaction(async ({ query: q }) => {
     await q(
@@ -223,6 +220,10 @@ export async function definirContas(visaoId, modulo, filial, centro, contas) {
 
 export async function definirUsoDoCentro(visaoId, modulo, filial, centro, usa) {
   if (usa) {
+    // A linha do módulo era criada pelo antigo `definirUsaCentro`, que sumiu com
+    // o interruptor. Sem ela o módulo não aparece como configurado na visão e a
+    // Visão geral mostra o cartão desabilitado com os centros já marcados.
+    await marcarModuloNaVisao(visaoId, modulo);
     await query(
       `IF NOT EXISTS (SELECT 1 FROM dbo.KING_PORTAL_ORC_VISAO_CENTRO
                        WHERE VISAO_ID = @visao AND MODULO = @modulo
@@ -376,19 +377,15 @@ export async function importar(estado, login) {
     await salvarVisao(visao, login);
 
     for (const [moduloId, modulo] of Object.entries(visao.modulos ?? {})) {
-      await definirUsaCentro(visao.id, moduloId, modulo.usaCentro);
+      await marcarModuloNaVisao(visao.id, moduloId);
 
       for (const [conta, tipo] of Object.entries(modulo.sinais ?? {})) {
         await definirSinal(visao.id, moduloId, conta, tipo);
       }
 
       for (const [filialId, daFilial] of Object.entries(modulo.filiais ?? {})) {
-        // Com centro, quem manda são os centros e a lista da filial é derivada:
-        // gravá-la também criaria linhas que a leitura ignora.
-        if (!modulo.usaCentro) {
-          await definirContas(visao.id, moduloId, filialId, SEM_CENTRO, daFilial.contas);
-          continue;
-        }
+        // Quem manda são os centros; a lista da filial é derivada na leitura, e
+        // gravá-la também criaria linhas que ninguém lê.
         for (const [centroId, doCentro] of Object.entries(daFilial.centros ?? {})) {
           await definirUsoDoCentro(visao.id, moduloId, filialId, centroId, true);
           if (doCentro.length) {

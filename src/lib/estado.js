@@ -31,7 +31,6 @@ export const estado = {
   visao: {
     salvar: (visao) => api.salvarVisao(visao),
     excluir: (id) => api.excluirVisao(id),
-    usaCentro: (visaoId, modulo, usaCentro) => api.salvarModulo(visaoId, modulo, { usaCentro }),
     contas: (visaoId, modulo, filial, centro, contas) =>
       api.salvarModulo(visaoId, modulo, { filial, centro: centro ?? "", contas }),
     contasEmLote: (visaoId, modulo, lotes) => api.salvarModulo(visaoId, modulo, { lotes }),

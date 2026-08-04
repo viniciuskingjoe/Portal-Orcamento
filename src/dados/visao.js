@@ -4,21 +4,14 @@ import { MODULOS } from "./modulos.js";
 // VISÃO
 //
 // Global (não pertence a um plano). Aponta para UMA visão contábil do Linx e,
-// para cada módulo, diz quais contas o compõem — por filial, e opcionalmente por
-// centro de custo.
+// para cada módulo, diz quais contas o compõem — por filial e por centro de
+// custo.
 //
 //   {
 //     id, nome,
 //     visaoContabil: "25",
 //     modulos: {
-//       "receita-vendas": {
-//         usaCentro: false,
-//         filiais: {
-//           "000025": { contas: ["3.1.1.01.001"], centros: {} }
-//         }
-//       },
 //       "despesas-operacionais": {
-//         usaCentro: true,
 //         filiais: {
 //           "000001": {
 //             centros: {                                  // quem manda
@@ -32,9 +25,10 @@ import { MODULOS } from "./modulos.js";
 //     }
 //   }
 //
-// Sem centro, `contas` é o que a filial orça. Com centro, quem manda são os
-// centros e `contas` é o consolidado deles — a ordem de uso é filial → centros
-// → contas de cada centro.
+// Quem manda são os centros; `contas` é o consolidado deles, guardado em vez de
+// recalculado para que a tela do plano, o DRE e a base do percentual leiam a
+// filial sem precisar somar centro a centro. A ordem de uso é sempre
+// filial → centros → contas de cada centro.
 // ============================================================================
 
 export const SEM_CENTRO = "";
@@ -44,19 +38,20 @@ export function criarVisao(id, nome, visaoContabil, modulos = {}) {
 }
 
 export function moduloDaVisao(visao, moduloId) {
-  return visao?.modulos?.[moduloId] ?? { usaCentro: false, filiais: {} };
+  return visao?.modulos?.[moduloId] ?? { filiais: {} };
 }
 
-export function usaCentroDeCusto(visao, moduloId) {
-  return moduloDaVisao(visao, moduloId).usaCentro === true;
-}
-
-export function definirUsaCentroDeCusto(visao, moduloId, usa) {
-  const modulo = moduloDaVisao(visao, moduloId);
-  return {
-    ...visao,
-    modulos: { ...visao.modulos, [moduloId]: { ...modulo, usaCentro: usa === true } },
-  };
+// TODO módulo é orçado por centro de custo. Já foi opcional, por módulo, com um
+// interruptor na tela — e o resultado era que a mesma pergunta ("de qual centro
+// é esta despesa?") tinha resposta em alguns módulos e não em outros, o que
+// impedia qualquer leitura por centro atravessando o DRE.
+//
+// A função continua existindo, em vez de as chamadas sumirem, porque é ela que
+// diz POR QUE os caminhos "sem centro" ainda estão no código: o consolidado da
+// filial (`SEM_CENTRO`) segue sendo um estado legítimo de leitura — é o "Total —
+// todos os centros". O que deixou de existir é módulo sem a dimensão.
+export function usaCentroDeCusto() {
+  return true;
 }
 
 // --------------------------------------------------------------------------
@@ -73,13 +68,13 @@ export function contasDaFilial(visao, moduloId, filialId) {
   return Array.isArray(contas) ? contas : [];
 }
 
-// Grava a filial mantendo a regra do consolidado: com centro, `contas` é sempre
-// a união dos centros, venha a alteração de onde vier.
-function gravarFilial(visao, moduloId, filialId, centros, contas) {
+// Grava a filial mantendo a regra do consolidado: `contas` é SEMPRE a união dos
+// centros, venha a alteração de onde vier. Quem chama não escolhe — se
+// escolhesse, uma tela poderia gravar um consolidado que não corresponde aos
+// centros, e o total da filial passaria a mentir.
+function gravarFilial(visao, moduloId, filialId, centros) {
   const modulo = moduloDaVisao(visao, moduloId);
-  const consolidado = usaCentroDeCusto(visao, moduloId)
-    ? [...new Set(Object.values(centros).flat())].sort()
-    : contas;
+  const consolidado = [...new Set(Object.values(centros).flat())].sort();
 
   return {
     ...visao,
@@ -91,20 +86,6 @@ function gravarFilial(visao, moduloId, filialId, centros, contas) {
       },
     },
   };
-}
-
-export function definirContasDaFilial(visao, moduloId, filialId, contas) {
-  const atual = moduloDaVisao(visao, moduloId).filiais?.[filialId] ?? { centros: {} };
-  const permitidas = new Set(contas);
-
-  // Conta que sai da filial sai também dos centros dela. O centro continua em
-  // uso mesmo ficando vazio — quem tira um centro do ar é `definirUsoDoCentro`.
-  const centros = {};
-  Object.entries(atual.centros ?? {}).forEach(([centroId, doCentro]) => {
-    centros[centroId] = (doCentro ?? []).filter((codigo) => permitidas.has(codigo));
-  });
-
-  return gravarFilial(visao, moduloId, filialId, centros, [...contas]);
 }
 
 // --------------------------------------------------------------------------
@@ -143,20 +124,20 @@ export function definirUsoDoCentro(visao, moduloId, filialId, centroId, usa) {
   if (usa) centros[centroId] = centros[centroId] ?? [];
   else delete centros[centroId];
 
-  return gravarFilial(visao, moduloId, filialId, centros, atual.contas ?? []);
+  return gravarFilial(visao, moduloId, filialId, centros);
 }
 
 export function definirContasDoCentro(visao, moduloId, filialId, centroId, contas) {
   const atual = moduloDaVisao(visao, moduloId).filiais?.[filialId] ?? { contas: [], centros: {} };
   const centros = { ...(atual.centros ?? {}), [centroId]: [...contas] };
 
-  return gravarFilial(visao, moduloId, filialId, centros, atual.contas ?? []);
+  return gravarFilial(visao, moduloId, filialId, centros);
 }
 
-// Contas que valem para uma combinação filial × centro. Sem centro (ou módulo
-// que não usa centro), são as da filial.
+// Contas que valem para uma combinação filial × centro. Sem centro escolhido, é
+// o consolidado da filial — o "Total — todos os centros".
 export function contasEfetivasDoModulo(visao, moduloId, filialId, centroId = SEM_CENTRO) {
-  if (!usaCentroDeCusto(visao, moduloId) || centroId === SEM_CENTRO) {
+  if (centroId === SEM_CENTRO) {
     return contasDaFilial(visao, moduloId, filialId);
   }
   return contasDoCentro(visao, moduloId, filialId, centroId);

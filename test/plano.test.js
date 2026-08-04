@@ -14,9 +14,7 @@ import { indexarRealizado } from "../src/dados/realizado.js";
 import {
   SEM_CENTRO,
   criarVisao,
-  definirContasDaFilial,
   definirContasDoCentro,
-  definirUsaCentroDeCusto,
 } from "../src/dados/visao.js";
 import { indexarContas } from "../src/dados/contas.js";
 
@@ -25,6 +23,8 @@ const MODULO = "receita-vendas";
 const DESPESA = "despesas-operacionais";
 const CONTA = "3.1.1.01.001";
 const OUTRA_CONTA = "3.1.1.01.002";
+// Todo módulo é orçado por centro: montar a visão passa sempre por um.
+const CENTRO = "002";
 
 const FILIAIS = [
   { id: "000001", nome: "KING&JOE" },
@@ -238,14 +238,14 @@ test("meses que ainda não chegaram entram como zero na média", () => {
 // ---------------------------------------------------------------------------
 
 test("totalPlanejadoNoAno soma as contas de cada filial pela visão", () => {
-  let visao = definirContasDaFilial(criarVisao("v1", "X", "25"), MODULO, "000001", [CONTA]);
-  visao = definirContasDaFilial(visao, MODULO, "000025", [CONTA, OUTRA_CONTA]);
+  let visao = definirContasDoCentro(criarVisao("v1", "X", "25"), MODULO, "000001", CENTRO, [CONTA]);
+  visao = definirContasDoCentro(visao, MODULO, "000025", CENTRO, [CONTA, OUTRA_CONTA]);
 
   const digitado = {
-    [chavePlanejado(MODULO, "000001", SEM_CENTRO, CONTA, 1)]: 10,
-    [chavePlanejado(MODULO, "000025", SEM_CENTRO, OUTRA_CONTA, 12)]: 90,
+    [chavePlanejado(MODULO, "000001", CENTRO, CONTA, 1)]: 10,
+    [chavePlanejado(MODULO, "000025", CENTRO, OUTRA_CONTA, 12)]: 90,
     // Conta que a visão não deu para esta filial: não entra.
-    [chavePlanejado(MODULO, "000001", SEM_CENTRO, OUTRA_CONTA, 5)]: 5000,
+    [chavePlanejado(MODULO, "000001", CENTRO, OUTRA_CONTA, 5)]: 5000,
   };
 
   const total = totalPlanejadoNoAno({
@@ -271,8 +271,8 @@ test("módulo com centro soma o planejado de cada centro", () => {
   // Em módulo com centro a tela só grava com um centro escolhido — não existe
   // valor sob SEM_CENTRO. Descer por centro é o que faz a linha do DRE fechar
   // com o que está na tela do módulo.
-  let visao = definirUsaCentroDeCusto(criarVisao("v1", "X", "25"), DESPESA, true);
-  visao = definirContasDaFilial(visao, DESPESA, "000001", ["4.4.1.01"]);
+  let visao = criarVisao("v1", "X", "25");
+  visao = definirContasDoCentro(visao, DESPESA, "000001", CENTRO, ["4.4.1.01"]);
   visao = definirContasDoCentro(visao, DESPESA, "000001", "002", ["4.4.1.01"]);
   visao = definirContasDoCentro(visao, DESPESA, "000001", "008", ["4.4.1.01"]);
 
@@ -337,16 +337,16 @@ const OUTRA_DEDUCAO = "3.1.2.01.002";
 // Receita planejada em janeiro: 1.000 em CONTA e 4.000 em OUTRA_CONTA, ambas na
 // filial 000001.
 function visaoComReceita() {
-  let visao = definirContasDaFilial(criarVisao("v1", "X", "25"), MODULO, "000001", [
+  let visao = definirContasDoCentro(criarVisao("v1", "X", "25"), MODULO, "000001", CENTRO, [
     CONTA,
     OUTRA_CONTA,
   ]);
-  return definirContasDaFilial(visao, PERCENTUAL, "000001", [CONTA_DEDUCAO, OUTRA_DEDUCAO]);
+  return definirContasDoCentro(visao, PERCENTUAL, "000001", CENTRO, [CONTA_DEDUCAO, OUTRA_DEDUCAO]);
 }
 
 const RECEITA = {
-  [chavePlanejado(MODULO, "000001", SEM_CENTRO, CONTA, 1)]: 1000,
-  [chavePlanejado(MODULO, "000001", SEM_CENTRO, OUTRA_CONTA, 1)]: 4000,
+  [chavePlanejado(MODULO, "000001", CENTRO, CONTA, 1)]: 1000,
+  [chavePlanejado(MODULO, "000001", CENTRO, OUTRA_CONTA, 1)]: 4000,
 };
 
 const linhasPercentuais = (planejado, extra) =>
@@ -453,7 +453,7 @@ test("o total do ano de um módulo percentual sai em reais", () => {
   const total = totalPlanejadoNoAno({
     plano: plano({
       ...RECEITA,
-      [chavePlanejado(PERCENTUAL, "000001", SEM_CENTRO, CONTA_DEDUCAO, 1, CONTA)]: 10,
+      [chavePlanejado(PERCENTUAL, "000001", CENTRO, CONTA_DEDUCAO, 1, CONTA)]: 10,
     }),
     visao: visaoComReceita(),
     moduloId: PERCENTUAL,
