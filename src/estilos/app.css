@@ -501,7 +501,9 @@ button {
   align-items: center;
   gap: 14px;
   width: 100%;
-  padding: 18px 58px 18px 16px;
+  /* Sem a reserva de 58px à direita: os botões saíram do canto e viraram uma
+     faixa embaixo, então a seta volta a ocupar a borda. */
+  padding: 18px 16px;
   border: 0;
   border-radius: inherit;
   background: transparent;
@@ -537,29 +539,6 @@ button {
 
 .card-plano__seta {
   color: var(--text-faint);
-}
-
-.card-plano__excluir {
-  position: absolute;
-  top: 50%;
-  right: 14px;
-  transform: translateY(-50%);
-  width: 34px;
-  height: 34px;
-  display: grid;
-  place-items: center;
-  border: 1px solid transparent;
-  border-radius: var(--radius-sm);
-  background: transparent;
-  color: var(--text-faint);
-  cursor: pointer;
-  transition: 0.16s ease;
-}
-
-.card-plano__excluir:hover {
-  background: var(--danger-soft);
-  border-color: var(--danger);
-  color: var(--danger);
 }
 
 /* ==========================================================================
@@ -3493,23 +3472,43 @@ dialog::backdrop {
   color: var(--accent);
 }
 
-/* Copiar fica ao lado de desativar, no canto do cartão. Discreto: a ação
-   principal do cartão é abrir o plano. */
-.card-plano__copiar {
-  position: absolute;
-  top: 14px;
-  right: 46px;
-  display: inline-flex;
+/* Ações do cartão: faixa embaixo, com rótulo, separada do que abre o plano.
+   Ícone sozinho no canto obrigava a mirar e não dizia o que fazia — e ficava a
+   um pixel da seta de abrir. */
+.card-plano__acoes {
+  display: flex;
+  gap: 4px;
   padding: 6px;
-  border: none;
+  border-top: 1px solid var(--border);
+}
+
+.card-plano__acao {
+  flex: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  /* 34px de altura em toda a metade do cartão: alvo grande o bastante para não
+     se errar, o oposto do ícone de 17px de antes. */
+  min-height: 34px;
+  padding: 0 10px;
+  border: 0;
   border-radius: var(--radius-sm);
   background: transparent;
   color: var(--muted);
+  font-size: 13px;
+  font-weight: 600;
   cursor: pointer;
+  transition: 0.15s ease;
 }
 
-.card-plano__copiar:hover,
-.card-plano__copiar:focus-visible {
+.card-plano__acao:hover,
+.card-plano__acao:focus-visible {
   background: var(--surface-soft);
-  color: var(--accent);
+  color: var(--text);
+}
+
+/* O hover do cartão não pode sugerir que a faixa toda abre o plano. */
+.card-plano:hover .card-plano__acoes {
+  border-top-color: var(--border-strong, var(--border));
 }

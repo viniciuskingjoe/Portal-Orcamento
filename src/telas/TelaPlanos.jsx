@@ -108,32 +108,39 @@ export default function TelaPlanos({
                 </div>
               ) : null}
 
-              {/* Copiar: cenário ajustado parte do que já existe em vez de
-                  redigitar doze meses. Não aparece em plano inativo — copiar o
-                  que foi aposentado é quase sempre engano. */}
-              {!inativo ? (
+              {/* Faixa de ações, com rótulo e separada da área de clique.
+                  Antes eram dois ícones sem nome no canto, colados na seta de
+                  abrir: alvo pequeno, três destinos disputando o mesmo pedaço
+                  do cartão e nenhum dizendo o que fazia. */}
+              <div className="card-plano__acoes">
+                {/* Copiar só em plano ativo: duplicar o que foi aposentado é
+                    quase sempre engano. */}
+                {!inativo ? (
+                  <button
+                    type="button"
+                    className="card-plano__acao"
+                    onClick={() => onCopiar(plano)}
+                    title="Criar um plano novo a partir deste, com os valores já lançados"
+                  >
+                    <Icone nome="copy" tamanho={15} />
+                    Duplicar
+                  </button>
+                ) : null}
+
                 <button
                   type="button"
-                  className="card-plano__copiar"
-                  onClick={() => onCopiar(plano)}
-                  aria-label={`Copiar ${plano.nome}`}
-                  title="Criar um plano novo a partir deste, com os valores já lançados"
+                  className="card-plano__acao"
+                  onClick={() => onAlternarSituacao(plano)}
+                  title={
+                    inativo
+                      ? "Voltar este plano para a lista"
+                      : "Tirar da lista — o planejado continua guardado"
+                  }
                 >
-                  <Icone nome="copy" tamanho={17} />
+                  <Icone nome={inativo ? "check" : "archive"} tamanho={15} />
+                  {inativo ? "Reativar" : "Desativar"}
                 </button>
-              ) : null}
-
-              {/* Desativar, nao excluir: orcamento antigo e referencia, e um
-                  clique nao pode levar o trabalho de quem montou o cenario. */}
-              <button
-                type="button"
-                className="card-plano__excluir"
-                onClick={() => onAlternarSituacao(plano)}
-                aria-label={`${inativo ? "Reativar" : "Desativar"} ${plano.nome}`}
-                title={inativo ? "Reativar este plano" : "Desativar — o planejado continua guardado"}
-              >
-                <Icone nome={inativo ? "check" : "archive"} tamanho={18} />
-              </button>
+              </div>
             </article>
             );
           })}
