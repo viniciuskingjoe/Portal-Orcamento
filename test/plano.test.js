@@ -4,6 +4,7 @@ import { test } from "node:test";
 import {
   chavePlanejado,
   criarLinhasOrcamento,
+  linhasParaOrcamento,
   valorParaGravar,
   criarPlano,
   purgarFilialDosPlanos,
@@ -627,4 +628,92 @@ test("a média divide as duas colunas por 12, então a taxa é a mesma do total"
   const lista = linhas({ plano: plano(digitado), filiais: [FILIAIS[0]] });
 
   assert.ok(Math.abs(mediaDe(lista).vsOrcado - totalDe(lista).vsOrcado) < 1e-9);
+});
+
+// ---------------------------------------------------------------------------
+// Conversão para o orçamento do Linx
+//
+// O ERP guarda filial × centro × classificação × mês com valor em reais. O
+// portal guarda taxa nos módulos percentuais, e a chave dele tem um sexto
+// segmento — a receita base — que não existe do lado de lá.
+// ---------------------------------------------------------------------------
+
+test("módulo em reais vai direto, uma linha por combinação", () => {
+  const visao = definirContasDoCentro(criarVisao("v1", "X", "25"), MODULO, "000001", CENTRO, [CONTA]);
+  const p = plano({ [chavePlanejado(MODULO, "000001", CENTRO, CONTA, 3)]: 1234.56 });
+
+  assert.deepEqual(linhasParaOrcamento({ plano: p, visao }), [
+    { filial: "000001", centro: CENTRO, conta: CONTA, mes: 3, valor: 1234.56 },
+  ]);
+});
+
+test("percentual vira reais sobre a receita daquele mês", () => {
+  const p = plano({
+    ...RECEITA, // 1.000 em CONTA e 4.000 em OUTRA_CONTA, mês 1, filial 000001
+    [chavePlanejado(PERCENTUAL, "000001", CENTRO, CONTA_DEDUCAO, 1, CONTA)]: 10,
+  });
+  const linhas = linhasParaOrcamento({ plano: p, visao: visaoComReceita() });
+  const deducao = linhas.find((l) => l.conta === CONTA_DEDUCAO);
+
+  // 10% de 1.000 — a receita da conta contra a qual foi lançado, não das duas.
+  assert.equal(deducao.valor, 100);
+});
+
+test("a dimensão receita colapsa somando", () => {
+  const p = plano({
+    ...RECEITA,
+    [chavePlanejado(PERCENTUAL, "000001", CENTRO, CONTA_DEDUCAO, 1, CONTA)]: 10, // 10% de 1000
+    [chavePlanejado(PERCENTUAL, "000001", CENTRO, CONTA_DEDUCAO, 1, OUTRA_CONTA)]: 5, // 5% de 4000
+  });
+  const linhas = linhasParaOrcamento({ plano: p, visao: visaoComReceita() });
+  const deducao = linhas.filter((l) => l.conta === CONTA_DEDUCAO);
+
+  assert.equal(deducao.length, 1, "duas receitas, uma linha só no ERP");
+  assert.equal(deducao[0].valor, 300, "100 + 200");
+});
+
+// Publicar o percentual cru mandaria "1,7" para o Power BI no lugar do valor.
+test("percentual sem receita planejada não vira linha", () => {
+  const visao = definirContasDoCentro(criarVisao("v1", "X", "25"), PERCENTUAL, "000001", CENTRO, [
+    CONTA_DEDUCAO,
+  ]);
+  const p = plano({ [chavePlanejado(PERCENTUAL, "000001", CENTRO, CONTA_DEDUCAO, 1, CONTA)]: 10 });
+
+  assert.deepEqual(linhasParaOrcamento({ plano: p, visao }), []);
+});
+
+test("conta que saiu da visão não é publicada", () => {
+  const visao = definirContasDoCentro(criarVisao("v1", "X", "25"), MODULO, "000001", CENTRO, [CONTA]);
+  const p = plano({
+    [chavePlanejado(MODULO, "000001", CENTRO, CONTA, 1)]: 500,
+    // Digitada antes, depois tirada da visão: fica no histórico do plano, mas
+    // publicar faria o Power BI divergir do que a tela mostra.
+    [chavePlanejado(MODULO, "000001", CENTRO, OUTRA_CONTA, 1)]: 999,
+  });
+
+  const linhas = linhasParaOrcamento({ plano: p, visao });
+  assert.equal(linhas.length, 1);
+  assert.equal(linhas[0].conta, CONTA);
+});
+
+test("zero não vira linha", () => {
+  const visao = definirContasDoCentro(criarVisao("v1", "X", "25"), MODULO, "000001", CENTRO, [CONTA]);
+  const p = plano({ [chavePlanejado(MODULO, "000001", CENTRO, CONTA, 1)]: 0 });
+  assert.deepEqual(linhasParaOrcamento({ plano: p, visao }), []);
+});
+
+// numeric(14,2) do ERP: mandar mais casas seria truncado lá sem ninguém ver.
+test("valor é arredondado em duas casas, como a coluna do ERP", () => {
+  const p = plano({
+    ...RECEITA,
+    [chavePlanejado(PERCENTUAL, "000001", CENTRO, CONTA_DEDUCAO, 1, CONTA)]: 33.333333,
+  });
+  const linhas = linhasParaOrcamento({ plano: p, visao: visaoComReceita() });
+  const deducao = linhas.find((l) => l.conta === CONTA_DEDUCAO);
+
+  assert.equal(deducao.valor, 333.33);
+});
+
+test("plano ou visão ausente devolve lista vazia", () => {
+  assert.deepEqual(linhasParaOrcamento({ plano: null, visao: null }), []);
 });

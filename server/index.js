@@ -46,6 +46,7 @@ import {
   removerAcesso,
   revogarAcesso,
 } from "./usuarios.js";
+import { publicar } from "./orcamentoLinx.js";
 import { buscarUsuarios } from "./ldap.js";
 import { podeEditar } from "../src/dados/permissoes.js";
 
@@ -279,6 +280,22 @@ app.delete(
   rota(async (req, res) => {
     await excluirPlano(req.params.id);
     res.json({ ok: true });
+  })
+);
+
+// Publica o planejado no orçamento do Linx, de onde o Power BI lê.
+//
+// Só admin: é a única rota do portal que escreve em tabela do ERP, e o efeito
+// sai do portal — passa a valer para quem consulta o BI.
+app.post(
+  "/api/planos/:id/publicar",
+  exigirAdmin,
+  rota(async (req, res) => {
+    // Lê o estado do banco, não do corpo da requisição: publicar o que o
+    // navegador mandou deixaria o ERP refletir a tela de alguém em vez do que
+    // está gravado.
+    const estado = await carregarEstado();
+    res.json(await publicar(req.params.id, estado, req.sessao.login));
   })
 );
 

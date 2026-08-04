@@ -442,6 +442,74 @@ export function totalPlanejadoNoAno(argumentos) {
   return totaisDoModuloNoAno(argumentos).planejado;
 }
 
+// --------------------------------------------------------------------------
+// O plano em REAIS, pronto para o orçamento do Linx
+//
+// A tabela do ERP (CTB_CONTA_ORCAMENTO) guarda uma linha por
+// filial × centro × classificação × mês, com o valor em reais. O portal guarda
+// outra coisa: nos módulos percentuais o que está gravado é a TAXA, e a chave
+// tem um sexto segmento — a conta de receita sobre a qual ela incide — que não
+// existe do lado de lá.
+//
+// Então a conversão faz duas coisas:
+//
+//   1. Percentual vira reais, mês a mês, sobre a receita planejada daquela
+//      conta base. É a mesma regra da tela; publicar o percentual cru mandaria
+//      "1,7" para o Power BI no lugar de um valor.
+//   2. A dimensão receita colapsa somando. Duas deduções lançadas contra
+//      receitas diferentes viram uma linha só no ERP, que é o que ele comporta.
+//
+// Chave sem correspondente na visão é ignorada: conta que saiu da visão continua
+// gravada no plano (é o histórico do que se digitou), mas publicar um valor que
+// a tela não mostra mais faria o Power BI divergir do portal.
+// --------------------------------------------------------------------------
+
+export function linhasParaOrcamento({ plano, visao }) {
+  if (!plano || !visao) return [];
+
+  const somado = new Map();
+
+  for (const [chave, valor] of Object.entries(plano.planejado ?? {})) {
+    if (!valor) continue;
+
+    const [moduloId, filialId, centroId, conta, mesTexto, receita] = chave.split("|");
+    const mes = Number(mesTexto);
+    if (!Number.isInteger(mes) || mes < 1 || mes > 12) continue;
+
+    // A conta precisa continuar valendo para esta combinação na visão.
+    if (!contasEfetivasDoModulo(visao, moduloId, filialId, centroId).includes(conta)) continue;
+
+    let reais = valor;
+    if (ehPercentual(moduloId)) {
+      // Sem a receita na chave não há base: é lançamento de antes da regra que
+      // passou a exigir a receita, e converter sobre a receita inteira daria um
+      // valor diferente do que a tela mostra.
+      if (!receita) continue;
+      reais = (valor / 100) * baseDaReceita(plano, visao, filialId, receita, mes);
+    }
+
+    if (!reais) continue;
+
+    const destino = `${filialId}|${centroId}|${conta}|${mes}`;
+    somado.set(destino, (somado.get(destino) ?? 0) + reais);
+  }
+
+  return [...somado.entries()]
+    .map(([destino, valor]) => {
+      const [filial, centro, conta, mes] = destino.split("|");
+      // Duas casas: é o que a coluna VALOR do ERP comporta, numeric(14,2).
+      return { filial, centro, conta, mes: Number(mes), valor: Math.round(valor * 100) / 100 };
+    })
+    .filter((linha) => linha.valor !== 0)
+    .sort(
+      (a, b) =>
+        a.filial.localeCompare(b.filial) ||
+        a.centro.localeCompare(b.centro) ||
+        a.conta.localeCompare(b.conta) ||
+        a.mes - b.mes
+    );
+}
+
 // Filial vem do ERP; se sair de lá, as edições ligadas a ela ficariam órfãs em
 // todos os planos.
 export function purgarFilialDosPlanos(planos, filialId) {
