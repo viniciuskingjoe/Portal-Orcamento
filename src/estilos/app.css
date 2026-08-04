@@ -1778,6 +1778,15 @@ dialog::backdrop {
   font-weight: 700;
 }
 
+/* Contagem e "Limpar" no mesmo canto: sem o gap os dois encostam e viram
+   "0 contas marcadasLimpar". */
+.contas-seletor__resumo {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  white-space: nowrap;
+}
+
 .contas-seletor__topo small {
   color: var(--accent);
   font-size: 12px;

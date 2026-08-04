@@ -208,9 +208,14 @@ function PlanejamentoOrcamentario({ sessao, onSair }) {
     [grupos, grupoAbertoId]
   );
 
+  // O grupo não tem visão contábil própria: ele é lido DENTRO de um plano, e
+  // quem manda ali é a visão contábil da visão daquele plano. Aqui a padrão só
+  // serve para desenhar a árvore de onde se escolhem as contas do grupo.
+  const visaoContabilPadrao = visoes[0]?.visaoContabil ?? erp.visoesContabeis[0]?.id ?? null;
+
   const visaoContabil =
     tela === "grupo"
-      ? (grupoAberto?.visaoContabil ?? null)
+      ? visaoContabilPadrao
       : ((tela === "visao" || tela === "visao-modulo" ? visaoAberta : visaoDoPlano)?.visaoContabil ??
         null);
 
@@ -568,10 +573,7 @@ function PlanejamentoOrcamentario({ sessao, onSair }) {
   // --------------------------------------------------------------------------
 
   function novoGrupo() {
-    // Nasce na visão contábil que o portal já usa: quase sempre é a certa, e
-    // trocar é um campo na tela seguinte.
-    const padrao = visoes[0]?.visaoContabil ?? erp.visoesContabeis[0]?.id ?? "25";
-    const grupo = { id: gerarId("grupo"), nome: "", visaoContabil: padrao, centros: [], contas: [] };
+    const grupo = { id: gerarId("grupo"), nome: "", centros: [], contas: [] };
     setGrupos((atuais) => [...atuais, grupo]);
     setGrupoAbertoId(grupo.id);
     navegar("grupo");
@@ -582,13 +584,6 @@ function PlanejamentoOrcamentario({ sessao, onSair }) {
     setGrupos(await repo.grupos());
     navegar("grupos");
   }
-
-  // Só na memória: a visão contábil do grupo vira gravação quando ele for
-  // salvo, junto do resto.
-  const trocarVisaoContabilDoGrupo = (visaoContabil) =>
-    setGrupos((atuais) =>
-      atuais.map((grupo) => (grupo.id === grupoAbertoId ? { ...grupo, visaoContabil } : grupo))
-    );
 
   // --------------------------------------------------------------------------
   // Visões
@@ -1077,11 +1072,9 @@ function PlanejamentoOrcamentario({ sessao, onSair }) {
           grupo={grupoAberto}
           centros={centrosDoErpVisiveis}
           catalogo={contas.catalogo}
-          visoesContabeis={erp.visoesContabeis}
           carregando={contas.carregando || erp.carregando}
           erro={contas.erro || erp.erro}
           onRecarregar={contas.recarregar}
-          onTrocarVisaoContabil={trocarVisaoContabilDoGrupo}
           onSalvar={salvarGrupo}
           onVoltar={() => navegar("grupos")}
         />

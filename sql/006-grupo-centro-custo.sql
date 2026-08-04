@@ -22,15 +22,25 @@ BEGIN
   CREATE TABLE dbo.KING_PORTAL_ORC_GRUPO (
     ID              VARCHAR(40)   NOT NULL,
     NOME            VARCHAR(80)   NOT NULL,
-    /* A classificação só significa algo DENTRO de uma visão contábil — o Linx
-       tem 19. Sem guardar qual, as contas do grupo ficam ambíguas no dia em que
-       alguém montar um plano sobre outra visão. */
-    VISAO_CONTABIL  VARCHAR(10)   NOT NULL,
     CRIADO_EM       DATETIME2(3)  NOT NULL CONSTRAINT DF_ORC_GRUPO_CRIADO DEFAULT (SYSUTCDATETIME()),
     CRIADO_POR      VARCHAR(50)   NULL,
 
     CONSTRAINT PK_KING_PORTAL_ORC_GRUPO PRIMARY KEY CLUSTERED (ID)
   );
+END
+GO
+
+/* O grupo NÃO guarda visão contábil.
+   Uma versão anterior deste script criava a coluna VISAO_CONTABIL, com o
+   argumento de que uma classificação só significa algo dentro de uma visão
+   contábil. É verdade, mas a visão certa não é uma escolha do grupo: o DRE é
+   lido DENTRO de um plano, e ali quem manda é a visão contábil da visão daquele
+   plano. Guardar outra no grupo só criaria a chance de as duas discordarem.
+   Removida aqui para quem já rodou a versão antiga. */
+IF COL_LENGTH('dbo.KING_PORTAL_ORC_GRUPO', 'VISAO_CONTABIL') IS NOT NULL
+BEGIN
+  ALTER TABLE dbo.KING_PORTAL_ORC_GRUPO DROP COLUMN VISAO_CONTABIL;
+  PRINT 'Coluna VISAO_CONTABIL removida do grupo.';
 END
 GO
 
@@ -49,7 +59,8 @@ BEGIN
 END
 GO
 
-/* Contas do grupo, na visão contábil dele. */
+/* Contas do grupo. A classificação é lida na visão contábil do plano em que o
+   grupo for usado — ver a nota acima. */
 IF OBJECT_ID('dbo.KING_PORTAL_ORC_GRUPO_CONTA', 'U') IS NULL
 BEGIN
   CREATE TABLE dbo.KING_PORTAL_ORC_GRUPO_CONTA (

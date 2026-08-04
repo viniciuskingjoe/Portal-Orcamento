@@ -345,7 +345,7 @@ export async function salvarPlano({ id, nome, ano, visaoId }, login) {
 export async function listarGrupos() {
   const [grupos, centros, contas] = await Promise.all([
     query(
-      "SELECT ID, NOME, VISAO_CONTABIL FROM dbo.KING_PORTAL_ORC_GRUPO ORDER BY NOME"
+      "SELECT ID, NOME FROM dbo.KING_PORTAL_ORC_GRUPO ORDER BY NOME"
     ),
     query("SELECT GRUPO_ID, CENTRO_CUSTO FROM dbo.KING_PORTAL_ORC_GRUPO_CENTRO"),
     query(
@@ -356,7 +356,6 @@ export async function listarGrupos() {
   return grupos.map((grupo) => ({
     id: grupo.ID,
     nome: grupo.NOME,
-    visaoContabil: grupo.VISAO_CONTABIL,
     centros: centros.filter((c) => c.GRUPO_ID === grupo.ID).map((c) => c.CENTRO_CUSTO),
     contas: contas.filter((c) => c.GRUPO_ID === grupo.ID).map((c) => c.CLASSIFICACAO),
   }));
@@ -364,7 +363,7 @@ export async function listarGrupos() {
 
 // Grava o grupo inteiro de uma vez. São dezenas de itens escolhidos numa tela
 // só, e gravar item a item deixaria o grupo meio salvo se a rede caísse no meio.
-export async function salvarGrupo({ id, nome, visaoContabil, centros, contas }, login) {
+export async function salvarGrupo({ id, nome, centros, contas }, login) {
   if (!id || !String(nome ?? "").trim()) {
     const erro = new Error("Informe um nome para o grupo.");
     erro.status = 400;
@@ -375,10 +374,10 @@ export async function salvarGrupo({ id, nome, visaoContabil, centros, contas }, 
     await q(
       `MERGE dbo.KING_PORTAL_ORC_GRUPO AS destino
        USING (SELECT @id AS ID) AS origem ON destino.ID = origem.ID
-       WHEN MATCHED THEN UPDATE SET NOME = @nome, VISAO_CONTABIL = @visao
-       WHEN NOT MATCHED THEN INSERT (ID, NOME, VISAO_CONTABIL, CRIADO_POR)
-         VALUES (@id, @nome, @visao, @por);`,
-      { id, nome: String(nome).trim(), visao: String(visaoContabil ?? "").trim(), por: login ?? null }
+       WHEN MATCHED THEN UPDATE SET NOME = @nome
+       WHEN NOT MATCHED THEN INSERT (ID, NOME, CRIADO_POR)
+         VALUES (@id, @nome, @por);`,
+      { id, nome: String(nome).trim(), por: login ?? null }
     );
 
     // Apagar e reinserir em vez de comparar: a lista vem inteira da tela, e

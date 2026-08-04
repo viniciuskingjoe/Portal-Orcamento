@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from "react";
 import Botao from "../componentes/Botao.jsx";
 import Cabecalho from "../componentes/Cabecalho.jsx";
 import Icone from "../componentes/Icone.jsx";
+import LinhaConta from "../componentes/LinhaConta.jsx";
 import Seletor from "../componentes/Seletor.jsx";
 import { AvisoErro, Carregando } from "../componentes/Estados.jsx";
 import {
@@ -22,64 +23,13 @@ import {
 // significa nada, e salvar no fim deixa desistir sem deixar rastro.
 // ============================================================================
 
-function Linha({ item, estado, onAlternar, onAlternarNo }) {
-  const classes = [
-    "arvore-conta",
-    item.sintetica ? "is-grupo" : "is-folha",
-    item.nivel === 0 ? "is-raiz" : "",
-    estado === "total" ? "is-marcada" : "",
-    estado === "parcial" ? "is-parcial" : "",
-  ]
-    .filter(Boolean)
-    .join(" ");
-
-  return (
-    <div className={classes} style={{ "--recuo": `${item.nivel * 20}px` }}>
-      {item.temFilhos ? (
-        <button
-          type="button"
-          className="arvore-toggle"
-          onClick={() => onAlternarNo(item.codigo)}
-          aria-expanded={item.aberto}
-          aria-label={`${item.aberto ? "Recolher" : "Expandir"} ${item.codigo}`}
-        >
-          <span className={`arvore-chevron ${item.aberto ? "is-aberto" : ""}`}>
-            <Icone nome="chevron" tamanho={13} />
-          </span>
-        </button>
-      ) : (
-        <span className="arvore-toggle arvore-toggle--vazio" aria-hidden="true" />
-      )}
-
-      <label className="arvore-marca">
-        <input
-          type="checkbox"
-          checked={estado === "total"}
-          ref={(elemento) => {
-            if (elemento) elemento.indeterminate = estado === "parcial";
-          }}
-          onChange={() => onAlternar(item.codigo, estado)}
-        />
-        <span className="checkbox-visual">
-          <Icone nome="check" tamanho={13} />
-        </span>
-      </label>
-
-      <code>{item.codigo}</code>
-      <span className="arvore-descricao">{item.descricao}</span>
-    </div>
-  );
-}
-
 export default function TelaGrupo({
   grupo,
   centros,
   catalogo,
-  visoesContabeis,
   carregando,
   erro,
   onRecarregar,
-  onTrocarVisaoContabil,
   onSalvar,
   onVoltar,
 }) {
@@ -147,7 +97,6 @@ export default function TelaGrupo({
       await onSalvar({
         id: grupo.id,
         nome: nome.trim(),
-        visaoContabil: grupo.visaoContabil,
         centros: escolhidos,
         contas: [...marcadas],
       });
@@ -198,24 +147,6 @@ export default function TelaGrupo({
             buscaVazia="Nenhum centro com esse nome."
           />
         </label>
-
-        {/* A classificação só significa algo dentro de uma visão contábil — o
-            Linx tem várias. Sem fixar qual, as contas do grupo ficariam
-            ambíguas no dia em que alguém montar um plano sobre outra. */}
-        <label className="filtro-ano">
-          <span>Visão contábil</span>
-          <select
-            className="campo-fixo"
-            value={grupo.visaoContabil}
-            onChange={(evento) => onTrocarVisaoContabil(evento.target.value)}
-          >
-            {visoesContabeis.map((visao) => (
-              <option value={visao.id} key={visao.id}>
-                {visao.id} — {visao.nome}
-              </option>
-            ))}
-          </select>
-        </label>
       </div>
 
       {erroForm ? (
@@ -256,7 +187,7 @@ export default function TelaGrupo({
           <div className="contas-seletor__lista contas-seletor__lista--alta">
             {linhas.length ? (
               linhas.map((item) => (
-                <Linha
+                <LinhaConta
                   key={item.codigo}
                   item={item}
                   estado={estadoDaSelecao(resumo, item.codigo)}
