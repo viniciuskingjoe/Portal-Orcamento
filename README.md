@@ -105,6 +105,25 @@ Gravar exige receita **e** conta escolhidas: 2% de devolução sobre coleção n
 2% sobre e-commerce, e um percentual único sobre a receita inteira não saberia
 diferenciar.
 
+As colunas de comparação respondem a perguntas diferentes, e por isso são duas:
+
+| Coluna | Compara com | Responde |
+|---|---|---|
+| `Variação $` e `Variação %` | ano anterior | cresci ou caí em relação ao ano passado? |
+| `Vs. orçado` | planejado do período | estou acima ou abaixo do que orcei? |
+
+No Scoreplan as duas dividem a mesma coluna: as linhas mensais comparam com o
+ano anterior e a linha Total troca para o planejado, mantendo o `Variação $`
+contra o ano anterior — duas perguntas sob um rótulo só. Era a causa de a linha
+Total "não bater": o número dele (−53,63%) agora aparece aqui em `Vs. orçado`,
+com nome próprio, em vez de mudarmos o sentido de uma coluna numa linha só.
+
+**Percentual é truncado em duas casas, não arredondado**, que é o que o
+Scoreplan faz. Arredondando, 110,4361% virava 110,44 contra 110,43 do relatório,
+e um centésimo de diferença em três meses de doze basta para alguém desconfiar
+do resto da tabela. Vale só para exibir — `formatarParaEdicao` mantém as seis
+casas, senão a taxa gravada seria destruída ao reabrir a célula.
+
 Há ainda a coluna **Realizado %**, que é `realizado ÷ receita REALIZADA do mês` —
 não a planejada. É o que torna a coluna comparável com `Planejado %`: as duas
 passam a ser fatia da receita do próprio período, e a diferença entre elas é

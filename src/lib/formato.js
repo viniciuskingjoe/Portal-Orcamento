@@ -12,8 +12,16 @@ export function formatarMoeda(valor) {
   return moeda.format(Number.isFinite(valor) ? valor : 0);
 }
 
+// Percentual é TRUNCADO em duas casas, não arredondado — é o que o Scoreplan
+// faz, e é contra ele que estes números são conferidos. Arredondando,
+// 110,4361% virava 110,44 contra 110,43 do relatório, e uma diferença de um
+// centésimo em três meses de doze é o bastante para alguém desconfiar do resto.
+//
+// Vale só para exibir. `formatarParaEdicao` continua com seis casas: truncar o
+// que a pessoa está digitando destruiria o valor gravado.
 export function formatarPercentual(valor) {
-  return `${percentual.format(Number.isFinite(valor) ? valor : 0)}%`;
+  const numero = Number.isFinite(valor) ? valor : 0;
+  return `${percentual.format(Math.trunc(numero * 100) / 100)}%`;
 }
 
 const SO_MILHAR = /^\d{1,3}(\.\d{3})+$/;

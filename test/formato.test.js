@@ -1,7 +1,7 @@
 import { strict as assert } from "node:assert";
 import { test } from "node:test";
 
-import { formatarParaEdicao, parseNumeroPtBr } from "../src/lib/formato.js";
+import { formatarParaEdicao, formatarPercentual, parseNumeroPtBr } from "../src/lib/formato.js";
 
 test("vírgula é sempre o separador decimal", () => {
   assert.equal(parseNumeroPtBr("1.234,56"), 1234.56);
@@ -64,4 +64,26 @@ test("percentual não perde casas ao reabrir a célula", () => {
 test("resíduo de ponto flutuante não vaza para o input", () => {
   assert.equal(formatarParaEdicao(0.1 + 0.2), "0,3");
   assert.equal(formatarParaEdicao(2257042.6400000002), "2257042,64");
+});
+
+// O Scoreplan TRUNCA percentual em duas casas. Arredondando, 110,4361% virava
+// 110,44 contra 110,43 do relatório — um centésimo em três meses de doze é o
+// bastante para alguém desconfiar do resto da tabela.
+test("percentual é truncado, não arredondado", () => {
+  assert.equal(formatarPercentual(110.4361), "110,43%");
+  assert.equal(formatarPercentual(12.2996), "12,29%");
+  assert.equal(formatarPercentual(30.158), "30,15%");
+  assert.equal(formatarPercentual(-53.6394), "-53,63%");
+});
+
+test("truncar não muda quem já tem duas casas", () => {
+  assert.equal(formatarPercentual(762.72), "762,72%");
+  assert.equal(formatarPercentual(-100), "-100,00%");
+  assert.equal(formatarPercentual(0), "0,00%");
+});
+
+// Truncar é só para EXIBIR. O que a pessoa edita mantém as seis casas, senão a
+// taxa gravada seria destruída ao reabrir a célula.
+test("truncar na exibição não afeta a edição", () => {
+  assert.equal(formatarParaEdicao(38.959531), "38,959531");
 });

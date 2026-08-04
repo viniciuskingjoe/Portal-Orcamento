@@ -182,6 +182,20 @@ function calcularVariacao(realizado, anterior) {
   };
 }
 
+// Quanto o realizado ficou acima ou abaixo do que se orçou.
+//
+// É outra pergunta que a `Variação %`, que compara com o ano anterior — e é a
+// diferença que fazia a linha Total divergir do Scoreplan: lá o Total troca de
+// referência e passa a comparar com o planejado, mantendo o `Variação $` contra
+// o ano anterior. Em vez de herdar duas perguntas sob o mesmo rótulo, cada uma
+// ganhou coluna própria.
+//
+// `null` quando não há orçamento no período: sem planejado não existe
+// atingimento, e mostrar −100% sugeriria que se orçou algo e não se realizou.
+function vsOrcado(realizado, planejado) {
+  return planejado ? ((realizado - planejado) / Math.abs(planejado)) * 100 : null;
+}
+
 // Todas as colunas dividem por 12 — o mesmo divisor, sempre.
 //
 // Antes o realizado dividia pelos meses com dado e o planejado por 12, para a
@@ -211,6 +225,7 @@ function linhaMedia(meses) {
     anterior: somar("anterior") / 12,
     nota: "Total ÷ 12 em todas as colunas. Os meses que ainda não chegaram entram como zero, então no meio do ano a média do realizado fica abaixo do ritmo mensal.",
   };
+  media.vsOrcado = vsOrcado(media.realizado, media.planejado);
   Object.assign(media, calcularVariacao(media.realizado, media.anterior));
   return media;
 }
@@ -226,6 +241,8 @@ function linhasVazias(ano) {
     anterior: 0,
     variacao: 0,
     variacaoPercentual: 0,
+    // Sem orçamento não há atingimento — a coluna mostra "—", não 0%.
+    vsOrcado: null,
   };
   return [
     ...MESES.map((mes) => ({
@@ -330,6 +347,7 @@ export function criarLinhasOrcamento({
     return {
       ...linha,
       realizadoPercentual: percentual ? taxa(linha.realizado, linha.baseRealizada) : null,
+      vsOrcado: vsOrcado(linha.realizado, linha.planejado),
       ...calcularVariacao(linha.realizado, linha.anterior),
     };
   });
@@ -346,6 +364,7 @@ export function criarLinhasOrcamento({
   };
   total.planejadoPercentual = percentual ? taxa(total.planejado, total.base) : null;
   total.realizadoPercentual = percentual ? taxa(total.realizado, total.baseRealizada) : null;
+  total.vsOrcado = vsOrcado(total.realizado, total.planejado);
   Object.assign(total, calcularVariacao(total.realizado, total.anterior));
 
   return [...meses, total, linhaMedia(meses)];

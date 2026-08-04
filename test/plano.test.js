@@ -579,3 +579,52 @@ test("zero continua zero em qualquer caminho — é o que apaga a célula", () =
     assert.equal(valorParaGravar(caso), 0, JSON.stringify(caso));
   }
 });
+
+// ---------------------------------------------------------------------------
+// Vs. orçado
+//
+// Coluna própria em vez de trocar o sentido da Variação % na linha Total. No
+// Scoreplan as duas dividem a mesma coluna: as linhas mensais comparam com o ano
+// anterior e o Total, com o planejado — mantendo o Variação $ contra o anterior.
+// Duas perguntas sob um rótulo só.
+// ---------------------------------------------------------------------------
+
+test("vs. orçado compara realizado com planejado, não com o ano anterior", () => {
+  const digitado = { [chavePlanejado(MODULO, "000001", SEM_CENTRO, CONTA, 1)]: 1000 };
+  const lista = linhas({ plano: plano(digitado), filiais: [FILIAIS[0]] });
+
+  // Mês 1: planejado 1000, realizado 1000 (do índice), anterior 800.
+  assert.equal(mes(lista, 1).vsOrcado, 0, "realizou exatamente o orçado");
+  assert.equal(mes(lista, 1).variacaoPercentual, 25, "mas 25% acima do ano anterior");
+});
+
+test("sem orçamento no período a coluna fica vazia, não zerada", () => {
+  const lista = linhas();
+  // Nada digitado: não existe atingimento a calcular.
+  assert.equal(mes(lista, 1).vsOrcado, null);
+  assert.equal(totalDe(lista).vsOrcado, null);
+});
+
+test("vs. orçado do total usa os totais do ano", () => {
+  const digitado = {
+    [chavePlanejado(MODULO, "000001", SEM_CENTRO, CONTA, 1)]: 4000,
+    [chavePlanejado(MODULO, "000001", SEM_CENTRO, CONTA, 2)]: 4000,
+  };
+  const lista = linhas({ plano: plano(digitado), filiais: [FILIAIS[0]] });
+  const total = totalDe(lista);
+
+  // Planejado 8000, realizado 3000 (1000 em janeiro + 2000 em fevereiro).
+  assert.equal(total.planejado, 8000);
+  assert.equal(total.realizado, 3000);
+  assert.equal(total.vsOrcado, ((3000 - 8000) / 8000) * 100);
+});
+
+test("a média divide as duas colunas por 12, então a taxa é a mesma do total", () => {
+  const digitado = {
+    [chavePlanejado(MODULO, "000001", SEM_CENTRO, CONTA, 1)]: 4000,
+    [chavePlanejado(MODULO, "000001", SEM_CENTRO, CONTA, 2)]: 4000,
+  };
+  const lista = linhas({ plano: plano(digitado), filiais: [FILIAIS[0]] });
+
+  assert.ok(Math.abs(mediaDe(lista).vsOrcado - totalDe(lista).vsOrcado) < 1e-9);
+});

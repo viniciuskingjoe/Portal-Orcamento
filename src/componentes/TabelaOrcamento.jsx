@@ -255,7 +255,13 @@ export default function TabelaOrcamento({
             <th scope="col">Realizado</th>
             <th scope="col">Ano anterior</th>
             <th scope="col">Variação {ehPercentual ? "p.p." : "$"}</th>
-            <th scope="col">Variação %</th>
+            <th scope="col" title="Realizado contra o ano anterior">Variação %</th>
+            {/* Outra pergunta que a Variação %: aquela olha para trás, esta olha
+                para o que foi orçado. No Scoreplan as duas dividem a mesma
+                coluna, e por isso a linha Total de lá parecia não bater. */}
+            <th scope="col" title="Realizado contra o planejado do período">
+              Vs. orçado
+            </th>
           </tr>
         </thead>
         <tbody>
@@ -305,6 +311,16 @@ export default function TabelaOrcamento({
                 <td className={classeVariacao(linha.variacaoPercentual)}>
                   {linha.variacaoPercentual > 0 ? "+" : ""}
                   {formatarPercentual(linha.variacaoPercentual)}
+                </td>
+                <td className={linha.vsOrcado == null ? "" : classeVariacao(linha.vsOrcado)}>
+                  {linha.vsOrcado == null ? (
+                    "—"
+                  ) : (
+                    <>
+                      {linha.vsOrcado > 0 ? "+" : ""}
+                      {formatarPercentual(linha.vsOrcado)}
+                    </>
+                  )}
                 </td>
               </tr>
             );
