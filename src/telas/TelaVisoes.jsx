@@ -57,14 +57,25 @@ export default function TelaVisoes({ visoes, planos, nomeContabil, onAbrir, onNo
                     <Icone nome="chevron" tamanho={18} />
                   </span>
                 </button>
-                <button
-                  type="button"
-                  className="card-plano__excluir"
-                  onClick={() => onExcluir(visao)}
-                  aria-label={`Excluir ${visao.nome}`}
-                >
-                  <Icone nome="trash" tamanho={18} />
-                </button>
+                {/* Mesma faixa do cartão de plano: rótulo, alvo grande e
+                    separada da área que abre. Excluir visão em uso levaria os
+                    módulos dos planos junto, então o botão diz quando não dá. */}
+                <div className="card-plano__acoes">
+                  <button
+                    type="button"
+                    className="card-plano__acao card-plano__acao--perigo"
+                    onClick={() => onExcluir(visao)}
+                    disabled={Boolean(emUso)}
+                    title={
+                      emUso
+                        ? `Não dá: ${emUso} ${emUso === 1 ? "plano usa" : "planos usam"} esta visão`
+                        : "Excluir esta visão"
+                    }
+                  >
+                    <Icone nome="trash" tamanho={15} />
+                    Excluir
+                  </button>
+                </div>
               </article>
             );
           })}

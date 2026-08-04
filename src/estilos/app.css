@@ -3512,3 +3512,18 @@ dialog::backdrop {
 .card-plano:hover .card-plano__acoes {
   border-top-color: var(--border-strong, var(--border));
 }
+
+/* Excluir é a única ação destrutiva que sobrou nos cartões: some da faixa
+   neutra ao passar o mouse para não ser confundida com Copiar ou Desativar. */
+.card-plano__acao--perigo:hover:not(:disabled),
+.card-plano__acao--perigo:focus-visible:not(:disabled) {
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+
+/* Desabilitado precisa PARECER desabilitado (PADRÃO §4): o `title` diz o
+   porquê, mas só depois de a pessoa tentar. */
+.card-plano__acao:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
