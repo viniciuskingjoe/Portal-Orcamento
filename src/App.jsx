@@ -10,6 +10,8 @@ import TelaPlanos from "./telas/TelaPlanos.jsx";
 import TelaHome from "./telas/TelaHome.jsx";
 import TelaConfiguracoes from "./telas/TelaConfiguracoes.jsx";
 import TelaListaErp from "./telas/TelaListaErp.jsx";
+import TelaGrupos from "./telas/TelaGrupos.jsx";
+import TelaGrupo from "./telas/TelaGrupo.jsx";
 import TelaVisoes from "./telas/TelaVisoes.jsx";
 import TelaVisao from "./telas/TelaVisao.jsx";
 import TelaVisaoModulo from "./telas/TelaVisaoModulo.jsx";
@@ -134,6 +136,8 @@ function PlanejamentoOrcamentario({ sessao, onSair }) {
   const [avisoPublicacao, setAvisoPublicacao] = useState("");
   const [publicando, setPublicando] = useState(null);
   const [mostrarInativos, setMostrarInativos] = useState(false);
+  const [grupos, setGrupos] = useState([]);
+  const [grupoAbertoId, setGrupoAbertoId] = useState(null);
 
   // Guardas da atualização de fundo — ver o efeito mais abaixo.
   const gravacoesEmVoo = useRef(0);
@@ -199,8 +203,16 @@ function PlanejamentoOrcamentario({ sessao, onSair }) {
 
   // A visão contábil em uso depende de onde se está: montando uma visão ou
   // orçando um plano.
+  const grupoAberto = useMemo(
+    () => grupos.find((grupo) => grupo.id === grupoAbertoId) ?? null,
+    [grupos, grupoAbertoId]
+  );
+
   const visaoContabil =
-    (tela === "visao" || tela === "visao-modulo" ? visaoAberta : visaoDoPlano)?.visaoContabil ?? null;
+    tela === "grupo"
+      ? (grupoAberto?.visaoContabil ?? null)
+      : ((tela === "visao" || tela === "visao-modulo" ? visaoAberta : visaoDoPlano)?.visaoContabil ??
+        null);
 
   const contas = useContas(visaoContabil);
   const realizado = useRealizado(planoAtivo?.ano ?? null, visaoDoPlano?.visaoContabil ?? null);
@@ -211,6 +223,7 @@ function PlanejamentoOrcamentario({ sessao, onSair }) {
 
   useEffect(() => {
     let vivo = true;
+    repo.grupos().then((lista) => vivo && setGrupos(lista)).catch(() => {});
     carregarEstado()
       .then((dados) => {
         if (!vivo) return;
@@ -253,11 +266,12 @@ function PlanejamentoOrcamentario({ sessao, onSair }) {
       if (editandoAgora.current || gravacoesEmVoo.current > 0) return;
 
       try {
-        const dados = await carregarEstado();
+        const [dados, lista] = await Promise.all([carregarEstado(), repo.grupos()]);
         if (!vivo) return;
         setConfiguracao(dados.configuracao);
         setVisoes(dados.visoes);
         setPlanos(dados.planos);
+        setGrupos(lista);
       } catch {
         // Silêncio de propósito: isto é atualização de fundo, e uma faixa
         // vermelha por causa de uma falha de rede que ninguém pediu assusta sem
@@ -487,6 +501,8 @@ function PlanejamentoOrcamentario({ sessao, onSair }) {
   function voltar() {
     if (tela === "visao-modulo") return navegar("visao");
     if (tela === "visao") return navegar("visoes");
+    if (tela === "grupo") return navegar("grupos");
+    if (tela === "grupos") return navegar("configuracoes");
     if (TELAS_ERP.has(tela)) return navegar("configuracoes");
     if (moduloDaTela) return navegar("home");
     return navegar("planos");
@@ -546,6 +562,33 @@ function PlanejamentoOrcamentario({ sessao, onSair }) {
     limpar();
     return undefined;
   }
+
+  // --------------------------------------------------------------------------
+  // Grupos de centro de custo
+  // --------------------------------------------------------------------------
+
+  function novoGrupo() {
+    // Nasce na visão contábil que o portal já usa: quase sempre é a certa, e
+    // trocar é um campo na tela seguinte.
+    const padrao = visoes[0]?.visaoContabil ?? erp.visoesContabeis[0]?.id ?? "25";
+    const grupo = { id: gerarId("grupo"), nome: "", visaoContabil: padrao, centros: [], contas: [] };
+    setGrupos((atuais) => [...atuais, grupo]);
+    setGrupoAbertoId(grupo.id);
+    navegar("grupo");
+  }
+
+  async function salvarGrupo(grupo) {
+    await repo.grupo.salvar(grupo);
+    setGrupos(await repo.grupos());
+    navegar("grupos");
+  }
+
+  // Só na memória: a visão contábil do grupo vira gravação quando ele for
+  // salvo, junto do resto.
+  const trocarVisaoContabilDoGrupo = (visaoContabil) =>
+    setGrupos((atuais) =>
+      atuais.map((grupo) => (grupo.id === grupoAbertoId ? { ...grupo, visaoContabil } : grupo))
+    );
 
   // --------------------------------------------------------------------------
   // Visões
@@ -717,6 +760,9 @@ function PlanejamentoOrcamentario({ sessao, onSair }) {
   }
 
   function descricaoDaConfirmacao() {
+    if (confirmacao?.tipo === "grupo") {
+      return "O grupo é só um recorte de leitura: nenhum valor planejado é afetado.";
+    }
     if (confirmacao?.tipo === "desativar") {
       return (
         "O plano sai da lista, mas nada e apagado: o planejado continua guardado e " +
@@ -738,6 +784,12 @@ function PlanejamentoOrcamentario({ sessao, onSair }) {
     if (!confirmacao) return;
     // Publicar nao e exclusao; compartilha o modal porque a pergunta e a mesma
     // -- "tem certeza?" -- e o efeito tambem sai do portal.
+    if (confirmacao.tipo === "grupo") {
+      setGrupos((atuais) => atuais.filter((grupo) => grupo.id !== confirmacao.id));
+      gravar(repo.grupo.excluir(confirmacao.id));
+      setConfirmacao(null);
+      return;
+    }
     if (confirmacao.tipo === "desativar") {
       alterarSituacao(confirmacao.id, "inativo");
       setConfirmacao(null);
@@ -993,8 +1045,45 @@ function PlanejamentoOrcamentario({ sessao, onSair }) {
           filiais={filiaisDoErpVisiveis}
           filiaisAtivas={filiaisAtivas}
           centros={centrosDoErpVisiveis}
+          grupos={grupos}
           visoesContabeis={erp.visoesContabeis}
           onAbrir={(id) => navegar(id)}
+        />
+      );
+    }
+
+    if (tela === "grupos") {
+      return (
+        <TelaGrupos
+          grupos={grupos}
+          centros={centrosDoErpVisiveis}
+          podeEditar={ehAdmin(sessao)}
+          onAbrir={(id) => {
+            setGrupoAbertoId(id);
+            navegar("grupo");
+          }}
+          onNovo={novoGrupo}
+          onExcluir={(grupo) =>
+            setConfirmacao({ tipo: "grupo", id: grupo.id, nome: grupo.nome || "este grupo" })
+          }
+          onVoltar={() => navegar("configuracoes")}
+        />
+      );
+    }
+
+    if (tela === "grupo" && grupoAberto) {
+      return exigirErp(
+        <TelaGrupo
+          grupo={grupoAberto}
+          centros={centrosDoErpVisiveis}
+          catalogo={contas.catalogo}
+          visoesContabeis={erp.visoesContabeis}
+          carregando={contas.carregando || erp.carregando}
+          erro={contas.erro || erp.erro}
+          onRecarregar={contas.recarregar}
+          onTrocarVisaoContabil={trocarVisaoContabilDoGrupo}
+          onSalvar={salvarGrupo}
+          onVoltar={() => navegar("grupos")}
         />
       );
     }

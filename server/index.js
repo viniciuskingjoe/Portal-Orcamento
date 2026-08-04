@@ -30,6 +30,9 @@ import {
   bancoVazio,
   definirSituacaoDoPlano,
   duplicarPlano,
+  listarGrupos,
+  salvarGrupo,
+  excluirGrupo,
   excluirPlano,
   excluirVisao,
   importar,
@@ -222,6 +225,30 @@ app.put(
   exigirAdmin,
   rota(async (req, res) => {
     await salvarConfiguracao(req.params.chave, req.body?.valor, req.sessao.login);
+    res.json({ ok: true });
+  })
+);
+
+// Grupos de centro de custo — configuração global, como as filiais em uso.
+app.get(
+  "/api/grupos",
+  rota(async (_req, res) => res.json(await listarGrupos()))
+);
+
+app.put(
+  "/api/grupos/:id",
+  exigirAdmin,
+  rota(async (req, res) => {
+    await salvarGrupo({ id: req.params.id, ...req.body }, req.sessao.login);
+    res.json({ ok: true });
+  })
+);
+
+app.delete(
+  "/api/grupos/:id",
+  exigirAdmin,
+  rota(async (req, res) => {
+    await excluirGrupo(req.params.id);
     res.json({ ok: true });
   })
 );

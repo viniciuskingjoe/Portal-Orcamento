@@ -40,6 +40,12 @@ export const estado = {
       api.salvarModulo(visaoId, modulo, { sinal: { conta, tipo } }),
   },
 
+  grupos: () => api.grupos(),
+  grupo: {
+    salvar: (grupo) => api.salvarGrupo(grupo),
+    excluir: (id) => api.excluirGrupo(id),
+  },
+
   plano: {
     salvar: (plano) => api.salvarPlano(plano),
     excluir: (id) => api.excluirPlano(id),

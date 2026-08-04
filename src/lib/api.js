@@ -99,6 +99,11 @@ export const api = {
   salvarConfiguracao: (chave, valor) =>
     buscar(`/api/configuracao/${encodeURIComponent(chave)}`, null, { metodo: "PUT", corpo: { valor } }),
 
+  grupos: () => buscar("/api/grupos"),
+  salvarGrupo: (grupo) =>
+    buscar(`/api/grupos/${encodeURIComponent(grupo.id)}`, null, { metodo: "PUT", corpo: grupo }),
+  excluirGrupo: (id) => buscar(`/api/grupos/${encodeURIComponent(id)}`, null, { metodo: "DELETE" }),
+
   salvarVisao: (visao) =>
     buscar(`/api/visoes/${encodeURIComponent(visao.id)}`, null, { metodo: "PUT", corpo: visao }),
   excluirVisao: (id) => buscar(`/api/visoes/${encodeURIComponent(id)}`, null, { metodo: "DELETE" }),

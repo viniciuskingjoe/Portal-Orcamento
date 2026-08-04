@@ -5,6 +5,7 @@ export default function TelaConfiguracoes({
   filiais,
   filiaisAtivas,
   centros,
+  grupos = [],
   visoesContabeis,
   onAbrir,
 }) {
@@ -22,6 +23,17 @@ export default function TelaConfiguracoes({
       icone: "layers",
       legenda: `${centros.length} ${centros.length === 1 ? "centro ativo" : "centros ativos"}`,
       origem: "dbo.CTB_CENTRO_CUSTO",
+    },
+    // Único cartão que leva a algo que o portal DECIDE, não a um cadastro lido
+    // do ERP. Por isso a origem nomeia o uso e não uma tabela do Linx.
+    {
+      id: "grupos",
+      titulo: "Grupos de centro de custo",
+      icone: "folder",
+      legenda: grupos.length
+        ? `${grupos.length} ${grupos.length === 1 ? "grupo" : "grupos"}`
+        : "nenhum grupo ainda",
+      origem: "recorte para ler o DRE",
     },
   ];
 

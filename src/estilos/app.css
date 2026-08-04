@@ -3579,3 +3579,22 @@ dialog::backdrop {
   padding: 0 16px;
   white-space: nowrap;
 }
+
+/* Nome do grupo: mesma caixa dos campos fixos da linha de filtros, mas aceita
+   digitação — sem isso ele destoaria dos seletores ao lado. */
+.campo-fixo--editavel {
+  width: 100%;
+  min-height: 40px;
+  padding: 0 12px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-md);
+  background: var(--surface-soft);
+  color: var(--text);
+  font-size: 13.5px;
+}
+
+.campo-fixo--editavel:focus-visible {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
