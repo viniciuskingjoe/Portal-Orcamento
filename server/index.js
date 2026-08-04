@@ -29,6 +29,7 @@ import {
   definirUsoDoCentro,
   bancoVazio,
   definirSituacaoDoPlano,
+  duplicarPlano,
   excluirPlano,
   excluirVisao,
   importar,
@@ -281,6 +282,19 @@ app.delete(
   rota(async (req, res) => {
     await excluirPlano(req.params.id);
     res.json({ ok: true });
+  })
+);
+
+// Cópia de um plano com todo o planejado. A cópia nasce sem vínculo com o Linx:
+// a primeira sincronização dela cria um orçamento novo lá.
+app.post(
+  "/api/planos/:id/duplicar",
+  exigirEdicao,
+  rota(async (req, res) => {
+    const { novoId, nome, ano } = req.body ?? {};
+    res.json(
+      await duplicarPlano({ id: req.params.id, novoId, nome, ano }, req.sessao.login)
+    );
   })
 );
 

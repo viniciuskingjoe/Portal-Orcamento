@@ -496,7 +496,22 @@ function PlanejamentoOrcamentario({ sessao, onSair }) {
   // Planos
   // --------------------------------------------------------------------------
 
-  function salvarNovoPlano() {
+  // Abre o mesmo formulário já preenchido a partir de um plano existente. A
+  // visão vem travada: copiar o planejado para outra visão daria chaves que
+  // apontam para contas que ela não tem, e a cópia nasceria com valores
+  // invisíveis na tela.
+  function pedirCopia(plano) {
+    setNovoPlano({
+      nome: `${plano.nome} (cópia)`,
+      ano: String(plano.ano),
+      visaoId: plano.visaoId,
+      copiaDe: plano.id,
+    });
+    setErroPlano("");
+    setDrawerAberto(true);
+  }
+
+  async function salvarNovoPlano() {
     const ano = Number(novoPlano.ano);
     if (!novoPlano.nome.trim()) return setErroPlano("Informe um nome para o plano.");
     if (!novoPlano.visaoId) return setErroPlano("Selecione a visão que este plano vai orçar.");
@@ -504,12 +519,31 @@ function PlanejamentoOrcamentario({ sessao, onSair }) {
       return setErroPlano("Informe um ano válido.");
     }
 
-    const plano = criarPlano(gerarId("plano"), novoPlano.nome.trim(), ano, novoPlano.visaoId);
+    const id = gerarId("plano");
+    const limpar = () => {
+      setNovoPlano({ nome: "", ano: String(new Date().getFullYear() + 1), visaoId: null });
+      setErroPlano("");
+      setDrawerAberto(false);
+    };
+
+    if (novoPlano.copiaDe) {
+      // A cópia é feita no servidor: são centenas de células, e mandá-las de
+      // volta pela rede só para o banco regravá-las seria trabalho à toa.
+      try {
+        await repo.plano.duplicar(novoPlano.copiaDe, { novoId: id, nome: novoPlano.nome.trim(), ano });
+        const dados = await carregarEstado();
+        setPlanos(dados.planos);
+        limpar();
+      } catch (erro) {
+        setErroPlano(`Não foi possível copiar: ${erro.message}`);
+      }
+      return undefined;
+    }
+
+    const plano = criarPlano(id, novoPlano.nome.trim(), ano, novoPlano.visaoId);
     setPlanos((atuais) => [...atuais, plano]);
     gravar(repo.plano.salvar(plano));
-    setNovoPlano({ nome: "", ano: String(new Date().getFullYear() + 1), visaoId: null });
-    setErroPlano("");
-    setDrawerAberto(false);
+    limpar();
     return undefined;
   }
 
@@ -1001,6 +1035,7 @@ function PlanejamentoOrcamentario({ sessao, onSair }) {
           mostrarInativos={mostrarInativos}
           onAbrir={abrirPlano}
           onNovo={() => setDrawerAberto(true)}
+          onCopiar={pedirCopia}
           onAlternarSituacao={pedirSituacao}
           onAlternarInativos={() => setMostrarInativos((atual) => !atual)}
         />

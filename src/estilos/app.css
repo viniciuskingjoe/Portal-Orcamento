@@ -3492,3 +3492,24 @@ dialog::backdrop {
   background: var(--accent-soft);
   color: var(--accent);
 }
+
+/* Copiar fica ao lado de desativar, no canto do cartão. Discreto: a ação
+   principal do cartão é abrir o plano. */
+.card-plano__copiar {
+  position: absolute;
+  top: 14px;
+  right: 46px;
+  display: inline-flex;
+  padding: 6px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.card-plano__copiar:hover,
+.card-plano__copiar:focus-visible {
+  background: var(--surface-soft);
+  color: var(--accent);
+}

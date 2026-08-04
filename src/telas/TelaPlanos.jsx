@@ -27,6 +27,7 @@ export default function TelaPlanos({
   mostrarInativos = false,
   onAbrir,
   onNovo,
+  onCopiar,
   onAlternarSituacao,
   onAlternarInativos,
 }) {
@@ -105,6 +106,21 @@ export default function TelaPlanos({
                     {plano.publicadoLinhas != null ? ` · ${plano.publicadoLinhas} linhas` : ""}
                   </span>
                 </div>
+              ) : null}
+
+              {/* Copiar: cenário ajustado parte do que já existe em vez de
+                  redigitar doze meses. Não aparece em plano inativo — copiar o
+                  que foi aposentado é quase sempre engano. */}
+              {!inativo ? (
+                <button
+                  type="button"
+                  className="card-plano__copiar"
+                  onClick={() => onCopiar(plano)}
+                  aria-label={`Copiar ${plano.nome}`}
+                  title="Criar um plano novo a partir deste, com os valores já lançados"
+                >
+                  <Icone nome="copy" tamanho={17} />
+                </button>
               ) : null}
 
               {/* Desativar, nao excluir: orcamento antigo e referencia, e um

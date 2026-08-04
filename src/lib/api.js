@@ -111,6 +111,8 @@ export const api = {
   salvarPlano: (plano) =>
     buscar(`/api/planos/${encodeURIComponent(plano.id)}`, null, { metodo: "PUT", corpo: plano }),
   excluirPlano: (id) => buscar(`/api/planos/${encodeURIComponent(id)}`, null, { metodo: "DELETE" }),
+  duplicarPlano: (id, novo) =>
+    buscar(`/api/planos/${encodeURIComponent(id)}/duplicar`, null, { corpo: novo }),
   situacaoDoPlano: (id, situacao) =>
     buscar(`/api/planos/${encodeURIComponent(id)}/situacao`, null, {
       metodo: "PUT",

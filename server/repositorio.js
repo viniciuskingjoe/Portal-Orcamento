@@ -333,6 +333,52 @@ export async function salvarPlano({ id, nome, ano, visaoId }, login) {
   );
 }
 
+// Cópia de um plano, com todo o planejado junto. O uso é "2026 ajustado": parte
+// do que já existe e mexe no que mudou, em vez de redigitar doze meses.
+//
+// A cópia NÃO herda o vínculo com o Linx. Se herdasse, sincronizar a cópia
+// apagaria o orçamento do original — a publicação limpa o orçamento antes de
+// inserir, e os dois apontariam para o mesmo. Nascendo sem vínculo, a primeira
+// sincronização cria um orçamento novo, e ter dois no mesmo exercício não
+// incomoda o ERP: a chave de CTB_ORCAMENTO é só o ID_ORCAMENTO.
+export async function duplicarPlano({ id, novoId, nome, ano }, login) {
+  const [origem] = await query(
+    "SELECT ID, VISAO_ID, ANO FROM dbo.KING_PORTAL_ORC_PLANO WHERE ID = @id",
+    { id }
+  );
+
+  if (!origem) {
+    const erro = new Error("Plano de origem não encontrado.");
+    erro.status = 404;
+    throw erro;
+  }
+
+  await transaction(async ({ query: q }) => {
+    await q(
+      `INSERT INTO dbo.KING_PORTAL_ORC_PLANO (ID, NOME, ANO, VISAO_ID, CRIADO_POR)
+       VALUES (@novo, @nome, @ano, @visao, @por)`,
+      { novo: novoId, nome, ano: ano ?? origem.ANO, visao: origem.VISAO_ID, por: login ?? null }
+    );
+
+    // Uma instrução só: copiar linha a linha seriam centenas de idas ao banco
+    // para uma operação que o servidor resolve sozinho.
+    await q(
+      `INSERT INTO dbo.KING_PORTAL_ORC_PLANEJADO
+         (PLANO_ID, MODULO, COD_FILIAL, CENTRO_CUSTO, CLASSIFICACAO, RECEITA, MES, VALOR, ALTERADO_POR)
+       SELECT @novo, MODULO, COD_FILIAL, CENTRO_CUSTO, CLASSIFICACAO, RECEITA, MES, VALOR, @por
+         FROM dbo.KING_PORTAL_ORC_PLANEJADO
+        WHERE PLANO_ID = @id`,
+      { novo: novoId, id, por: login ?? null }
+    );
+  });
+
+  const [{ celulas }] = await query(
+    "SELECT COUNT(*) AS celulas FROM dbo.KING_PORTAL_ORC_PLANEJADO WHERE PLANO_ID = @id",
+    { id: novoId }
+  );
+  return { id: novoId, celulas };
+}
+
 // Desativar em vez de excluir: orçamento antigo é referência. Sai da lista mas
 // segue respondendo "quanto a gente tinha previsto?", e o planejado de quem o
 // montou não vira pó por um clique.

@@ -6,6 +6,9 @@ import { resumoDaVisao } from "../dados/visao.js";
 // Também é um `<dialog>`: só a apresentação é de painel lateral. Assim ganha
 // Escape para fechar e retenção de foco sem código extra.
 export default function DrawerNovoPlano({ valores, visoes, erro, onAlterar, onSalvar, onFechar }) {
+  // Copiar para outra visão daria chaves apontando para contas que ela não tem,
+  // e a cópia nasceria com valores que a tela não mostra. O campo fica travado.
+  const copiando = Boolean(valores.copiaDe);
   const referencia = useRef(null);
 
   useEffect(() => {
@@ -35,8 +38,8 @@ export default function DrawerNovoPlano({ valores, visoes, erro, onAlterar, onSa
       >
         <div className="drawer__topo">
           <div>
-            <span>Novo cenário</span>
-            <h2>Adicionar plano orçamentário</h2>
+            <span>{copiando ? "Cópia" : "Novo cenário"}</span>
+            <h2>{copiando ? "Copiar plano orçamentário" : "Adicionar plano orçamentário"}</h2>
           </div>
           <button type="button" className="botao-icone" onClick={onFechar} aria-label="Fechar">
             <Icone nome="close" />
@@ -76,6 +79,8 @@ export default function DrawerNovoPlano({ valores, visoes, erro, onAlterar, onSa
             </span>
             <select
               value={valores.visaoId ?? ""}
+              disabled={copiando}
+              title={copiando ? "A cópia mantém a visão do plano de origem" : undefined}
               onChange={(evento) => onAlterar({ visaoId: evento.target.value || null })}
             >
               <option value="">Selecione uma visão…</option>
@@ -91,6 +96,14 @@ export default function DrawerNovoPlano({ valores, visoes, erro, onAlterar, onSa
             <p className="campo__ajuda">
               {resumo.modulos} de {resumo.totalDeModulos} módulos · {resumo.filiais}{" "}
               {resumo.filiais === 1 ? "filial" : "filiais"} · {resumo.contas} contas
+            </p>
+          ) : null}
+
+          {copiando ? (
+            <p className="campo__ajuda">
+              Os valores já lançados vêm junto. A cópia começa sem vínculo com o
+              Linx: ao sincronizá-la, um orçamento novo é criado lá, e o do plano
+              de origem não é tocado.
             </p>
           ) : null}
 
