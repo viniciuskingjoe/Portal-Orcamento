@@ -123,7 +123,7 @@ export default function TelaPlanos({
                     title="Criar um plano novo a partir deste, com os valores já lançados"
                   >
                     <Icone nome="copy" tamanho={15} />
-                    Duplicar
+                    Copiar
                   </button>
                 ) : null}
 
