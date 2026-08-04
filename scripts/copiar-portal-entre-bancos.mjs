@@ -61,6 +61,17 @@ const colunasDe = async (banco, tabela) => {
   return linhas.map((l) => l.name);
 };
 
+// Tabela com IDENTITY recusa id explícito. Os ids precisam vir junto: a
+// permissão é revogada pelo id, e regerá-los faria a tela do administrador
+// apontar para linha errada depois da cópia.
+const temIdentity = async (banco, tabela) => {
+  const [linha] = await query(
+    `SELECT COUNT(*) AS n FROM ${banco}.sys.columns
+      WHERE object_id = OBJECT_ID('${banco}.dbo.${tabela}') AND is_identity = 1`
+  );
+  return linha.n > 0;
+};
+
 try {
   console.log(`\n  ${origem}  →  ${destino}\n`);
 
@@ -119,10 +130,30 @@ try {
         await q(`DELETE FROM ${destino}.dbo.${tabela}`);
       }
       for (const { tabela } of plano) {
-        const colunas = (await colunasDe(destino, tabela)).join(", ");
+        // A interseção das colunas dos dois lados, não as do destino. Os bancos
+        // podem estar em versões diferentes de DDL — foi o caso aqui: a
+        // homologação já tinha as colunas de publicação no Linx e a produção
+        // não. Copiar só o que existe dos dois lados deixa o resto no padrão.
+        const naOrigem = new Set(await colunasDe(origem, tabela));
+        const comuns = (await colunasDe(destino, tabela)).filter((c) => naOrigem.has(c));
+        const colunas = comuns.join(", ");
+        const identity = await temIdentity(destino, tabela);
+
+        // As três instruções vão num LOTE só. `SET IDENTITY_INSERT` é de sessão,
+        // mas o driver abre uma requisição por chamada e a opção não sobrevive
+        // até a próxima — o INSERT chegava com ela já desligada. Junto, funciona.
+        //
+        // Ligar e desligar em volta de cada tabela também é obrigatório: o SQL
+        // Server só aceita uma tabela com IDENTITY_INSERT ligado por sessão.
+        const insercao = `INSERT INTO ${destino}.dbo.${tabela} (${colunas})
+                          SELECT ${colunas} FROM ${origem}.dbo.${tabela}`;
+
         await q(
-          `INSERT INTO ${destino}.dbo.${tabela} (${colunas})
-           SELECT ${colunas} FROM ${origem}.dbo.${tabela}`
+          identity
+            ? `SET IDENTITY_INSERT ${destino}.dbo.${tabela} ON;
+               ${insercao};
+               SET IDENTITY_INSERT ${destino}.dbo.${tabela} OFF;`
+            : insercao
         );
       }
     });
