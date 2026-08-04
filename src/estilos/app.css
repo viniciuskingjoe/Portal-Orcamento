@@ -3527,3 +3527,15 @@ dialog::backdrop {
   opacity: 0.45;
   cursor: not-allowed;
 }
+
+/* Sincronizar fica na linha dos filtros, mas sem rótulo em cima — precisa se
+   alinhar pela BASE, senão flutua no meio da altura de quem tem rótulo. Mesma
+   regra que a dica de edição usa ali do lado.
+   Escopado em .filtros-orcamento para casar a especificidade das outras regras
+   da linha e não depender da ordem do arquivo. */
+.filtros-orcamento .botao-sincronizar {
+  align-self: flex-end;
+  min-height: 40px;
+  padding: 0 16px;
+  white-space: nowrap;
+}

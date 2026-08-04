@@ -276,7 +276,7 @@ export default function TelaOrcamento({
         {podeSincronizar ? (
           <button
             type="button"
-            className="botao botao--secundario botao--compacto"
+            className="botao botao--primario botao-sincronizar"
             onClick={onSincronizar}
             disabled={sincronizando}
             title="Deixa o orçamento deste plano no Linx igual ao que está aqui"
