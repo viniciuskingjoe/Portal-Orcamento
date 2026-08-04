@@ -99,6 +99,30 @@ export default function TelaOrcamento({
 
   const receitas = percentual ? (receitasDisponiveis ?? []) : [];
 
+  // Centros que a VISÃO deu a esta filial neste módulo — não os 37 do ERP.
+  // Oferecer centro que a visão não configurou leva a escolher um e encontrar a
+  // tela vazia, sem dizer por quê.
+  //
+  // Em "Total" é a união dos centros das filiais em uso: ver um centro em todas
+  // as filiais de uma vez é leitura legítima.
+  //
+  // Fica ANTES de `podeEditar` e `motivo` porque os dois o leem. `const` não é
+  // içado com valor: declarado depois, a leitura cai na zona morta temporal e
+  // derruba a tela inteira em branco, sem erro visível.
+  const centrosDaVisao = useMemo(() => {
+    const doModulo = new Set();
+    const alvo =
+      filtros.filial === "total" ? filiais.map((filial) => filial.id) : [filtros.filial];
+
+    alvo.forEach((filialId) =>
+      centrosDaFilial(visao, modulo.id, filialId).forEach((centro) => doModulo.add(centro))
+    );
+
+    // Percorre `centros` (já recortado pela permissão) para herdar a ordem e o
+    // nome do ERP em vez de mostrar códigos soltos.
+    return (centros ?? []).filter((centro) => doModulo.has(centro.id));
+  }, [visao, modulo.id, filtros.filial, filiais, centros]);
+
   // Editar só faz sentido em uma célula única: uma filial e uma conta — e, no
   // módulo percentual, também uma receita: o mesmo percentual vale valores
   // diferentes conforme a receita sobre a qual incide.
@@ -127,26 +151,6 @@ export default function TelaOrcamento({
               : percentual && filtros.receita === TODAS_AS_CONTAS
                 ? "Escolha também a receita sobre a qual o percentual incide."
                 : `${percentual ? "Digite o percentual ou o valor em reais — as duas colunas aceitam" : "Digite na coluna Planejado"} — Enter grava e desce · arraste o canto da célula (ou Ctrl+Enter) para repetir nos outros meses · Ctrl+D copia o mês de cima · Esc cancela.`;
-
-  // Centros que a VISÃO deu a esta filial neste módulo — não os 37 do ERP.
-  // Oferecer centro que a visão não configurou leva a escolher um e encontrar a
-  // tela vazia, sem dizer por quê.
-  //
-  // Em "Total" é a união dos centros das filiais em uso: ver um centro em todas
-  // as filiais de uma vez é leitura legítima.
-  const centrosDaVisao = useMemo(() => {
-    const doModulo = new Set();
-    const alvo =
-      filtros.filial === "total" ? filiais.map((filial) => filial.id) : [filtros.filial];
-
-    alvo.forEach((filialId) =>
-      centrosDaFilial(visao, modulo.id, filialId).forEach((centro) => doModulo.add(centro))
-    );
-
-    // Percorre `centros` (já recortado pela permissão) para herdar a ordem e o
-    // nome do ERP em vez de mostrar códigos soltos.
-    return centros.filter((centro) => doModulo.has(centro.id));
-  }, [visao, modulo.id, filtros.filial, filiais, centros]);
 
   // As dimensões que compõem a célula, na ordem em que se escolhe: sobre o quê
   // (receita) e o quê (conta do módulo). Filial e centro ficam nos seletores do
