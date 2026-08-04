@@ -365,8 +365,8 @@ const linhasPercentuais = (planejado, extra) =>
 
 test("a chave do módulo percentual carrega a conta de receita", () => {
   assert.equal(
-    chavePlanejado(PERCENTUAL, "000001", SEM_CENTRO, CONTA_DEDUCAO, 1, CONTA),
-    `${PERCENTUAL}|000001||${CONTA_DEDUCAO}|1|${CONTA}`
+    chavePlanejado(PERCENTUAL, "000001", CENTRO, CONTA_DEDUCAO, 1, CONTA),
+    `${PERCENTUAL}|000001|${CENTRO}|${CONTA_DEDUCAO}|1|${CONTA}`
   );
   // Sem receita, a chave continua com cinco segmentos — módulo em reais.
   assert.equal(
@@ -383,8 +383,8 @@ test("receitasDaBase lista as contas de receita da filial", () => {
 test("o percentual incide sobre a receita contra a qual foi lançado", () => {
   // 10% sobre a receita de 1.000 e 5% sobre a de 4.000: 100 + 200.
   const lista = linhasPercentuais({
-    [chavePlanejado(PERCENTUAL, "000001", SEM_CENTRO, CONTA_DEDUCAO, 1, CONTA)]: 10,
-    [chavePlanejado(PERCENTUAL, "000001", SEM_CENTRO, CONTA_DEDUCAO, 1, OUTRA_CONTA)]: 5,
+    [chavePlanejado(PERCENTUAL, "000001", CENTRO, CONTA_DEDUCAO, 1, CONTA)]: 10,
+    [chavePlanejado(PERCENTUAL, "000001", CENTRO, CONTA_DEDUCAO, 1, OUTRA_CONTA)]: 5,
   });
 
   assert.equal(mes(lista, 1).planejado, 300);
@@ -394,8 +394,8 @@ test("o percentual incide sobre a receita contra a qual foi lançado", () => {
 
 test("filtrar uma receita restringe a base e o valor", () => {
   const digitado = {
-    [chavePlanejado(PERCENTUAL, "000001", SEM_CENTRO, CONTA_DEDUCAO, 1, CONTA)]: 10,
-    [chavePlanejado(PERCENTUAL, "000001", SEM_CENTRO, CONTA_DEDUCAO, 1, OUTRA_CONTA)]: 5,
+    [chavePlanejado(PERCENTUAL, "000001", CENTRO, CONTA_DEDUCAO, 1, CONTA)]: 10,
+    [chavePlanejado(PERCENTUAL, "000001", CENTRO, CONTA_DEDUCAO, 1, OUTRA_CONTA)]: 5,
   };
 
   const soAPrimeira = linhasPercentuais(digitado, { receitas: [CONTA] });
@@ -409,7 +409,7 @@ test("filtrar uma receita restringe a base e o valor", () => {
 
 test("percentual lançado contra outra receita não entra na conta filtrada", () => {
   const lista = linhasPercentuais(
-    { [chavePlanejado(PERCENTUAL, "000001", SEM_CENTRO, CONTA_DEDUCAO, 1, OUTRA_CONTA)]: 5 },
+    { [chavePlanejado(PERCENTUAL, "000001", CENTRO, CONTA_DEDUCAO, 1, OUTRA_CONTA)]: 5 },
     { receitas: [CONTA] }
   );
   assert.equal(mes(lista, 1).planejado, 0);
@@ -418,7 +418,7 @@ test("percentual lançado contra outra receita não entra na conta filtrada", ()
 
 test("percentual do total é valor ÷ base, não a soma dos meses", () => {
   const lista = linhasPercentuais({
-    [chavePlanejado(PERCENTUAL, "000001", SEM_CENTRO, CONTA_DEDUCAO, 1, CONTA)]: 10,
+    [chavePlanejado(PERCENTUAL, "000001", CENTRO, CONTA_DEDUCAO, 1, CONTA)]: 10,
   });
 
   const total = totalDe(lista);
@@ -431,7 +431,7 @@ test("percentual do total é valor ÷ base, não a soma dos meses", () => {
 test("sem receita planejada o percentual não vira valor", () => {
   const lista = criarLinhasOrcamento({
     plano: plano({
-      [chavePlanejado(PERCENTUAL, "000001", SEM_CENTRO, CONTA_DEDUCAO, 1, CONTA)]: 10,
+      [chavePlanejado(PERCENTUAL, "000001", CENTRO, CONTA_DEDUCAO, 1, CONTA)]: 10,
     }),
     visao: visaoComReceita(),
     moduloId: PERCENTUAL,
@@ -716,4 +716,79 @@ test("valor é arredondado em duas casas, como a coluna do ERP", () => {
 
 test("plano ou visão ausente devolve lista vazia", () => {
   assert.deepEqual(linhasParaOrcamento({ plano: null, visao: null }), []);
+});
+
+// ---------------------------------------------------------------------------
+// Total — todos os centros
+//
+// A regressão que motivou estes testes: quando todo módulo passou a ser orçado
+// por centro, nada mais ficou gravado sob a chave de centro vazio. O consolidado
+// continuava lendo por ela e devolvia ZERO — a tela mostrava Realizado cheio
+// contra Planejado 0,00, com o valor lançado logo ao lado.
+// ---------------------------------------------------------------------------
+
+test("o consolidado da filial soma os centros", () => {
+  let visao = definirContasDoCentro(criarVisao("v1", "X", "25"), MODULO, "000001", "002", [CONTA]);
+  visao = definirContasDoCentro(visao, MODULO, "000001", "008", [CONTA]);
+
+  const p = plano({
+    [chavePlanejado(MODULO, "000001", "002", CONTA, 1)]: 100,
+    [chavePlanejado(MODULO, "000001", "008", CONTA, 1)]: 25,
+  });
+  const comum = { plano: p, visao, moduloId: MODULO, filiais: [FILIAIS[0]], contas: [CONTA] };
+
+  assert.equal(mes(criarLinhasOrcamento({ ...comum, centroId: "002" }), 1).planejado, 100);
+  assert.equal(mes(criarLinhasOrcamento({ ...comum, centroId: "008" }), 1).planejado, 25);
+  assert.equal(
+    mes(criarLinhasOrcamento({ ...comum, centroId: SEM_CENTRO }), 1).planejado,
+    125,
+    "Total — todos os centros"
+  );
+});
+
+test("o consolidado percentual também soma os centros", () => {
+  let visao = definirContasDoCentro(criarVisao("v1", "X", "25"), MODULO, "000001", "002", [CONTA]);
+  visao = definirContasDoCentro(visao, PERCENTUAL, "000001", "002", [CONTA_DEDUCAO]);
+  visao = definirContasDoCentro(visao, PERCENTUAL, "000001", "008", [CONTA_DEDUCAO]);
+
+  const p = plano({
+    [chavePlanejado(MODULO, "000001", "002", CONTA, 1)]: 1000,
+    [chavePlanejado(PERCENTUAL, "000001", "002", CONTA_DEDUCAO, 1, CONTA)]: 6,
+    [chavePlanejado(PERCENTUAL, "000001", "008", CONTA_DEDUCAO, 1, CONTA)]: 4,
+  });
+
+  const linha = mes(
+    criarLinhasOrcamento({
+      plano: p,
+      visao,
+      moduloId: PERCENTUAL,
+      filiais: [FILIAIS[0]],
+      centroId: SEM_CENTRO,
+      contas: [CONTA_DEDUCAO],
+    }),
+    1
+  );
+
+  assert.equal(linha.planejadoPercentual, 10, "as duas taxas compõem a da filial");
+  assert.equal(linha.planejado, 100, "10% de 1.000");
+});
+
+// Plano montado antes do centro obrigatório: o valor está sob a chave vazia e a
+// filial não tem centro na visão. Continua aparecendo em vez de sumir.
+test("plano antigo, sem centro na visão, ainda é lido", () => {
+  const visao = criarVisao("v1", "X", "25");
+  const p = plano({ [chavePlanejado(MODULO, "000001", SEM_CENTRO, CONTA, 1)]: 77 });
+
+  const linha = mes(
+    criarLinhasOrcamento({
+      plano: p,
+      visao,
+      moduloId: MODULO,
+      filiais: [FILIAIS[0]],
+      centroId: SEM_CENTRO,
+      contas: [CONTA],
+    }),
+    1
+  );
+  assert.equal(linha.planejado, 77);
 });

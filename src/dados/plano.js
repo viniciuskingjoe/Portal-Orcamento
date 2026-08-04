@@ -78,11 +78,30 @@ export function criarPlano(id, nome, ano, visaoId) {
 // Cálculo
 // --------------------------------------------------------------------------
 
-function digitadoDoMes(plano, moduloId, filialId, centroId, contas, mes) {
+// Em quais centros procurar o valor. Um centro escolhido é ele mesmo; SEM_CENTRO
+// é o consolidado — "Total, todos os centros" — e aí é preciso somar os centros
+// que a filial usa.
+//
+// Isto existe porque todo módulo passou a ser orçado por centro: nada mais fica
+// gravado sob a chave de centro vazio. Ler o consolidado por aquela chave
+// devolvia zero com valor lançado logo ao lado, e a tela mostrava Realizado
+// cheio contra Planejado zerado — parecia erro de cálculo e era leitura no lugar
+// errado.
+function centrosParaLeitura(visao, moduloId, filialId, centroId) {
+  if (centroId !== SEM_CENTRO) return [centroId];
+  const daFilial = centrosDaFilial(visao, moduloId, filialId);
+  // Sem visão (ou filial sem centro) sobra a própria chave vazia: é o que os
+  // planos anteriores ao centro obrigatório têm gravado.
+  return daFilial.length ? daFilial : [SEM_CENTRO];
+}
+
+function digitadoDoMes(plano, visao, moduloId, filialId, centroId, contas, mes) {
   let total = 0;
-  contas.forEach((conta) => {
-    total += plano.planejado[chavePlanejado(moduloId, filialId, centroId, conta, mes)] ?? 0;
-  });
+  for (const centro of centrosParaLeitura(visao, moduloId, filialId, centroId)) {
+    for (const conta of contas) {
+      total += plano.planejado[chavePlanejado(moduloId, filialId, centro, conta, mes)] ?? 0;
+    }
+  }
   return total;
 }
 
@@ -145,21 +164,28 @@ function planejadoDoMes(plano, visao, moduloId, filiais, centroId, contas, mes, 
 
   filiais.forEach((filial) => {
     if (!percentual) {
-      const daFilial = digitadoDoMes(plano, moduloId, filial.id, centroId, contas, mes);
+      const daFilial = digitadoDoMes(plano, visao, moduloId, filial.id, centroId, contas, mes);
       digitado += daFilial;
       reais += daFilial;
       return;
     }
 
+    const centros = centrosParaLeitura(visao, moduloId, filial.id, centroId);
+
     (receitas ?? receitasDaBase(visao, filial.id)).forEach((receita) => {
       const baseDaConta = baseDaReceita(plano, visao, filial.id, receita, mes);
       base += baseDaConta;
 
-      contas.forEach((conta) => {
-        const chave = chavePlanejado(moduloId, filial.id, centroId, conta, mes, receita);
-        const lancado = plano.planejado[chave] ?? 0;
-        digitado += lancado;
-        reais += (lancado / 100) * baseDaConta;
+      // A taxa é somada sobre os centros da mesma forma que o valor em reais:
+      // no consolidado, duas taxas lançadas em centros diferentes compõem a taxa
+      // da filial, e ler só a chave de centro vazio devolveria zero.
+      centros.forEach((centro) => {
+        contas.forEach((conta) => {
+          const chave = chavePlanejado(moduloId, filial.id, centro, conta, mes, receita);
+          const lancado = plano.planejado[chave] ?? 0;
+          digitado += lancado;
+          reais += (lancado / 100) * baseDaConta;
+        });
       });
     });
   });
