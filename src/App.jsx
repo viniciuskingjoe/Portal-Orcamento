@@ -139,6 +139,22 @@ function PlanejamentoOrcamentario({ sessao, onSair }) {
   const [grupos, setGrupos] = useState([]);
   const [grupoAbertoId, setGrupoAbertoId] = useState(null);
 
+  // Um grupo novo só existe aqui até alguém clicar em salvar: ele nasce no
+  // clique de "Novo grupo" e o servidor não sabe dele. Trocar a lista pela do
+  // servidor apagava o que estava sendo preenchido — e como a tela do grupo
+  // depende de achá-lo na lista, ela caía sozinha de volta para os planos no
+  // meio da digitação, a cada minuto ou ao voltar o foco da janela.
+  //
+  // Só os marcados `novo` sobrevivem: sem isso, um grupo que outra pessoa
+  // excluiu ressuscitaria em cada atualização.
+  function mesclarGrupos(doServidor) {
+    setGrupos((atuais) => {
+      const salvos = new Set(doServidor.map((grupo) => grupo.id));
+      const pendentes = atuais.filter((grupo) => grupo.novo && !salvos.has(grupo.id));
+      return [...pendentes, ...doServidor];
+    });
+  }
+
   // Guardas da atualização de fundo — ver o efeito mais abaixo.
   const gravacoesEmVoo = useRef(0);
   const editandoAgora = useRef(false);
@@ -228,7 +244,7 @@ function PlanejamentoOrcamentario({ sessao, onSair }) {
 
   useEffect(() => {
     let vivo = true;
-    repo.grupos().then((lista) => vivo && setGrupos(lista)).catch(() => {});
+    repo.grupos().then((lista) => vivo && mesclarGrupos(lista)).catch(() => {});
     carregarEstado()
       .then((dados) => {
         if (!vivo) return;
@@ -276,7 +292,7 @@ function PlanejamentoOrcamentario({ sessao, onSair }) {
         setConfiguracao(dados.configuracao);
         setVisoes(dados.visoes);
         setPlanos(dados.planos);
-        setGrupos(lista);
+        mesclarGrupos(lista);
       } catch {
         // Silêncio de propósito: isto é atualização de fundo, e uma faixa
         // vermelha por causa de uma falha de rede que ninguém pediu assusta sem
@@ -506,7 +522,7 @@ function PlanejamentoOrcamentario({ sessao, onSair }) {
   function voltar() {
     if (tela === "visao-modulo") return navegar("visao");
     if (tela === "visao") return navegar("visoes");
-    if (tela === "grupo") return navegar("grupos");
+    if (tela === "grupo") return sairDoGrupo();
     if (tela === "grupos") return navegar("configuracoes");
     if (TELAS_ERP.has(tela)) return navegar("configuracoes");
     if (moduloDaTela) return navegar("home");
@@ -573,7 +589,8 @@ function PlanejamentoOrcamentario({ sessao, onSair }) {
   // --------------------------------------------------------------------------
 
   function novoGrupo() {
-    const grupo = { id: gerarId("grupo"), nome: "", centros: [], contas: [] };
+    // `novo` marca o que ainda não existe no servidor — ver `mesclarGrupos`.
+    const grupo = { id: gerarId("grupo"), nome: "", centros: [], contas: [], novo: true };
     setGrupos((atuais) => [...atuais, grupo]);
     setGrupoAbertoId(grupo.id);
     navegar("grupo");
@@ -581,7 +598,14 @@ function PlanejamentoOrcamentario({ sessao, onSair }) {
 
   async function salvarGrupo(grupo) {
     await repo.grupo.salvar(grupo);
-    setGrupos(await repo.grupos());
+    mesclarGrupos(await repo.grupos());
+    navegar("grupos");
+  }
+
+  // Sair sem salvar joga fora o grupo que nunca chegou ao servidor — senão
+  // sobra na lista um cartão sem nome que ninguém pediu.
+  function sairDoGrupo() {
+    setGrupos((atuais) => atuais.filter((grupo) => !(grupo.novo && grupo.id === grupoAbertoId)));
     navegar("grupos");
   }
 
@@ -1076,7 +1100,7 @@ function PlanejamentoOrcamentario({ sessao, onSair }) {
           erro={contas.erro || erp.erro}
           onRecarregar={contas.recarregar}
           onSalvar={salvarGrupo}
-          onVoltar={() => navegar("grupos")}
+          onVoltar={sairDoGrupo}
         />
       );
     }
