@@ -336,34 +336,28 @@ export async function salvarPlano({ id, nome, ano, visaoId }, login) {
 // --------------------------------------------------------------------------
 // Grupos de centro de custo
 //
-// Configuração global, como as filiais em uso: um grupo junta centros e as
-// contas que interessam para lê-los, e serve de lente sobre o DRE. Não é visão
-// — a visão diz o que cada módulo ORÇA, o grupo é recorte de LEITURA por cima do
-// que já foi orçado.
+// Configuração global, como as filiais em uso: um grupo junta centros de custo
+// e serve de lente sobre o DRE. Não é visão — a visão diz o que cada módulo
+// ORÇA e quais contas ele usa; o grupo só recorta POR ONDE ler o que já foi
+// orçado.
 // --------------------------------------------------------------------------
 
 export async function listarGrupos() {
-  const [grupos, centros, contas] = await Promise.all([
-    query(
-      "SELECT ID, NOME FROM dbo.KING_PORTAL_ORC_GRUPO ORDER BY NOME"
-    ),
+  const [grupos, centros] = await Promise.all([
+    query("SELECT ID, NOME FROM dbo.KING_PORTAL_ORC_GRUPO ORDER BY NOME"),
     query("SELECT GRUPO_ID, CENTRO_CUSTO FROM dbo.KING_PORTAL_ORC_GRUPO_CENTRO"),
-    query(
-      "SELECT GRUPO_ID, CLASSIFICACAO FROM dbo.KING_PORTAL_ORC_GRUPO_CONTA ORDER BY CLASSIFICACAO"
-    ),
   ]);
 
   return grupos.map((grupo) => ({
     id: grupo.ID,
     nome: grupo.NOME,
     centros: centros.filter((c) => c.GRUPO_ID === grupo.ID).map((c) => c.CENTRO_CUSTO),
-    contas: contas.filter((c) => c.GRUPO_ID === grupo.ID).map((c) => c.CLASSIFICACAO),
   }));
 }
 
 // Grava o grupo inteiro de uma vez. São dezenas de itens escolhidos numa tela
 // só, e gravar item a item deixaria o grupo meio salvo se a rede caísse no meio.
-export async function salvarGrupo({ id, nome, centros, contas }, login) {
+export async function salvarGrupo({ id, nome, centros }, login) {
   if (!id || !String(nome ?? "").trim()) {
     const erro = new Error("Informe um nome para o grupo.");
     erro.status = 400;
@@ -391,14 +385,6 @@ export async function salvarGrupo({ id, nome, centros, contas }, login) {
       );
     }
 
-    await q("DELETE FROM dbo.KING_PORTAL_ORC_GRUPO_CONTA WHERE GRUPO_ID = @id", { id });
-    for (const conta of [...new Set(contas ?? [])]) {
-      await q(
-        `INSERT INTO dbo.KING_PORTAL_ORC_GRUPO_CONTA (GRUPO_ID, CLASSIFICACAO)
-         VALUES (@id, @conta)`,
-        { id, conta }
-      );
-    }
   });
 }
 

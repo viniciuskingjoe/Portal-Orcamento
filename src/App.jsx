@@ -217,23 +217,17 @@ function PlanejamentoOrcamentario({ sessao, onSair }) {
     [sessao, erp.centros]
   );
 
-  // A visão contábil em uso depende de onde se está: montando uma visão ou
-  // orçando um plano.
   const grupoAberto = useMemo(
     () => grupos.find((grupo) => grupo.id === grupoAbertoId) ?? null,
     [grupos, grupoAbertoId]
   );
 
-  // O grupo não tem visão contábil própria: ele é lido DENTRO de um plano, e
-  // quem manda ali é a visão contábil da visão daquele plano. Aqui a padrão só
-  // serve para desenhar a árvore de onde se escolhem as contas do grupo.
-  const visaoContabilPadrao = visoes[0]?.visaoContabil ?? erp.visoesContabeis[0]?.id ?? null;
-
+  // A visão contábil em uso depende de onde se está: montando uma visão ou
+  // orçando um plano. O grupo não entra aqui — ele só junta centros de custo, e
+  // quais contas aparecem é decisão da visão do plano em que o DRE for lido.
   const visaoContabil =
-    tela === "grupo"
-      ? visaoContabilPadrao
-      : ((tela === "visao" || tela === "visao-modulo" ? visaoAberta : visaoDoPlano)?.visaoContabil ??
-        null);
+    (tela === "visao" || tela === "visao-modulo" ? visaoAberta : visaoDoPlano)?.visaoContabil ??
+    null;
 
   const contas = useContas(visaoContabil);
   const realizado = useRealizado(planoAtivo?.ano ?? null, visaoDoPlano?.visaoContabil ?? null);
@@ -1095,10 +1089,9 @@ function PlanejamentoOrcamentario({ sessao, onSair }) {
         <TelaGrupo
           grupo={grupoAberto}
           centros={centrosDoErpVisiveis}
-          catalogo={contas.catalogo}
-          carregando={contas.carregando || erp.carregando}
-          erro={contas.erro || erp.erro}
-          onRecarregar={contas.recarregar}
+          carregando={erp.carregando}
+          erro={erp.erro}
+          onRecarregar={erp.recarregar}
           onSalvar={salvarGrupo}
           onVoltar={sairDoGrupo}
         />

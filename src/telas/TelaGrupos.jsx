@@ -6,12 +6,12 @@ import Icone from "../componentes/Icone.jsx";
 // ============================================================================
 // GRUPOS DE CENTRO DE CUSTO
 //
-// Um grupo junta centros e as contas que interessam para lê-los — "Fábrica",
-// "Lojas", "Administrativo" — e serve de lente sobre o DRE.
+// Um grupo junta centros de custo — "Fábrica", "Lojas", "Administrativo" — e
+// serve de lente sobre o DRE.
 //
-// NÃO é visão. A visão diz o que cada módulo ORÇA; o grupo é recorte de LEITURA
-// por cima do que já foi orçado. Por isso mora em Configurações, junto das
-// filiais em uso, e não dentro da visão.
+// NÃO é visão, e não escolhe contas. A visão diz o que cada módulo ORÇA e com
+// quais contas; o grupo só recorta POR ONDE ler o que já foi orçado. Por isso
+// mora em Configurações, junto das filiais em uso, e não dentro da visão.
 //
 // Um centro pode estar em vários grupos: "020 E-COMMERCE" cabe em "Digital" e
 // em "Comercial" ao mesmo tempo, e exigir exclusividade obrigaria a escolher uma
@@ -62,8 +62,7 @@ export default function TelaGrupos({
                   <strong>{grupo.nome}</strong>
                   <small>
                     {grupo.centros.length}{" "}
-                    {grupo.centros.length === 1 ? "centro" : "centros"} ·{" "}
-                    {grupo.contas.length} {grupo.contas.length === 1 ? "conta" : "contas"}
+                    {grupo.centros.length === 1 ? "centro de custo" : "centros de custo"}
                   </small>
                   {/* Os nomes dos centros, não os códigos: é o que diz se o
                       grupo é o que se pensa que é sem precisar abri-lo. */}

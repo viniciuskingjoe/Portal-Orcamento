@@ -1293,50 +1293,17 @@ button {
   justify-content: flex-start;
 }
 
-/* Dois painéis que são a MESMA escolha lado a lado — centros e contas do grupo.
-   Terminam na mesma linha.
-
-   Não dá para acertar isso com dois `max-height` iguais: o painel de contas tem
-   a barra de busca por cima, então o mesmo teto na lista deixa o bloco 44px mais
-   alto que o vizinho. Em vez disso a altura é do BLOCO, e cada lista rola por
-   dentro do que sobrar. Assim continuam alinhados por construção, não por
-   coincidência de números. */
-.orcamento-layout--par {
-  height: min(62vh, 640px);
+/* Colunas que se acomodam à largura. São nomes curtos: numa coluna só, os 63
+   centros viram uma rolagem longa onde não se enxerga o que já foi marcado. */
+.grade-centros {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 2px 10px;
+  padding: 6px;
 }
 
-.orcamento-layout--par > .orcamento-lateral,
-.orcamento-layout--par .painel-selecao,
-.orcamento-layout--par > .orcamento-dados,
-.orcamento-layout--par .contas-seletor {
-  height: 100%;
-  /* Sem isto o conteúdo define o mínimo e o filho estoura o pai em vez de rolar. */
-  min-height: 0;
-}
-
-/* A lateral é grudenta na tela do módulo, onde a página rola atrás dela. Aqui o
-   bloco inteiro cabe de uma vez, e grudar não teria o que acompanhar. */
-.orcamento-layout--par > .orcamento-lateral {
-  position: static;
-}
-
-.orcamento-layout--par .painel-selecao {
-  overflow-y: auto;
-}
-
-.orcamento-layout--par .contas-seletor {
-  display: flex;
-  flex-direction: column;
-}
-
-.orcamento-layout--par .contas-seletor__topo {
-  flex: 0 0 auto;
-}
-
-.orcamento-layout--par .contas-seletor__lista {
-  flex: 1 1 auto;
-  max-height: none;
-  min-height: 0;
+.grade-centros .sem-contas {
+  grid-column: 1 / -1;
 }
 
 /* Nome de filial é longo e não tem código para encurtar ("KING&JOE FILIAL LOJA
@@ -2691,21 +2658,6 @@ dialog::backdrop {
 
   .orcamento-lateral > .painel-selecao {
     flex: 1 1 220px;
-  }
-
-  /* Empilhados, não mais lado a lado: terminar na mesma linha deixou de
-     significar alguma coisa, e a altura travada só cortaria as listas. */
-  .orcamento-layout--par,
-  .orcamento-layout--par > .orcamento-lateral,
-  .orcamento-layout--par .painel-selecao,
-  .orcamento-layout--par > .orcamento-dados,
-  .orcamento-layout--par .contas-seletor {
-    height: auto;
-  }
-
-  .orcamento-layout--par .painel-selecao,
-  .orcamento-layout--par .contas-seletor__lista {
-    max-height: 50vh;
   }
 }
 

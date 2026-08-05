@@ -2,13 +2,13 @@
    GRUPOS DE CENTRO DE CUSTO
    Depende de: 003-orcamento-dados.sql
 
-   Um grupo junta centros de custo e as contas que interessam para lê-los —
-   "Fábrica", "Lojas", "Administrativo" — para o DRE poder ser visto por esse
-   recorte em vez de centro a centro.
+   Um grupo junta centros de custo — "Fábrica", "Lojas", "Administrativo" —
+   para o DRE poder ser visto por esse recorte em vez de centro a centro.
 
    É configuração GLOBAL, como as filiais em uso: vale para todos os planos.
-   Não é visão. A visão diz quais contas cada módulo orça; o grupo é uma lente
-   de leitura por cima do que já foi orçado.
+   Não é visão, e não guarda contas: a visão do plano já diz quais contas cada
+   módulo orça, e uma segunda lista aqui só teria como serventia discordar da
+   primeira. O grupo diz POR ONDE ler, não O QUE ler.
 
    Um centro pode estar em vários grupos: "020 E-COMMERCE" cabe em "Digital" e
    em "Comercial" ao mesmo tempo, e forçar exclusividade obrigaria a escolher
@@ -59,18 +59,15 @@ BEGIN
 END
 GO
 
-/* Contas do grupo. A classificação é lida na visão contábil do plano em que o
-   grupo for usado — ver a nota acima. */
-IF OBJECT_ID('dbo.KING_PORTAL_ORC_GRUPO_CONTA', 'U') IS NULL
+/* O grupo NÃO guarda contas.
+   Uma versão anterior deste script criava KING_PORTAL_ORC_GRUPO_CONTA. A visão
+   do plano já define quais contas cada módulo orça; repetir a escolha aqui só
+   criava uma segunda lista para discordar da primeira na hora de ler o DRE.
+   Removida aqui para quem já rodou a versão antiga. */
+IF OBJECT_ID('dbo.KING_PORTAL_ORC_GRUPO_CONTA', 'U') IS NOT NULL
 BEGIN
-  CREATE TABLE dbo.KING_PORTAL_ORC_GRUPO_CONTA (
-    GRUPO_ID       VARCHAR(40)  NOT NULL,
-    CLASSIFICACAO  VARCHAR(20)  NOT NULL,
-
-    CONSTRAINT PK_KING_PORTAL_ORC_GRUPO_CONTA PRIMARY KEY CLUSTERED (GRUPO_ID, CLASSIFICACAO),
-    CONSTRAINT FK_KING_PORTAL_ORC_GRUPO_CONTA
-      FOREIGN KEY (GRUPO_ID) REFERENCES dbo.KING_PORTAL_ORC_GRUPO (ID) ON DELETE CASCADE
-  );
+  DROP TABLE dbo.KING_PORTAL_ORC_GRUPO_CONTA;
+  PRINT 'Tabela KING_PORTAL_ORC_GRUPO_CONTA removida.';
 END
 GO
 
