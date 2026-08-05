@@ -66,7 +66,7 @@ export default function Sidebar({
       <nav className="nav" aria-label="Navegação principal">
         <ItemNav
           id="planos"
-          titulo="Planos"
+          titulo="Orçamentos"
           icone="folder"
           ativo={tela === "planos"}
           onNavegar={onNavegar}
