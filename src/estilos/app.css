@@ -45,7 +45,9 @@ button {
   width: var(--sidebar-width);
   display: flex;
   flex-direction: column;
-  padding: 22px 0 16px;
+  /* O recuo lateral é da sidebar, não de cada bloco: assim marca, produto, nav
+     e rodapé nascem alinhados no mesmo eixo, como no Fluxo Fiscal. */
+  padding: 22px 16px 16px;
   background: var(--sidebar-bg);
   color: var(--on-dark);
   overflow-y: auto;
@@ -59,53 +61,62 @@ button {
 
 /* --- marca AKR | BRANDS ------------------------------------------------- */
 
+/* Centralizada e nas duas mesmas medidas do Fluxo Fiscal: é a mesma marca, e
+   quem usa os dois portais nota a diferença antes de ler qualquer palavra. */
 .marca {
   display: flex;
   align-items: center;
+  justify-content: center;
   gap: 10px;
-  padding: 0 22px;
+  padding: 8px 8px 18px;
   color: var(--on-dark);
+  font-size: 23px;
+  font-weight: 800;
+  letter-spacing: 0.18em;
+  white-space: nowrap;
 }
 
 .marca strong {
-  font-size: 20px;
-  font-weight: 800;
-  letter-spacing: -0.01em;
+  font-size: inherit;
+  font-weight: inherit;
 }
 
 .marca__divisor {
   width: 1px;
-  height: 20px;
-  background: var(--sidebar-line);
+  height: 1.05em;
+  background: currentColor;
+  opacity: 0.4;
 }
 
 .marca__sufixo {
-  font-size: 15px;
   font-weight: 300;
-  letter-spacing: 0.18em;
+  letter-spacing: 0.32em;
 }
 
 /* --- produto ------------------------------------------------------------ */
 
+/* Linha, não cartão. O bloco identifica o portal; virar cartão o punha no mesmo
+   peso visual dos itens de menu, e o produto não é um destino de navegação. */
 .produto {
   display: flex;
   align-items: center;
-  gap: 11px;
-  margin: 20px 14px 18px;
-  padding: 11px 10px;
-  border-radius: var(--radius-md);
-  background: var(--sidebar-hover);
+  gap: 10px;
+  margin: 0 0 4px;
+  padding: 0 8px 20px;
+  border-bottom: 1px solid var(--sidebar-line);
 }
 
+/* Quadrado neutro: o azul da sidebar é reservado ao item ativo e ao avatar.
+   Gastá-lo aqui competia com o realce que diz onde a pessoa está. */
 .produto__icone {
   flex: 0 0 auto;
-  width: 34px;
-  height: 34px;
+  width: 32px;
+  height: 32px;
   display: grid;
   place-items: center;
-  border-radius: var(--radius-sm);
-  background: var(--sidebar-accent);
-  color: var(--sidebar-bg);
+  border-radius: 11px;
+  background: rgba(255, 255, 255, 0.12);
+  color: var(--on-dark);
 }
 
 .produto__texto {
@@ -116,13 +127,13 @@ button {
 }
 
 .produto__texto strong {
-  font-size: 14px;
+  font-size: 15px;
   color: var(--on-dark);
 }
 
 .produto__texto small {
   font-size: 12px;
-  color: var(--sidebar-faint);
+  color: var(--sidebar-muted);
 }
 
 /* --- navegação ---------------------------------------------------------- */
@@ -130,19 +141,18 @@ button {
 .nav {
   display: flex;
   flex-direction: column;
-  gap: 2px;
-  padding: 0 8px;
+  gap: 6px;
 }
 
 .nav-grupo {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 6px;
   margin-top: 16px;
 }
 
 .nav-grupo__titulo {
-  padding: 0 10px 6px;
+  padding: 0 12px 6px;
   font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.09em;
@@ -150,21 +160,24 @@ button {
   color: var(--sidebar-faint);
 }
 
+/* O Fluxo Fiscal usa 16px aqui. Este portal fica em 15: os nomes de módulo são
+   bem mais longos ("Receitas não operacionais"), e a 16 até "Planos
+   Orçamentários" passava do fim da linha. O resto — peso, recuo, raio — é igual. */
 .nav-item {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 11px;
   width: 100%;
-  min-height: 38px;
-  padding: 0 10px;
+  padding: 11px 12px;
   border: 0;
-  border-radius: var(--radius-sm);
+  border-radius: 8px;
   background: transparent;
   color: var(--sidebar-text);
-  font-size: 13.5px;
+  font-size: 15px;
+  font-weight: 700;
   text-align: left;
   cursor: pointer;
-  transition: background 0.16s ease, color 0.16s ease;
+  transition: background 0.18s ease, color 0.18s ease;
 }
 
 .nav-item > span {
@@ -183,7 +196,6 @@ button {
 .nav-item.is-active {
   background: var(--sidebar-active);
   color: var(--on-dark);
-  font-weight: 600;
   box-shadow: inset 3px 0 0 var(--sidebar-accent);
 }
 
@@ -194,23 +206,22 @@ button {
 
 .nav-badge {
   flex: 0 0 auto;
-  min-width: 21px;
-  padding: 1px 6px;
+  min-width: 24px;
+  padding: 1px 7px;
   border-radius: 999px;
-  background: var(--sidebar-hover);
-  color: var(--sidebar-text);
-  font-size: 11px;
-  font-weight: 700;
+  background: rgba(255, 255, 255, 0.13);
+  color: #dbe8fb;
+  font-size: 13px;
   text-align: center;
 }
 
 .nav-item.is-active .nav-badge {
   background: var(--sidebar-accent);
-  color: var(--sidebar-bg);
+  color: var(--sidebar-sobre-accent);
 }
 
 .nav-aviso {
-  margin: 4px 10px 0;
+  margin: 4px 12px 0;
   color: var(--sidebar-faint);
   font-size: 11.5px;
   line-height: 1.35;
@@ -220,10 +231,10 @@ button {
 
 .sidebar__rodape {
   margin-top: auto;
-  padding: 16px 12px 0;
+  padding-top: 16px;
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 13px;
 }
 
 .tema-toggle {
@@ -249,21 +260,21 @@ button {
 .card-usuario {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 10px;
+  gap: 9px;
+  padding: 10px 7px 4px;
   border-top: 1px solid var(--sidebar-line);
 }
 
 .card-usuario__avatar {
   flex: 0 0 auto;
-  width: 32px;
-  height: 32px;
+  width: 34px;
+  height: 34px;
   display: grid;
   place-items: center;
   border-radius: 999px;
-  background: var(--sidebar-hover);
-  color: var(--on-dark);
-  font-size: 12px;
+  background: var(--sidebar-accent);
+  color: var(--sidebar-sobre-accent);
+  font-size: 13px;
   font-weight: 800;
 }
 
@@ -275,7 +286,7 @@ button {
 }
 
 .card-usuario__texto strong {
-  font-size: 11.5px;
+  font-size: 13px;
   color: var(--on-dark);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -283,8 +294,8 @@ button {
 }
 
 .card-usuario__texto small {
-  font-size: 10.5px;
-  color: var(--sidebar-faint);
+  font-size: 12px;
+  color: var(--sidebar-muted);
 }
 
 /* ==========================================================================

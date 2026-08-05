@@ -46,11 +46,17 @@
   /* A sidebar é preta nos dois temas, então seus tons não pertencem ao par
      claro/escuro — ficam fora do bloco [data-theme]. */
   --sidebar-accent: #6aa8f2;
-  --sidebar-text: rgba(255, 255, 255, 0.7);
+  --sidebar-text: rgba(255, 255, 255, 0.72);
+  --sidebar-muted: rgba(255, 255, 255, 0.6);
   --sidebar-faint: rgba(255, 255, 255, 0.42);
-  --sidebar-hover: rgba(255, 255, 255, 0.06);
-  --sidebar-active: rgba(106, 168, 242, 0.13);
+  --sidebar-hover: rgba(255, 255, 255, 0.07);
+  /* Realce neutro, não azulado: o azul do item ativo é a barra de 3px à
+     esquerda, e tingir o fundo também deixava o realce mais forte que o do
+     Fluxo Fiscal. */
+  --sidebar-active: rgba(255, 255, 255, 0.14);
   --sidebar-line: rgba(255, 255, 255, 0.09);
+  /* Texto sobre o azul do avatar — branco sobre #6aa8f2 não tem contraste. */
+  --sidebar-sobre-accent: #0f2742;
 }
 
 :root[data-theme="dark"] {
