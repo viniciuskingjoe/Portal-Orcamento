@@ -30,7 +30,10 @@ DECLARE @fim     DATETIME2(3) = '2027-01-01';
 DECLARE @excluidos TABLE (TIPO VARCHAR(10) PRIMARY KEY);
 INSERT INTO @excluidos (TIPO) VALUES ('ELD'), ('LAC'), ('ELC'), ('LAD');
 
-WITH movimento AS (
+/* Tabela temporária, e não CTE: uma CTE vale só para o comando seguinte, e
+   aqui três consultas leem o mesmo movimento. */
+IF OBJECT_ID('tempdb..#movimento') IS NOT NULL DROP TABLE #movimento;
+
   SELECT
     RTRIM(pv.CLASSIFICACAO)  AS classificacao,
     MONTH(l.DATA_LANCAMENTO) AS mes,
@@ -42,6 +45,7 @@ WITH movimento AS (
         * ISNULL(pv.PORCENTAGEM, 100) / 100.0
         * ISNULL(cri.PORCENTAGEM, 100) / 100.0
         * CASE WHEN RTRIM(pv.OPERADOR) = '-' THEN -1 ELSE 1 END)  AS credito
+  INTO #movimento
   FROM dbo.CTB_LANCAMENTO_ITEM AS i
   INNER JOIN dbo.CTB_LANCAMENTO AS l
     ON l.LANCAMENTO = i.LANCAMENTO
@@ -55,8 +59,7 @@ WITH movimento AS (
     AND l.DATA_LANCAMENTO <  @fim
     AND RTRIM(UPPER(ISNULL(i.LX_TIPO_LANCAMENTO, ''))) NOT IN (SELECT TIPO FROM @excluidos)
     AND RTRIM(pv.CLASSIFICACAO) LIKE '4.1.%'
-  GROUP BY RTRIM(pv.CLASSIFICACAO), MONTH(l.DATA_LANCAMENTO)
-)
+  GROUP BY RTRIM(pv.CLASSIFICACAO), MONTH(l.DATA_LANCAMENTO);
 
 /* -------------------------------------------------------------------------
    1) Conta a conta. Despesa é DÉBITO menos CRÉDITO.
@@ -73,7 +76,7 @@ SELECT
          '4.1.3.01.001',
          '4.1.5.01.040')
        THEN 'custos-variaveis' ELSE '' END    AS modulo_do_portal
-FROM movimento m
+FROM #movimento m
 LEFT JOIN dbo.CTB_VISAO v
   ON RTRIM(v.CLASSIFICACAO) = m.classificacao
  AND RTRIM(v.VISAO_CONTABIL) = @visao
@@ -91,7 +94,7 @@ ORDER BY m.mes, m.classificacao;
 SELECT
   m.mes,
   CAST(SUM(m.debito - m.credito) AS DECIMAL(18,2)) AS realizado_custos_variaveis
-FROM movimento m
+FROM #movimento m
 WHERE m.mes BETWEEN 1 AND 3
   AND m.classificacao IN (
         '4.1.1.01.001', '4.1.2.01.001', '4.1.2.02.001', '4.1.3.01.001', '4.1.5.01.040')
