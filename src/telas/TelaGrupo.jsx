@@ -147,12 +147,12 @@ export default function TelaGrupo({
       {erro ? <AvisoErro mensagem={erro} onTentarDeNovo={onRecarregar} /> : null}
 
       {!carregando && !erro ? (
-        <div className="orcamento-layout">
+        <div className="orcamento-layout orcamento-layout--par">
           {/* Centros à esquerda, contas à direita — o mesmo par da tela de
               visão. As duas listas são escolhas do mesmo tipo, e um seletor
               suspenso escondia metade da decisão atrás de um clique. */}
           <aside className="orcamento-lateral">
-            <section className="painel-selecao painel-selecao--alta">
+            <section className="painel-selecao">
               <h3>Centros de custo</h3>
               <p className="painel-selecao__descricao">
                 {escolhidos.length
@@ -213,7 +213,7 @@ export default function TelaGrupo({
                 </span>
               </div>
 
-              <div className="contas-seletor__lista contas-seletor__lista--alta">
+              <div className="contas-seletor__lista">
                 {linhas.length ? (
                   linhas.map((item) => (
                     <LinhaConta
