@@ -1,5 +1,6 @@
 import { useState } from "react";
 
+import CampoSenha from "../componentes/CampoSenha.jsx";
 import Icone from "../componentes/Icone.jsx";
 import { EMPRESA } from "../dados/seeds.js";
 
@@ -70,16 +71,12 @@ export default function TelaLogin({ onEntrar, carregando, erro }) {
           />
         </label>
 
-        <label className="campo-login">
-          <span>Senha do portal</span>
-          <input
-            type="password"
-            value={senha}
-            onChange={(evento) => setSenha(evento.target.value)}
-            autoComplete="current-password"
-            disabled={carregando}
-          />
-        </label>
+        <CampoSenha
+          rotulo="Senha do portal"
+          valor={senha}
+          aoMudar={setSenha}
+          disabled={carregando}
+        />
 
         {erro ? (
           <p className="login-erro" role="alert">

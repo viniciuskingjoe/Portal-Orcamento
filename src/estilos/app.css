@@ -2838,7 +2838,10 @@ dialog::backdrop {
   gap: 6px;
 }
 
-.campo-login span {
+/* O campo de senha usa `label for` em vez de envolver o input: o botão do olho
+   é conteúdo interativo, e o HTML não deixa um label ter outro controle dentro. */
+.campo-login span,
+.campo-login > label {
   color: var(--text);
   font-size: 13px;
   font-weight: 600;
@@ -2858,6 +2861,52 @@ dialog::backdrop {
   outline: none;
   border-color: var(--accent);
   box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
+.campo-senha {
+  position: relative;
+  display: flex;
+}
+
+.campo-senha input {
+  flex: 1;
+  min-width: 0;
+  /* Espaço do olho: sem isso a senha longa passa por baixo do botão. */
+  padding-right: 44px;
+}
+
+/* O Edge põe um olho próprio no campo de senha. Dois olhos lado a lado, um
+   deles fora do nosso estilo, é pior do que nenhum. */
+.campo-senha input::-ms-reveal,
+.campo-senha input::-ms-clear {
+  display: none;
+}
+
+.campo-senha__olho {
+  position: absolute;
+  top: 50%;
+  right: 4px;
+  transform: translateY(-50%);
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: none;
+  color: var(--text-soft);
+  cursor: pointer;
+}
+
+.campo-senha__olho:hover:not(:disabled) {
+  background: var(--surface);
+  color: var(--accent);
+}
+
+.campo-senha__olho:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
 }
 
 /* Senha mostrada uma única vez. Destacada de propósito: fechar sem anotar
