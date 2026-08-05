@@ -85,17 +85,43 @@ function configuracao() {
 
 let poolPromise = null;
 
-export function pool() {
-  if (!poolPromise) {
-    poolPromise = new sql.ConnectionPool(configuracao())
-      .connect()
-      .catch((erro) => {
-        // Sem isto uma falha na primeira conexão ficaria em cache para sempre e
-        // toda requisição seguinte rejeitaria com o erro antigo.
-        poolPromise = null;
-        throw erro;
-      });
-  }
+function abrirPool() {
+  const conexao = new sql.ConnectionPool(configuracao());
+
+  // Conexão que morre DEPOIS de aberta (rede oscilou, VPN reconectou, o SQL
+  // Server reiniciou) não derruba o pool: ele continua em cache, e toda
+  // requisição seguinte fica pendurada até estourar o requestTimeout — 30s para
+  // devolver erro, indefinidamente, até alguém reiniciar o serviço.
+  //
+  // Descartar o cache aqui faz a próxima requisição abrir um pool novo, e o
+  // portal se recupera sozinho.
+  conexao.on("error", () => {
+    if (poolPromise === promessa) poolPromise = null;
+  });
+
+  const promessa = conexao
+    .connect()
+    .then(() => conexao)
+    .catch((erro) => {
+      // Sem isto uma falha na primeira conexão ficaria em cache para sempre e
+      // toda requisição seguinte rejeitaria com o erro antigo.
+      if (poolPromise === promessa) poolPromise = null;
+      throw erro;
+    });
+
+  return promessa;
+}
+
+export async function pool() {
+  if (!poolPromise) poolPromise = abrirPool();
+  const conexao = await poolPromise;
+
+  // O evento `error` cobre a queda avisada; esta conferência cobre a silenciosa.
+  // Uma tentativa só: se o pool novo também vier desconectado, o erro é outro e
+  // insistir viraria laço.
+  if (conexao.connected) return conexao;
+
+  poolPromise = abrirPool();
   return poolPromise;
 }
 

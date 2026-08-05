@@ -7,3 +7,6 @@ dist
 .env
 .env.*
 !.env.example
+
+# Exportacoes do Scoreplan: dado financeiro real, nao vai para o repositorio.
+dados-scoreplan/
