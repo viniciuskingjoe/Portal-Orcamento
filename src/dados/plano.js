@@ -138,6 +138,22 @@ function baseDaReceita(plano, visao, filialId, receita, mes) {
   return total;
 }
 
+// A base de UM lançamento percentual: a receita da mesma filial, do mesmo
+// centro e da mesma conta de receita.
+//
+// O centro faz parte da base, e não só do recorte. Um percentual lançado em
+// GERAL incide sobre a receita de GERAL — não sobre a soma de GERAL, BAZAR e
+// B2B. Somar a filial inteira multiplicava o planejado pelo número de centros
+// com receita: em janeiro/2026 as deduções davam 1.048.913,47 em vez de
+// 535.458,54.
+//
+// `plano.planejado` já tem SEM_CENTRO como chave nos planos antigos, então a
+// leitura direta serve para os dois formatos.
+function baseNoCentro(plano, filialId, centroId, receita, mes) {
+  const chave = chavePlanejado(MODULO_BASE_DO_PERCENTUAL, filialId, centroId, receita, mes);
+  return plano.planejado[chave] ?? 0;
+}
+
 // Base do percentual na filial: soma das receitas consideradas. `receitas` vem
 // da tela — todas, ou só a que o usuário selecionou.
 export function baseDoPercentual(plano, visao, filialId, mes, receitas = null) {
@@ -173,18 +189,22 @@ function planejadoDoMes(plano, visao, moduloId, filiais, centroId, contas, mes, 
     const centros = centrosParaLeitura(visao, moduloId, filial.id, centroId);
 
     (receitas ?? receitasDaBase(visao, filial.id)).forEach((receita) => {
-      const baseDaConta = baseDaReceita(plano, visao, filial.id, receita, mes);
-      base += baseDaConta;
-
       // A taxa é somada sobre os centros da mesma forma que o valor em reais:
       // no consolidado, duas taxas lançadas em centros diferentes compõem a taxa
       // da filial, e ler só a chave de centro vazio devolveria zero.
+      //
+      // A base é POR CENTRO: cada percentual incide sobre a receita do centro em
+      // que foi lançado. Somar a filial e aplicar a todos multiplicava o valor
+      // pelo número de centros com receita.
       centros.forEach((centro) => {
+        const baseDoCentro = baseNoCentro(plano, filial.id, centro, receita, mes);
+        base += baseDoCentro;
+
         contas.forEach((conta) => {
           const chave = chavePlanejado(moduloId, filial.id, centro, conta, mes, receita);
           const lancado = plano.planejado[chave] ?? 0;
           digitado += lancado;
-          reais += (lancado / 100) * baseDaConta;
+          reais += (lancado / 100) * baseDoCentro;
         });
       });
     });
@@ -360,9 +380,23 @@ export function criarLinhasOrcamento({
       id: mes,
       label: `${String(mes).padStart(2, "0")}/${ano}`,
       planejado: planejado.reais,
-      // O que o usuário digita. `null` fora dos módulos percentuais, para a
-      // tabela saber que não há coluna a mostrar.
-      planejadoPercentual: percentual ? planejado.digitado : null,
+      // A taxa efetiva sobre a base, a mesma conta da linha Total — não a soma
+      // dos percentuais lançados. Cada percentual incide sobre a receita do seu
+      // centro, então somar 10% de um centro com 5% de outro daria "15%" de
+      // coisa nenhuma. Na célula editável há um lançamento só, e a taxa devolve
+      // exatamente o que foi digitado.
+      //
+      // Sem base não há taxa a calcular, e aí o que foi digitado é a única
+      // informação que existe: some-la deixaria a coluna vazia ao lado de um
+      // valor que a pessoa acabou de lançar.
+      //
+      // `null` fora dos módulos percentuais, para a tabela saber que não há
+      // coluna a mostrar.
+      planejadoPercentual: percentual
+        ? planejado.base
+          ? taxa(planejado.reais, planejado.base)
+          : planejado.digitado
+        : null,
       base: planejado.base,
       realizado: houve ? somarRealizado({ ...comum, indice: realizado, mes }) : 0,
       baseRealizada: houve ? receitaRealizada(realizado, mes) : 0,
@@ -511,7 +545,9 @@ export function linhasParaOrcamento({ plano, visao }) {
       // passou a exigir a receita, e converter sobre a receita inteira daria um
       // valor diferente do que a tela mostra.
       if (!receita) continue;
-      reais = (valor / 100) * baseDaReceita(plano, visao, filialId, receita, mes);
+      // Mesma regra da tela: a base é a receita do próprio centro. Aqui o erro
+      // saía do portal e ia para o ERP.
+      reais = (valor / 100) * baseNoCentro(plano, filialId, centroId, receita, mes);
     }
 
     if (!reais) continue;

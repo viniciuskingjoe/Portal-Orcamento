@@ -388,7 +388,9 @@ test("o percentual incide sobre a receita contra a qual foi lançado", () => {
   });
 
   assert.equal(mes(lista, 1).planejado, 300);
-  assert.equal(mes(lista, 1).planejadoPercentual, 15);
+  // 300 sobre 5.000. Somar as duas taxas daria "15%", que não é taxa de nada:
+  // uma incide sobre 1.000 e a outra sobre 4.000.
+  assert.equal(mes(lista, 1).planejadoPercentual, 6);
   assert.equal(mes(lista, 1).base, 5000);
 });
 
@@ -747,11 +749,47 @@ test("o consolidado da filial soma os centros", () => {
 });
 
 test("o consolidado percentual também soma os centros", () => {
+  // Cada centro com a SUA receita: o percentual incide sobre a receita do
+  // próprio centro, então cada um contribui com o seu valor.
+  let visao = definirContasDoCentro(criarVisao("v1", "X", "25"), MODULO, "000001", "002", [CONTA]);
+  visao = definirContasDoCentro(visao, MODULO, "000001", "008", [CONTA]);
+  visao = definirContasDoCentro(visao, PERCENTUAL, "000001", "002", [CONTA_DEDUCAO]);
+  visao = definirContasDoCentro(visao, PERCENTUAL, "000001", "008", [CONTA_DEDUCAO]);
+
+  const p = plano({
+    [chavePlanejado(MODULO, "000001", "002", CONTA, 1)]: 600,
+    [chavePlanejado(MODULO, "000001", "008", CONTA, 1)]: 400,
+    [chavePlanejado(PERCENTUAL, "000001", "002", CONTA_DEDUCAO, 1, CONTA)]: 10,
+    [chavePlanejado(PERCENTUAL, "000001", "008", CONTA_DEDUCAO, 1, CONTA)]: 5,
+  });
+
+  const linha = mes(
+    criarLinhasOrcamento({
+      plano: p,
+      visao,
+      moduloId: PERCENTUAL,
+      filiais: [FILIAIS[0]],
+      centroId: SEM_CENTRO,
+      contas: [CONTA_DEDUCAO],
+    }),
+    1
+  );
+
+  assert.equal(linha.planejado, 80, "10% de 600 mais 5% de 400");
+  assert.equal(linha.planejadoPercentual, 8, "80 sobre a base de 1.000");
+});
+
+// O erro que fazia deduções e custos variáveis darem o dobro: a base era a
+// receita da FILIAL inteira, aplicada ao lançamento de cada centro. Um
+// percentual lançado onde não há receita virava valor tirado da receita alheia,
+// e o planejado saía multiplicado pelo número de centros com receita.
+test("percentual em centro sem receita não vira valor", () => {
   let visao = definirContasDoCentro(criarVisao("v1", "X", "25"), MODULO, "000001", "002", [CONTA]);
   visao = definirContasDoCentro(visao, PERCENTUAL, "000001", "002", [CONTA_DEDUCAO]);
   visao = definirContasDoCentro(visao, PERCENTUAL, "000001", "008", [CONTA_DEDUCAO]);
 
   const p = plano({
+    // Receita só no 002. O 008 tem taxa lançada, mas nada sobre o que incidir.
     [chavePlanejado(MODULO, "000001", "002", CONTA, 1)]: 1000,
     [chavePlanejado(PERCENTUAL, "000001", "002", CONTA_DEDUCAO, 1, CONTA)]: 6,
     [chavePlanejado(PERCENTUAL, "000001", "008", CONTA_DEDUCAO, 1, CONTA)]: 4,
@@ -769,8 +807,8 @@ test("o consolidado percentual também soma os centros", () => {
     1
   );
 
-  assert.equal(linha.planejadoPercentual, 10, "as duas taxas compõem a da filial");
-  assert.equal(linha.planejado, 100, "10% de 1.000");
+  assert.equal(linha.planejado, 60, "só os 6% do centro que tem receita");
+  assert.equal(linha.planejadoPercentual, 6, "60 sobre a base de 1.000");
 });
 
 // Plano montado antes do centro obrigatório: o valor está sob a chave vazia e a
