@@ -1,5 +1,6 @@
 import { useState } from "react";
 
+import CampoSenha from "../componentes/CampoSenha.jsx";
 import Icone from "../componentes/Icone.jsx";
 import { EMPRESA } from "../dados/seeds.js";
 
@@ -66,44 +67,32 @@ export default function TelaTrocarSenha({ sessao, obrigatoria = false, onTrocar,
           </p>
         </div>
 
-        <label className="campo-login">
-          <span>{primeiroAcesso ? "Senha da rede (Windows)" : "Senha atual"}</span>
-          <input
-            type="password"
-            value={senhaAtual}
-            onChange={(evento) => setSenhaAtual(evento.target.value)}
-            autoComplete="current-password"
-            autoFocus
-            disabled={enviando}
-          />
-        </label>
+        <CampoSenha
+          rotulo={primeiroAcesso ? "Senha da rede (Windows)" : "Senha atual"}
+          valor={senhaAtual}
+          aoMudar={setSenhaAtual}
+          disabled={enviando}
+          autoFocus
+        />
 
-        <label className="campo-login">
-          <span>Senha nova</span>
-          <input
-            type="password"
-            value={senhaNova}
-            onChange={(evento) => setSenhaNova(evento.target.value)}
-            autoComplete="new-password"
-            disabled={enviando}
-          />
-          <small className="campo-login__dica">
-            Pelo menos 10 caracteres. Não pode conter o seu nome nem o seu login.
-          </small>
-        </label>
+        <CampoSenha
+          rotulo="Senha nova"
+          valor={senhaNova}
+          aoMudar={setSenhaNova}
+          autoComplete="new-password"
+          disabled={enviando}
+          dica="Pelo menos 10 caracteres. Não pode conter o seu nome nem o seu login."
+        />
 
-        <label className="campo-login">
-          <span>Repita a senha nova</span>
-          <input
-            type="password"
-            value={repetida}
-            onChange={(evento) => setRepetida(evento.target.value)}
-            autoComplete="new-password"
-            disabled={enviando}
-            aria-invalid={diferem || undefined}
-          />
-          {diferem ? <small className="campo-login__dica campo-login__dica--erro">As duas não são iguais.</small> : null}
-        </label>
+        <CampoSenha
+          rotulo="Repita a senha nova"
+          valor={repetida}
+          aoMudar={setRepetida}
+          autoComplete="new-password"
+          disabled={enviando}
+          invalido={diferem}
+          dica={diferem ? "As duas não são iguais." : null}
+        />
 
         {erro ? (
           <p className="login-erro" role="alert">

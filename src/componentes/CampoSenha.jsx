@@ -20,9 +20,13 @@ export default function CampoSenha({
   autoComplete = "current-password",
   disabled = false,
   autoFocus = false,
+  // Texto sob o campo: a regra de força, ou o aviso de que as duas não batem.
+  dica = null,
+  invalido = false,
 }) {
   const [visivel, setVisivel] = useState(false);
   const id = useId();
+  const idDica = `${id}-dica`;
 
   return (
     <div className="campo-login">
@@ -37,6 +41,8 @@ export default function CampoSenha({
           disabled={disabled}
           autoFocus={autoFocus}
           spellCheck={false}
+          aria-invalid={invalido || undefined}
+          aria-describedby={dica ? idDica : undefined}
         />
         {/* `tabIndex={-1}` de propósito: quem navega pelo teclado sai da senha
             direto para o botão de entrar. O olho é gesto de mouse, e ficar no
@@ -54,6 +60,15 @@ export default function CampoSenha({
           <Icone nome={visivel ? "eyeOff" : "eye"} tamanho={18} />
         </button>
       </div>
+
+      {dica ? (
+        <small
+          id={idDica}
+          className={`campo-login__dica ${invalido ? "campo-login__dica--erro" : ""}`}
+        >
+          {dica}
+        </small>
+      ) : null}
     </div>
   );
 }
