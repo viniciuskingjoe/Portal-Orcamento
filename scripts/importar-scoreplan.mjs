@@ -27,6 +27,7 @@
 import { readFile, readdir } from "node:fs/promises";
 import path from "node:path";
 
+import { listarRealizado } from "../server/consultas.js";
 import { query, transaction } from "../server/sqlserver.js";
 
 const MATRIZ = "000001";
@@ -229,6 +230,52 @@ async function lerPasta(pasta, ano) {
   return { celulas, relatorio, semPerfil };
 }
 
+// O portal só mostra o realizado das combinações que a visão configura. O
+// Scoreplan soma tudo, então enquanto a visão não cobrir onde o Linx tem
+// lançamento, os dois nunca batem — e a diferença parece erro de cálculo.
+//
+// Aqui a cobertura sai do próprio razão: para cada conta que o CSV já atribuiu
+// a um módulo, procura toda filial × centro com movimento no ano e devolve a
+// combinação. Não inventa módulo para conta nenhuma — conta que o CSV não
+// menciona continua de fora, e é relatada.
+async function coberturaDoRealizado(celulas, ano, visaoContabil) {
+  const modulosDaConta = new Map();
+  for (const chave of celulas.keys()) {
+    const [modulo, , , conta] = chave.split("|");
+    if (!modulosDaConta.has(conta)) modulosDaConta.set(conta, new Set());
+    modulosDaConta.get(conta).add(modulo);
+  }
+
+  const realizado = await listarRealizado({ ano, visao: visaoContabil });
+  const combinacoes = new Set();
+  const orfas = new Map();
+  let semCentro = 0;
+
+  for (const linha of realizado) {
+    const valor = Number(linha.credito) - Number(linha.debito);
+    if (!valor) continue;
+
+    const modulos = modulosDaConta.get(linha.classificacao);
+    if (!modulos) {
+      orfas.set(linha.classificacao, (orfas.get(linha.classificacao) ?? 0) + valor);
+      continue;
+    }
+
+    // Lançamento sem centro não tem onde entrar: todo módulo do portal usa
+    // centro, e um centro vazio viraria uma linha em branco no seletor.
+    if (!linha.centro) {
+      semCentro += valor;
+      continue;
+    }
+
+    for (const modulo of modulos) {
+      combinacoes.add([modulo, linha.filial, linha.centro, linha.classificacao].join("|"));
+    }
+  }
+
+  return { combinacoes, orfas, semCentro };
+}
+
 async function conferirCadastros(celulas) {
   const centros = new Set();
   const contas = new Set();
@@ -250,24 +297,39 @@ async function conferirCadastros(celulas) {
   };
 }
 
-async function gravar(planoId, celulas, login) {
-  const plano = await query(
-    "SELECT ID, NOME, ANO, VISAO_ID FROM dbo.KING_PORTAL_ORC_PLANO WHERE ID = @id",
+async function carregarPlano(planoId) {
+  const linhas = await query(
+    `SELECT p.ID, p.NOME, p.ANO, p.VISAO_ID, RTRIM(v.VISAO_CONTABIL) AS VISAO_CONTABIL
+       FROM dbo.KING_PORTAL_ORC_PLANO p
+       LEFT JOIN dbo.KING_PORTAL_ORC_VISAO v ON v.ID = p.VISAO_ID
+      WHERE p.ID = @id`,
     { id: planoId }
   );
-  if (!plano.length) throw new Error(`Plano ${planoId} não existe.`);
-  const { VISAO_ID: visaoId, ANO: ano } = plano[0];
-  if (!visaoId) throw new Error(`O plano ${planoId} não tem visão associada.`);
+  if (!linhas.length) throw new Error(`Plano ${planoId} não existe.`);
+  if (!linhas[0].VISAO_ID) throw new Error(`O plano ${planoId} não tem visão associada.`);
+  return linhas[0];
+}
+
+async function gravar(plano, celulas, cobertura, login) {
+  const visaoId = plano.VISAO_ID;
+  const planoId = plano.ID;
 
   const registros = [...celulas.entries()].map(([chave, valor]) => {
     const [modulo, filial, centro, conta, receita, mes] = chave.split("|");
     return { modulo, filial, centro, conta, receita, mes: Number(mes), valor };
   });
 
+  // A visão cobre o que se ORÇA (vem do CSV) mais o que se LÊ (vem do razão).
+  // Sem a segunda parte o portal esconderia realizado que o Scoreplan mostra.
+  const daVisao = new Set([
+    ...registros.map((r) => [r.modulo, r.filial, r.centro, r.conta].join("|")),
+    ...cobertura,
+  ]);
+
   await transaction(async ({ query: q }) => {
     // A visão precisa conhecer a combinação antes de o valor aparecer na tela:
     // o portal só desenha filial × centro × conta que a visão configurou.
-    const modulos = new Set(registros.map((r) => r.modulo));
+    const modulos = new Set([...daVisao].map((c) => c.split("|")[0]));
     for (const modulo of modulos) {
       await q(
         `MERGE dbo.KING_PORTAL_ORC_VISAO_MODULO AS d
@@ -278,7 +340,7 @@ async function gravar(planoId, celulas, login) {
       );
     }
 
-    const centros = new Set(registros.map((r) => [r.modulo, r.filial, r.centro].join("|")));
+    const centros = new Set([...daVisao].map((c) => c.split("|").slice(0, 3).join("|")));
     for (const chave of centros) {
       const [modulo, filial, centro] = chave.split("|");
       await q(
@@ -293,9 +355,7 @@ async function gravar(planoId, celulas, login) {
       );
     }
 
-    const contas = new Set(
-      registros.map((r) => [r.modulo, r.filial, r.centro, r.conta].join("|"))
-    );
+    const contas = daVisao;
     for (const chave of contas) {
       const [modulo, filial, centro, conta] = chave.split("|");
       await q(
@@ -342,7 +402,7 @@ async function gravar(planoId, celulas, login) {
     }
   });
 
-  return { ano, registros: registros.length };
+  return { registros: registros.length, combinacoes: daVisao.size };
 }
 
 async function principal() {
@@ -386,17 +446,49 @@ async function principal() {
     );
   }
 
+  if (!planoId) {
+    console.log("\nInforme --plano <id> para ver a cobertura do realizado.\n");
+    process.exit(deveGravar ? 1 : 0);
+  }
+
+  const plano = await carregarPlano(planoId);
+  const { combinacoes, orfas, semCentro } = await coberturaDoRealizado(
+    celulas,
+    plano.ANO,
+    plano.VISAO_CONTABIL
+  );
+
+  const doCsv = new Set(
+    [...celulas.keys()].map((chave) => chave.split("|").slice(0, 4).join("|"))
+  );
+  const novas = [...combinacoes].filter((chave) => !doCsv.has(chave));
+
+  console.log(`\nCobertura do realizado (plano ${plano.NOME}, ${plano.ANO}):`);
+  console.log(`  combinações vindas do CSV .............. ${doCsv.size}`);
+  console.log(`  combinações só com realizado ........... ${novas.length}`);
+  console.log(`  (entram na visão sem planejado, para o realizado aparecer)`);
+
+  if (orfas.size) {
+    const ordenadas = [...orfas].sort((a, b) => Math.abs(b[1]) - Math.abs(a[1]));
+    const total = ordenadas.reduce((soma, [, valor]) => soma + valor, 0);
+    console.log(
+      `\n  ${orfas.size} contas têm realizado e nenhum módulo as reivindica (${total.toFixed(2)}):`
+    );
+    ordenadas
+      .slice(0, 8)
+      .forEach(([conta, valor]) => console.log(`    ${conta}  ${valor.toFixed(2)}`));
+    if (ordenadas.length > 8) console.log(`    … e mais ${ordenadas.length - 8}`);
+  }
+  if (semCentro) {
+    console.log(`\n  Realizado sem centro de custo, fora da cobertura: ${semCentro.toFixed(2)}`);
+  }
+
   if (!deveGravar) {
-    console.log("\nConferência apenas. Para gravar: --gravar --plano <id>\n");
+    console.log("\nConferência apenas. Para gravar, acrescente --gravar\n");
     process.exit(0);
   }
 
-  if (!planoId) {
-    console.error("\n--gravar exige --plano <id>.");
-    process.exit(1);
-  }
-
-  const { registros } = await gravar(planoId, celulas, "importacao-scoreplan");
+  const { registros } = await gravar(plano, celulas, combinacoes, "importacao-scoreplan");
   console.log(`\nGravadas ${registros} células no plano ${planoId}.\n`);
   process.exit(0);
 }
