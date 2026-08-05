@@ -153,7 +153,10 @@ export default function TelaOrcamento({
               ? "Escolha uma conta na lista à esquerda para lançar o planejado."
               : percentual && filtros.receita === TODAS_AS_CONTAS
                 ? "Escolha também a receita sobre a qual o percentual incide."
-                : `${percentual ? "Digite o percentual ou o valor em reais — as duas colunas aceitam" : "Digite na coluna Planejado"} — Enter grava e desce · arraste o canto da célula (ou Ctrl+Enter) para repetir nos outros meses · Ctrl+D copia o mês de cima · Esc cancela.`;
+                // Pronto para lançar não precisa de aviso: a faixa só existe
+                // para dizer o que FALTA. Explicar o teclado a cada tela era
+                // ocupar espaço fixo com algo que se aprende na primeira vez.
+                : null;
 
   // As dimensões que compõem a célula, na ordem em que se escolhe: sobre o quê
   // (receita) e o quê (conta do módulo). Filial e centro ficam nos seletores do
@@ -262,7 +265,7 @@ export default function TelaOrcamento({
         ) : null}
 
         {/* A dica fecha a linha dos filtros: é sobre o que falta escolher neles. */}
-        <DicaEdicao pronta={podeEditar}>{motivo}</DicaEdicao>
+        <DicaEdicao>{motivo}</DicaEdicao>
 
         {/* Digitar já grava no portal — este botão é outra coisa: manda o
             planejado para o orçamento do Linx, de onde o Power BI lê. Daí o

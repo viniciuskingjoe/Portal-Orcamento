@@ -1059,7 +1059,6 @@ function PlanejamentoOrcamentario({ sessao, onSair }) {
           filiaisAtivas={filiaisAtivas}
           centros={centrosDoErpVisiveis}
           grupos={grupos}
-          visoesContabeis={erp.visoesContabeis}
           onAbrir={(id) => navegar(id)}
         />
       );

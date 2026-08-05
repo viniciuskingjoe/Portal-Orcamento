@@ -6,7 +6,6 @@ export default function TelaConfiguracoes({
   filiaisAtivas,
   centros,
   grupos = [],
-  visoesContabeis,
   onAbrir,
 }) {
   const cartoes = [
@@ -66,12 +65,6 @@ export default function TelaConfiguracoes({
         ))}
       </div>
 
-      <p className="modulo-aviso">
-        <Icone nome="info" tamanho={16} />
-        As listas são do ERP e não se editam aqui — o que o portal decide é quais filiais usar. O
-        plano de contas vem das {visoesContabeis.length} visões contábeis do Linx, escolhidas em
-        cada visão do portal.
-      </p>
     </main>
   );
 }

@@ -1424,12 +1424,6 @@ button {
   font-size: 12.5px;
 }
 
-.dica-edicao.is-ready {
-  border-color: var(--success);
-  background: var(--success-soft);
-  color: var(--success);
-}
-
 /* --- tabela ------------------------------------------------------------- */
 
 .tabela-wrap {
