@@ -4,7 +4,6 @@ import Botao from "../componentes/Botao.jsx";
 import Cabecalho from "../componentes/Cabecalho.jsx";
 import Icone from "../componentes/Icone.jsx";
 import LinhaConta from "../componentes/LinhaConta.jsx";
-import Seletor from "../componentes/Seletor.jsx";
 import { AvisoErro, Carregando } from "../componentes/Estados.jsx";
 import {
   ancestrais,
@@ -67,8 +66,7 @@ export default function TelaGrupo({
     return catalogo.lista
       .filter(
         (item) =>
-          item.codigo.toLowerCase().includes(termo) ||
-          item.descricao.toLowerCase().includes(termo)
+          item.codigo.toLowerCase().includes(termo) || item.descricao.toLowerCase().includes(termo)
       )
       .map((item) => ({ ...item, nivel: 0, temFilhos: false, aberto: true }));
   }, [catalogo, expandidos, termo]);
@@ -78,6 +76,11 @@ export default function TelaGrupo({
       estado === "total"
         ? desmarcarEmCascata(catalogo, marcadas, codigo)
         : marcarEmCascata(catalogo, marcadas, codigo)
+    );
+
+  const alternarCentro = (id) =>
+    setEscolhidos((atuais) =>
+      atuais.includes(id) ? atuais.filter((centro) => centro !== id) : [...atuais, id]
     );
 
   const alternarNo = (codigo) =>
@@ -131,22 +134,6 @@ export default function TelaGrupo({
             autoFocus
           />
         </label>
-
-        <label>
-          <span>Centros de custo</span>
-          <Seletor
-            multiplo
-            rotuloTodos="nenhum centro escolhido"
-            valor={escolhidos}
-            opcoes={centros.map((centro) => ({
-              valor: centro.id,
-              rotulo: centro.nome,
-              detalhe: centro.id,
-            }))}
-            aoEscolher={setEscolhidos}
-            buscaVazia="Nenhum centro com esse nome."
-          />
-        </label>
       </div>
 
       {erroForm ? (
@@ -160,45 +147,89 @@ export default function TelaGrupo({
       {erro ? <AvisoErro mensagem={erro} onTentarDeNovo={onRecarregar} /> : null}
 
       {!carregando && !erro ? (
-        <div className="contas-seletor">
-          <div className="contas-seletor__topo">
-            <label className="campo-busca">
-              <input
-                value={busca}
-                onChange={(evento) => setBusca(evento.target.value)}
-                placeholder="Filtrar por código ou descrição…"
-              />
-            </label>
-            <span className="contas-seletor__resumo">
-              <small>
-                {marcadas.size} {marcadas.size === 1 ? "conta marcada" : "contas marcadas"}
-              </small>
-              <button
-                type="button"
-                className="botao-texto"
-                onClick={() => setMarcadas(new Set())}
-                disabled={!marcadas.size}
-              >
-                Limpar
-              </button>
-            </span>
-          </div>
+        <div className="orcamento-layout">
+          {/* Centros à esquerda, contas à direita — o mesmo par da tela de
+              visão. As duas listas são escolhas do mesmo tipo, e um seletor
+              suspenso escondia metade da decisão atrás de um clique. */}
+          <aside className="orcamento-lateral">
+            <section className="painel-selecao painel-selecao--alta">
+              <h3>Centros de custo</h3>
+              <p className="painel-selecao__descricao">
+                {escolhidos.length
+                  ? `${escolhidos.length} de ${centros.length} ${
+                      escolhidos.length === 1 ? "marcado" : "marcados"
+                    }`
+                  : "Marque os centros que este grupo reúne."}
+              </p>
 
-          <div className="contas-seletor__lista contas-seletor__lista--alta">
-            {linhas.length ? (
-              linhas.map((item) => (
-                <LinhaConta
-                  key={item.codigo}
-                  item={item}
-                  estado={estadoDaSelecao(resumo, item.codigo)}
-                  onAlternar={alternar}
-                  onAlternarNo={alternarNo}
-                />
-              ))
-            ) : (
-              <p className="sem-contas">Nenhuma conta encontrada.</p>
-            )}
-          </div>
+              {centros.map((centro) => (
+                <label
+                  className={`selecao-item selecao-item--marcavel centro-uso ${
+                    escolhidos.includes(centro.id) ? "is-active" : ""
+                  }`}
+                  key={centro.id}
+                >
+                  <input
+                    type="checkbox"
+                    checked={escolhidos.includes(centro.id)}
+                    onChange={() => alternarCentro(centro.id)}
+                  />
+                  <span className="checkbox-visual">
+                    <Icone nome="check" tamanho={13} />
+                  </span>
+                  <span className="centro-nome">
+                    <code>{centro.id}</code>
+                    <span>{centro.nome}</span>
+                  </span>
+                </label>
+              ))}
+
+              {centros.length ? null : <p className="sem-contas">Nenhum centro de custo ativo.</p>}
+            </section>
+          </aside>
+
+          <section className="orcamento-dados">
+            <div className="contas-seletor">
+              <div className="contas-seletor__topo">
+                <label className="campo-busca">
+                  <input
+                    value={busca}
+                    onChange={(evento) => setBusca(evento.target.value)}
+                    placeholder="Filtrar por código ou descrição…"
+                  />
+                </label>
+                <span className="contas-seletor__resumo">
+                  <small>
+                    {marcadas.size} {marcadas.size === 1 ? "conta marcada" : "contas marcadas"}
+                  </small>
+                  <button
+                    type="button"
+                    className="botao-texto"
+                    onClick={() => setMarcadas(new Set())}
+                    disabled={!marcadas.size}
+                  >
+                    Limpar
+                  </button>
+                </span>
+              </div>
+
+              <div className="contas-seletor__lista contas-seletor__lista--alta">
+                {linhas.length ? (
+                  linhas.map((item) => (
+                    <LinhaConta
+                      key={item.codigo}
+                      item={item}
+                      estado={estadoDaSelecao(resumo, item.codigo)}
+                      onAlternar={alternar}
+                      onAlternarNo={alternarNo}
+                    />
+                  ))
+                ) : (
+                  <p className="sem-contas">Nenhuma conta encontrada.</p>
+                )}
+              </div>
+            </div>
+          </section>
         </div>
       ) : null}
     </main>

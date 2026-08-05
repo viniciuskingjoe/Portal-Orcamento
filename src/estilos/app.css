@@ -1285,6 +1285,21 @@ button {
   white-space: nowrap;
 }
 
+/* Linha inteira clicável. Na visão a linha do centro tem dois alvos — a caixa
+   marca, o nome entra nas contas dele — e por isso os dois vão para as pontas.
+   No grupo não há para onde entrar: sobra uma escolha só, e ela cabe na linha
+   toda em vez de só na caixa. */
+.selecao-item--marcavel {
+  justify-content: flex-start;
+}
+
+/* Painel que acompanha a altura da árvore ao lado, em vez de esticar a página
+   quando há muitos centros. */
+.painel-selecao--alta {
+  max-height: min(60vh, 620px);
+  overflow-y: auto;
+}
+
 /* Nome de filial é longo e não tem código para encurtar ("KING&JOE FILIAL LOJA
    CATUAI LDN"). Quebra em duas linhas e o item cresce; sem `min-width: 0` o
    texto não encolhe dentro do flex e escapa do painel. */
