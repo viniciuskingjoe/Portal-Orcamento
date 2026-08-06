@@ -30,16 +30,25 @@ export default function TelaTrocarSenha({ sessao, obrigatoria = false, onTrocar,
   const [enviando, setEnviando] = useState(false);
 
   const diferem = repetida.length > 0 && senhaNova !== repetida;
-  const pronto = senhaAtual && senhaNova.length >= 10 && senhaNova === repetida && !enviando;
 
+  // Lê do formulário, não do estado: o gerenciador de senhas preenche o DOM sem
+  // avisar o React, e a senha atual chegaria vazia ao servidor. Ver TelaLogin.
   async function enviar(evento) {
     evento.preventDefault();
-    if (!pronto) return;
+    if (enviando) return;
+
+    const campos = new FormData(evento.currentTarget);
+    const atual = String(campos.get("senhaAtual") ?? "");
+    const nova = String(campos.get("senhaNova") ?? "");
+    const confirmada = String(campos.get("repetida") ?? "");
+
+    if (!atual || !nova) return setErro("Preencha os dois campos de senha.");
+    if (nova !== confirmada) return setErro("As duas senhas novas não são iguais.");
 
     setEnviando(true);
     setErro("");
     try {
-      await onTrocar({ senhaAtual, senhaNova });
+      await onTrocar({ senhaAtual: atual, senhaNova: nova });
     } catch (falha) {
       // A mensagem vem pronta do servidor: é ele que conhece a regra.
       setErro(falha?.message ?? "Não foi possível trocar a senha.");
@@ -68,6 +77,7 @@ export default function TelaTrocarSenha({ sessao, obrigatoria = false, onTrocar,
         </div>
 
         <CampoSenha
+          nome="senhaAtual"
           rotulo={primeiroAcesso ? "Senha da rede (Windows)" : "Senha atual"}
           valor={senhaAtual}
           aoMudar={setSenhaAtual}
@@ -76,6 +86,7 @@ export default function TelaTrocarSenha({ sessao, obrigatoria = false, onTrocar,
         />
 
         <CampoSenha
+          nome="senhaNova"
           rotulo="Senha nova"
           valor={senhaNova}
           aoMudar={setSenhaNova}
@@ -85,6 +96,7 @@ export default function TelaTrocarSenha({ sessao, obrigatoria = false, onTrocar,
         />
 
         <CampoSenha
+          nome="repetida"
           rotulo="Repita a senha nova"
           valor={repetida}
           aoMudar={setRepetida}
@@ -101,7 +113,7 @@ export default function TelaTrocarSenha({ sessao, obrigatoria = false, onTrocar,
           </p>
         ) : null}
 
-        <button type="submit" className="botao botao--primario botao--login" disabled={!pronto}>
+        <button type="submit" className="botao botao--primario botao--login" disabled={enviando}>
           {enviando ? "Salvando…" : "Salvar senha"}
         </button>
 

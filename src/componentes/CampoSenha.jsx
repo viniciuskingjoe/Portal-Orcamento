@@ -15,6 +15,9 @@ import Icone from "./Icone.jsx";
 
 export default function CampoSenha({
   rotulo,
+  // `name` no input: quem lê o formulário com FormData pega o valor mesmo
+  // quando o preenchimento automático do navegador não avisa o React.
+  nome,
   valor,
   aoMudar,
   autoComplete = "current-password",
@@ -34,6 +37,7 @@ export default function CampoSenha({
       <div className="campo-senha">
         <input
           id={id}
+          name={nome}
           type={visivel ? "text" : "password"}
           value={valor}
           onChange={(evento) => aoMudar(evento.target.value)}

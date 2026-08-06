@@ -20,13 +20,32 @@ import { EMPRESA } from "../dados/seeds.js";
 export default function TelaLogin({ onEntrar, carregando, erro }) {
   const [usuario, setUsuario] = useState("");
   const [senha, setSenha] = useState("");
+  const [aviso, setAviso] = useState("");
 
-  const pronto = usuario.trim().length > 0 && senha.length > 0 && !carregando;
-
+  // O que vale é o FORMULÁRIO, não o estado do React.
+  //
+  // O preenchimento automático do navegador escreve direto no DOM e nem sempre
+  // dispara o `change` que o React escuta: os campos aparecem cheios e
+  // `usuario`/`senha` continuam vazios. Enquanto o botão dependia do estado, ele
+  // ficava apagado com a senha à vista — e submeter mandaria string vazia.
+  //
+  // Ler do formulário resolve os dois: o valor é o que está na tela, tenha vindo
+  // de digitação ou do gerenciador de senhas.
   function enviar(evento) {
     evento.preventDefault();
-    if (!pronto) return;
-    onEntrar({ usuario: usuario.trim(), senha });
+    if (carregando) return;
+
+    const campos = new FormData(evento.currentTarget);
+    const login = String(campos.get("usuario") ?? "").trim();
+    const segredo = String(campos.get("senha") ?? "");
+
+    if (!login || !segredo) {
+      setAviso("Preencha o usuário e a senha.");
+      return;
+    }
+
+    setAviso("");
+    onEntrar({ usuario: login, senha: segredo });
   }
 
   return (
@@ -61,6 +80,7 @@ export default function TelaLogin({ onEntrar, carregando, erro }) {
         <label className="campo-login">
           <span>Usuário</span>
           <input
+            name="usuario"
             value={usuario}
             onChange={(evento) => setUsuario(evento.target.value)}
             autoComplete="username"
@@ -72,20 +92,21 @@ export default function TelaLogin({ onEntrar, carregando, erro }) {
         </label>
 
         <CampoSenha
+          nome="senha"
           rotulo="Senha do portal"
           valor={senha}
           aoMudar={setSenha}
           disabled={carregando}
         />
 
-        {erro ? (
+        {erro || aviso ? (
           <p className="login-erro" role="alert">
             <Icone nome="info" tamanho={16} />
-            <span>{erro}</span>
+            <span>{erro || aviso}</span>
           </p>
         ) : null}
 
-        <button type="submit" className="botao botao--primario botao--login" disabled={!pronto}>
+        <button type="submit" className="botao botao--primario botao--login" disabled={carregando}>
           {carregando ? "Entrando…" : "Entrar"}
         </button>
 
