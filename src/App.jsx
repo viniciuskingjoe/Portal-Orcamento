@@ -72,6 +72,31 @@ const FILTROS_PADRAO = {
 };
 const TELAS_ERP = new Set(["filiais", "centros"]);
 
+// O que a sincronização fez, em português.
+//
+// A sincronização manda só a diferença, então "7121 linhas" era o total gravado
+// e não o que mudou — quem clicava depois de corrigir uma célula via o mesmo
+// número de sempre e não sabia se a correção tinha ido.
+//
+// O número do orçamento fica no fim, entre parênteses: é por ele que se confere
+// no SSMS e é por ele que o Power BI filtra, mas não é o que a pessoa quer ler
+// primeiro.
+function resumoDaSincronizacao({ idOrcamento, linhas, inseridas, atualizadas, removidas }, ano) {
+  if (!linhas) return "Nada a sincronizar — este plano ainda não tem valor lançado.";
+
+  const oQue = ano ? `Planejado de ${ano}` : "Planejado";
+  const partes = [
+    inseridas ? `${inseridas} ${inseridas === 1 ? "valor novo" : "valores novos"}` : null,
+    atualizadas ? `${atualizadas} ${atualizadas === 1 ? "alterado" : "alterados"}` : null,
+    removidas ? `${removidas} ${removidas === 1 ? "removido" : "removidos"}` : null,
+  ].filter(Boolean);
+
+  if (!partes.length) {
+    return `${oQue} já estava sincronizado com o Linx — nenhum valor mudou. (orçamento ${idOrcamento})`;
+  }
+  return `${oQue} sincronizado com o Linx: ${partes.join(", ")}. (orçamento ${idOrcamento})`;
+}
+
 // `undefined` cai no padrao do modal, que fala em exclusao.
 const TITULO_CONFIRMACAO = { desativar: "Desativar plano" };
 const ROTULO_CONFIRMACAO = { desativar: "Desativar" };
@@ -749,19 +774,12 @@ function PlanejamentoOrcamentario({ sessao, onSair }) {
     setPublicando(planoId);
     setAvisoPersistencia("");
     try {
-      const { linhas, idOrcamento } = await repo.plano.publicar(planoId);
+      const retorno = await repo.plano.publicar(planoId);
       // Relê para a data de publicação vir do servidor, não de um relógio local
       // que pode estar adiantado em relação ao banco.
       const dados = await carregarEstado();
       setPlanos(dados.planos);
-      // Diz o número do orçamento porque é por ele que se confere no SSMS e é
-      // por ele que o Power BI filtra — sem isso a pessoa sabe que "deu certo"
-      // e não sabe onde olhar.
-      setAvisoPublicacao(
-        linhas
-          ? `Sincronizado: ${linhas} ${linhas === 1 ? "linha" : "linhas"} no orçamento ${idOrcamento} do Linx.`
-          : "Nada a sincronizar — este plano ainda não tem valor lançado."
-      );
+      setAvisoPublicacao(resumoDaSincronizacao(retorno, planoAtivo?.ano));
     } catch (erro) {
       // Erro aqui é do ERP e precisa aparecer inteiro: a mensagem do servidor
       // diz se foi o status do orçamento, o exercício que falta no Linx ou
