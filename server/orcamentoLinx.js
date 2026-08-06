@@ -171,11 +171,97 @@ export async function publicar(planoId, estado, login) {
       throw erro;
     }
 
-    // Apagar é seguro: o gatilho é só de INSERT.
-    await q("DELETE FROM dbo.CTB_CONTA_ORCAMENTO WHERE ID_ORCAMENTO = @id", { id: idOrcamento });
+    // Compara com o que já está lá e aplica só a diferença.
+    //
+    // Antes eram DELETE de tudo + um INSERT por linha: 7.121 idas ao servidor,
+    // ~57s de transação aberta segurando lock numa tabela do ERP. E, durante
+    // esse minuto, quem lesse o orçamento fora da transação o via VAZIO.
+    //
+    // A comparação é contra o que o ERP tem AGORA, não contra o que o portal
+    // lembra de ter enviado — então continua se autocorrigindo: linha apagada à
+    // mão no Linx volta, valor mexido por fora é reposto. Num ajuste normal, de
+    // algumas células, são dezenas de comandos em vez de milhares.
+    const atuais = await q(
+      `SELECT ITEM_ORCAMENTO, RTRIM(COD_FILIAL) AS COD_FILIAL,
+              RTRIM(CENTRO_CUSTO) AS CENTRO_CUSTO, RTRIM(CLASSIFICACAO) AS CLASSIFICACAO,
+              ID_PERIODO, VALOR
+         FROM dbo.CTB_CONTA_ORCAMENTO
+        WHERE ID_ORCAMENTO = @id`,
+      { id: idOrcamento }
+    );
 
-    let item = 0;
+    const chaveDa = (filial, centro, conta, mes) => `${filial}|${centro}|${conta}|${mes}`;
+
+    // Duplicata só aparece se alguém inseriu à mão: `linhasParaOrcamento` produz
+    // uma linha por combinação. A primeira serve de par; as demais são sobra.
+    const noErp = new Map();
+    const sobrando = [];
+    let maiorItem = 0;
+    for (const linha of atuais) {
+      maiorItem = Math.max(maiorItem, Number(linha.ITEM_ORCAMENTO) || 0);
+      const chave = chaveDa(
+        linha.COD_FILIAL,
+        linha.CENTRO_CUSTO,
+        linha.CLASSIFICACAO,
+        Number(linha.ID_PERIODO)
+      );
+      if (noErp.has(chave)) sobrando.push(linha.ITEM_ORCAMENTO);
+      else noErp.set(chave, { item: linha.ITEM_ORCAMENTO, valor: Number(linha.VALOR) });
+    }
+
+    const aInserir = [];
+    const aAtualizar = [];
     for (const linha of linhas) {
+      const chave = chaveDa(linha.filial, linha.centro, linha.conta, linha.mes);
+      const atual = noErp.get(chave);
+      if (!atual) {
+        aInserir.push(linha);
+        continue;
+      }
+      noErp.delete(chave);
+      // Meio centavo de tolerância: a coluna do ERP tem duas casas, e comparar
+      // decimais por igualdade exata reescreveria linhas idênticas.
+      if (Math.abs(atual.valor - linha.valor) > 0.005) {
+        aAtualizar.push({ item: atual.item, valor: linha.valor });
+      }
+    }
+
+    // O que sobrou no mapa não existe mais no plano.
+    const aRemover = [...noErp.values()].map((x) => x.item).concat(sobrando);
+
+    if (aRemover.length) {
+      // Em blocos: um IN com milhares de itens estoura o limite de parâmetros.
+      for (let i = 0; i < aRemover.length; i += 500) {
+        const bloco = aRemover.slice(i, i + 500);
+        const nomes = bloco.map((_, j) => `@item${j}`).join(", ");
+        const parametros = { id: idOrcamento };
+        bloco.forEach((item, j) => {
+          parametros[`item${j}`] = item;
+        });
+        await q(
+          `DELETE FROM dbo.CTB_CONTA_ORCAMENTO
+            WHERE ID_ORCAMENTO = @id AND ITEM_ORCAMENTO IN (${nomes})`,
+          parametros
+        );
+      }
+    }
+
+    for (const alvo of aAtualizar) {
+      await q(
+        `UPDATE dbo.CTB_CONTA_ORCAMENTO
+            SET VALOR = @valor, USUARIO = @usuario, DATA_INCLUSAO = SYSDATETIME()
+          WHERE ID_ORCAMENTO = @id AND ITEM_ORCAMENTO = @item`,
+        {
+          id: idOrcamento,
+          item: alvo.item,
+          valor: alvo.valor,
+          usuario: (login ?? "portal").slice(0, 25),
+        }
+      );
+    }
+
+    let item = maiorItem;
+    for (const linha of aInserir) {
       item += 1;
       await q(
         `INSERT INTO dbo.CTB_CONTA_ORCAMENTO
@@ -215,8 +301,17 @@ export async function publicar(planoId, estado, login) {
       { plano: planoId, login: login ?? null, linhas: linhas.length }
     );
 
-    await registrar(q, planoId, login, `${linhas.length} linhas no orçamento ${idOrcamento}`);
+    const resumo =
+      `${linhas.length} linhas no orçamento ${idOrcamento} ` +
+      `(${aInserir.length} novas, ${aAtualizar.length} alteradas, ${aRemover.length} removidas)`;
+    await registrar(q, planoId, login, resumo);
 
-    return { idOrcamento, linhas: linhas.length };
+    return {
+      idOrcamento,
+      linhas: linhas.length,
+      inseridas: aInserir.length,
+      atualizadas: aAtualizar.length,
+      removidas: aRemover.length,
+    };
   });
 }
