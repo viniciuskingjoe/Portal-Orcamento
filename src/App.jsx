@@ -1231,8 +1231,6 @@ function PlanejamentoOrcamentario({ sessao, onSair }) {
             : filiaisDoErpVisiveis.length + centrosDoErpVisiveis.length
         }
         planoAtivo={planoAtivo}
-        visaoDoPlano={visaoDoPlano}
-        modulosVisiveis={(lista) => modulosPermitidos(sessao, lista)}
         podeVerDre={podeVerDre}
         sessao={sessao}
         onSair={onSair}

@@ -1,5 +1,4 @@
 import Icone from "./Icone.jsx";
-import { modulosDaVisao } from "../dados/visao.js";
 
 // Duas letras do nome, para o avatar. Nome de uma palavra só usa as duas
 // primeiras letras — "V" sozinho num círculo não identifica ninguém.
@@ -31,8 +30,6 @@ export default function Sidebar({
   // real, como se o ERP não tivesse filial nenhuma.
   badgeConfiguracoes,
   planoAtivo,
-  visaoDoPlano,
-  modulosVisiveis,
   podeVerDre = true,
   tela,
   onNavegar,
@@ -41,10 +38,6 @@ export default function Sidebar({
   sessao,
   onSair,
 }) {
-  const configurados = visaoDoPlano ? modulosDaVisao(visaoDoPlano) : [];
-  // Módulo que a pessoa não pode ver não aparece na navegação.
-  const modulos = modulosVisiveis ? modulosVisiveis(configurados) : configurados;
-
   return (
     <aside className="sidebar">
       <div className="marca">
@@ -99,56 +92,34 @@ export default function Sidebar({
           />
         ) : null}
 
+        {/* Os oito módulos NÃO entram aqui. A Visão geral já é a lista deles, e
+            com mais informação — diz se o módulo está configurado e o resumo de
+            cada um. Repetir na sidebar dobrava a altura do menu e dava duas
+            portas para o mesmo lugar.
+            Ficam a Visão geral e o DRE: um é por onde se entra nos módulos, o
+            outro é o fechamento. */}
         {planoAtivo ? (
-          <>
-            <div className="nav-grupo">
-              <span className="nav-grupo__titulo">{planoAtivo.nome}</span>
+          <div className="nav-grupo">
+            <span className="nav-grupo__titulo">{planoAtivo.nome}</span>
+            <ItemNav
+              id="home"
+              titulo="Visão geral"
+              icone="calendar"
+              ativo={tela === "home"}
+              onNavegar={onNavegar}
+            />
+            {/* Some para quem não vê todos os módulos: com um de fora os
+                subtotais deixam de ser o resultado da empresa. */}
+            {podeVerDre ? (
               <ItemNav
-                id="home"
-                titulo="Visão geral"
-                icone="calendar"
-                ativo={tela === "home"}
+                id="dre"
+                titulo="DRE"
+                icone="chart"
+                ativo={tela === "dre"}
                 onNavegar={onNavegar}
               />
-              {/* O DRE fecha os módulos, então vive ao lado deles e não dentro
-                  da lista — não é um módulo que se orça. Some para quem não vê
-                  todos: com um módulo de fora os subtotais deixam de ser o
-                  resultado da empresa. */}
-              {podeVerDre ? (
-                <ItemNav
-                  id="dre"
-                  titulo="DRE"
-                  icone="chart"
-                  ativo={tela === "dre"}
-                  onNavegar={onNavegar}
-                />
-              ) : null}
-            </div>
-
-            <div className="nav-grupo">
-              <span className="nav-grupo__titulo">
-                Orçamentos{visaoDoPlano ? ` · ${visaoDoPlano.nome}` : ""}
-              </span>
-              {modulos.length ? (
-                modulos.map((modulo) => (
-                  <ItemNav
-                    key={modulo.id}
-                    id={modulo.id}
-                    titulo={modulo.titulo}
-                    icone={modulo.icone}
-                    ativo={tela === modulo.id}
-                    onNavegar={onNavegar}
-                  />
-                ))
-              ) : (
-                <p className="nav-aviso">
-                  {visaoDoPlano
-                    ? "Nenhum módulo configurado nesta visão."
-                    : "Este plano não tem visão associada."}
-                </p>
-              )}
-            </div>
-          </>
+            ) : null}
+          </div>
         ) : null}
       </nav>
 
