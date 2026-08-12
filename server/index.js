@@ -472,7 +472,7 @@ app.delete(
   "/api/usuarios/:login/acessos/:id",
   exigirAdmin,
   rota(async (req, res) => {
-    await revogarAcesso(req.params.login, req.params.id);
+    await revogarAcesso(req.params.login, req.params.id, req.sessao.login);
     res.json({ ok: true });
   })
 );

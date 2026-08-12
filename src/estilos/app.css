@@ -3389,9 +3389,18 @@ dialog::backdrop {
 }
 
 .editor-permissao__previa {
-  margin: 0;
+  min-width: 0;
   color: var(--muted);
   font-size: 12px;
+}
+
+.editor-permissao__previa p {
+  margin: 0 0 4px;
+  line-height: 1.4;
+}
+
+.editor-permissao__previa p:last-child {
+  margin-bottom: 0;
 }
 
 .nova-concessao {

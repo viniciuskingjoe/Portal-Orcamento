@@ -118,3 +118,44 @@ export function gerarConcessoes(areas = []) {
 export function areaVazia() {
   return { territorio: [TUDO], matriz: matrizVazia() };
 }
+
+const nomeDe = (catalogo, id) => catalogo?.find((item) => item.id === id)?.nome ?? id;
+
+function ondeDaArea(area, { filiais, centros } = {}) {
+  const asFiliais = [...new Set(area.territorio.map((l) => l.filial).filter(Boolean))];
+  const osCentros = [...new Set(area.territorio.map((l) => l.centro).filter(Boolean))];
+
+  const partes = [];
+  if (asFiliais.length) partes.push(asFiliais.map((id) => nomeDe(filiais, id)).join(", "));
+  if (osCentros.length) partes.push(osCentros.map((id) => nomeDe(centros, id)).join(", "));
+  return partes.length ? partes.join(" · ") : "tudo";
+}
+
+/**
+ * Uma frase por área, em português.
+ *
+ * "Vai gravar 9 concessões" descreve o banco, não a pessoa. Quem confere uma
+ * permissão quer saber o que ela vai poder — e é isso que precisa estar legível
+ * na hora de salvar.
+ */
+export function descreverAreas(areas = [], catalogos = {}) {
+  return areas
+    .map((area) => {
+      const edita = MODULOS.filter((m) => area.matriz?.[m.id] === EDITA);
+      const ve = MODULOS.filter((m) => area.matriz?.[m.id] === VE);
+      if (!edita.length && !ve.length) return null;
+
+      const onde = ondeDaArea(area, catalogos);
+      const todos = (lista) => lista.length === MODULOS.length;
+
+      const acoes = [];
+      if (edita.length) {
+        acoes.push(`lança em ${todos(edita) ? "tudo" : edita.map((m) => m.titulo).join(", ")}`);
+      }
+      if (ve.length) {
+        acoes.push(`só consulta ${todos(ve) ? "tudo" : ve.map((m) => m.titulo).join(", ")}`);
+      }
+      return `Em ${onde}: ${acoes.join("; ")}.`;
+    })
+    .filter(Boolean);
+}

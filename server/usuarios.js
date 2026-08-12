@@ -170,6 +170,43 @@ export async function removerAcesso(login, quem) {
 // ver; `podeEditar` diz se também lança.
 // --------------------------------------------------------------------------
 
+// Quem mexeu na permissão de quem, e o que mudou.
+//
+// Dar acesso, tornar admin e remover já eram auditados; conceder e revogar
+// permissão não. Numa tela que decide quem lança orçamento, "quem tirou a
+// edição do fulano na sexta?" precisa ter resposta — e `definirAcessos`, que
+// apaga tudo e regrava, é justamente o que apagaria a pista.
+//
+// `.catch()` de propósito: auditoria não pode derrubar a operação que ela
+// registra. Falhar em anotar é ruim; falhar em revogar por causa da anotação é
+// pior.
+function resumirParaAuditoria(lista) {
+  if (!lista?.length) return "nada";
+  return lista
+    .map(
+      ({ modulo, filial, centro, podeEditar }) =>
+        `${modulo ?? "*"}/${filial ?? "*"}/${centro ?? "*"}${podeEditar ? "=edita" : "=ve"}`
+    )
+    .join(" ");
+}
+
+function anotarPermissao(login, quem, detalhe) {
+  return query(
+    `INSERT INTO dbo.KING_IDENTIDADE_AUDITORIA (LOGIN, APP, EVENTO, DETALHE)
+     VALUES (@login, @app, 'permissao-alterada', @detalhe)`,
+    { login, app: APP, detalhe: `por ${quem ?? "?"}: ${detalhe}`.slice(0, 400) }
+  ).catch(() => {});
+}
+
+async function permissaoAtual(login) {
+  return query(
+    `SELECT MODULO AS modulo, COD_FILIAL AS filial, CENTRO_CUSTO AS centro,
+            PODE_EDITAR AS podeEditar
+       FROM dbo.KING_PORTAL_ORC_ACESSO WHERE LOGIN = @login`,
+    { login }
+  );
+}
+
 // Lote em transação: marcar cinco centros e gravar três é pior que não gravar
 // nada — a pessoa sai achando que concedeu os cinco.
 export async function concederAcessos(login, lista, quem) {
@@ -178,6 +215,8 @@ export async function concederAcessos(login, lista, quem) {
       await gravarConcessao(q, login, acesso, quem);
     }
   });
+
+  await anotarPermissao(login, quem, `concedeu [${resumirParaAuditoria(lista)}]`);
 }
 
 export async function concederAcesso(login, acesso, quem) {
@@ -193,12 +232,21 @@ export async function concederAcesso(login, acesso, quem) {
 // Numa transação só: entre apagar e reinserir, a pessoa ficaria sem acesso
 // nenhum, e uma falha no meio a deixaria assim.
 export async function definirAcessos(login, lista, quem) {
+  // Lido ANTES de apagar: é a única chance de registrar o que a pessoa tinha.
+  const antes = await permissaoAtual(login);
+
   await transaction(async ({ query: q }) => {
     await q("DELETE FROM dbo.KING_PORTAL_ORC_ACESSO WHERE LOGIN = @login", { login });
     for (const acesso of lista ?? []) {
       await gravarConcessao(q, login, acesso, quem);
     }
   });
+
+  await anotarPermissao(
+    login,
+    quem,
+    `de [${resumirParaAuditoria(antes)}] para [${resumirParaAuditoria(lista)}]`
+  );
 }
 
 function gravarConcessao(executar, login, { modulo, filial, centro, podeEditar }, quem) {
@@ -231,9 +279,19 @@ function gravarConcessao(executar, login, { modulo, filial, centro, podeEditar }
   );
 }
 
-export async function revogarAcesso(login, id) {
+export async function revogarAcesso(login, id, quem) {
+  // Lida antes de apagar: depois do DELETE não há o que descrever.
+  const [alvo] = await query(
+    `SELECT MODULO AS modulo, COD_FILIAL AS filial, CENTRO_CUSTO AS centro,
+            PODE_EDITAR AS podeEditar
+       FROM dbo.KING_PORTAL_ORC_ACESSO WHERE ID = @id AND LOGIN = @login`,
+    { id: Number(id), login }
+  );
+
   await query("DELETE FROM dbo.KING_PORTAL_ORC_ACESSO WHERE ID = @id AND LOGIN = @login", {
     id: Number(id),
     login,
   });
+
+  if (alvo) await anotarPermissao(login, quem, `revogou [${resumirParaAuditoria([alvo])}]`);
 }

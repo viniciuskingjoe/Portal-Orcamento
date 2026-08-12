@@ -2,12 +2,14 @@ import { useEffect, useState } from "react";
 
 import Icone from "./Icone.jsx";
 import Seletor from "./Seletor.jsx";
+import ModalConfirmacao from "./ModalConfirmacao.jsx";
 import { MODULOS } from "../dados/modulos.js";
 import {
   EDITA,
   NADA,
   VE,
   areaVazia,
+  descreverAreas,
   gerarConcessoes,
   lerAreas,
   matrizVazia,
@@ -171,6 +173,7 @@ export default function EditorPermissao({ usuario, catalogos, onSalvar }) {
     return lidas.length ? lidas : [areaVazia()];
   });
   const [salvando, setSalvando] = useState(false);
+  const [confirmandoZerar, setConfirmandoZerar] = useState(false);
 
   // Trocar de usuário sem fechar o painel precisa recarregar, senão a matriz
   // mostrada é a da pessoa anterior.
@@ -180,11 +183,17 @@ export default function EditorPermissao({ usuario, catalogos, onSalvar }) {
   }, [usuario.login, usuario.acessos]);
 
   const concessoes = gerarConcessoes(areas);
+  const frases = descreverAreas(areas, catalogos);
+  // Tirar toda a permissão de quem tinha alguma tem efeito quase igual ao de
+  // remover a pessoa do portal — e remover pede confirmação. Salvar vazio sem
+  // perguntar é um clique de distância de deixar alguém sem acesso.
+  const vaiZerar = !concessoes.length && (usuario.acessos ?? []).length > 0;
 
   async function salvar() {
     setSalvando(true);
     try {
       await onSalvar(concessoes);
+      setConfirmandoZerar(false);
     } finally {
       setSalvando(false);
     }
@@ -214,27 +223,43 @@ export default function EditorPermissao({ usuario, catalogos, onSalvar }) {
       </button>
 
       <div className="editor-permissao__rodape">
-        <p className="editor-permissao__previa">
-          {concessoes.length ? (
-            <>
-              Vai gravar {concessoes.length}{" "}
-              {concessoes.length === 1 ? "concessão" : "concessões"}.
-            </>
+        {/* A frase é o que a pessoa vai poder; a contagem de concessões descreve
+            o banco e não ajuda a conferir. */}
+        <div className="editor-permissao__previa">
+          {frases.length ? (
+            frases.map((frase, indice) => <p key={indice}>{frase}</p>)
           ) : (
-            <>
+            <p>
               Nenhum módulo marcado — salvar assim <strong>tira todo o acesso</strong> desta pessoa.
-            </>
+            </p>
           )}
-        </p>
+        </div>
         <button
           type="button"
           className="botao botao--primario botao--compacto"
-          onClick={salvar}
+          onClick={() => (vaiZerar ? setConfirmandoZerar(true) : salvar())}
           disabled={salvando}
         >
           {salvando ? "Salvando…" : "Salvar permissão"}
         </button>
       </div>
+
+      {confirmandoZerar ? (
+        <ModalConfirmacao
+          nome={usuario.nome}
+          titulo="Tirar toda a permissão"
+          verbo="tirar a permissão de"
+          rotuloConfirmar="Tirar permissão"
+          mensagem={
+            <>
+              <strong>{usuario.nome}</strong> continua com acesso ao portal, mas não vê nem lança
+              nada até receber permissão de novo.
+            </>
+          }
+          onConfirmar={salvar}
+          onFechar={() => setConfirmandoZerar(false)}
+        />
+      ) : null}
     </div>
   );
 }

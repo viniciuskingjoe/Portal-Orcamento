@@ -2,7 +2,15 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { MODULOS } from "../src/dados/modulos.js";
-import { EDITA, NADA, VE, gerarConcessoes, lerAreas, matrizVazia } from "../src/dados/territorio.js";
+import {
+  EDITA,
+  NADA,
+  VE,
+  descreverAreas,
+  gerarConcessoes,
+  lerAreas,
+  matrizVazia,
+} from "../src/dados/territorio.js";
 
 const RECEITA = "receita-vendas";
 const DEDUCOES = "deducoes-vendas";
@@ -143,4 +151,51 @@ test("ida e volta também com tudo liberado", () => {
     MODULOS.every((modulo) => lido[0].matriz[modulo.id] === EDITA),
     true
   );
+});
+
+// A prévia da tela: "Vai gravar 9 concessões" descreve o banco, não a pessoa.
+const CATALOGOS = {
+  filiais: [
+    { id: "000001", nome: "KING&JOE" },
+    { id: "000025", nome: "MEN HUB" },
+  ],
+  centros: [{ id: "020", nome: "E-COMMERCE" }],
+};
+
+test("descreve cada área numa frase", () => {
+  const frases = descreverAreas(
+    [
+      {
+        territorio: [{ filial: "000001", centro: null }],
+        matriz: matrizDe({ [RECEITA]: EDITA, [DEDUCOES]: VE }),
+      },
+      { territorio: [{ filial: "000025", centro: null }], matriz: matrizDe({ [RECEITA]: VE }) },
+    ],
+    CATALOGOS
+  );
+
+  assert.equal(frases.length, 2);
+  assert.match(frases[0], /^Em KING&JOE: lança em Receita de vendas; só consulta Deduções/);
+  assert.match(frases[1], /^Em MEN HUB: só consulta Receita de vendas\.$/);
+});
+
+test("todos os módulos no mesmo estado vira 'tudo'", () => {
+  const matriz = matrizVazia();
+  MODULOS.forEach((modulo) => {
+    matriz[modulo.id] = EDITA;
+  });
+  const [frase] = descreverAreas([{ territorio: [{ filial: null, centro: null }], matriz }], CATALOGOS);
+  assert.equal(frase, "Em tudo: lança em tudo.");
+});
+
+test("filial e centro juntos aparecem na mesma frase", () => {
+  const [frase] = descreverAreas(
+    [{ territorio: [{ filial: "000001", centro: "020" }], matriz: matrizDe({ [RECEITA]: VE }) }],
+    CATALOGOS
+  );
+  assert.match(frase, /^Em KING&JOE · E-COMMERCE:/);
+});
+
+test("área sem módulo marcado não vira frase", () => {
+  assert.deepEqual(descreverAreas([{ territorio: [], matriz: matrizVazia() }], CATALOGOS), []);
 });
