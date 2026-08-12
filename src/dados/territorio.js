@@ -1,129 +1,120 @@
 import { MODULOS } from "./modulos.js";
 
 // ============================================================================
-// TERRITÓRIO + MATRIZ
+// ÁREAS: ONDE + O QUÊ
 //
 // Duas leituras da MESMA permissão. O banco continua guardando concessões
 // soltas — isto é só uma forma de escrevê-las e de lê-las de volta.
 //
-//   concessão   { modulo, filial, centro, podeEditar }   como grava
-//   território  onde a pessoa atua: pares filial × centro
-//   matriz      o que ela faz em cada módulo: nada | ve | edita
+//   concessão  { modulo, filial, centro, podeEditar }   como grava
+//   área       um território (filial × centro) + a matriz do que se faz nele
 //
 // POR QUE
 // Autorar concessão a concessão obriga a montar um produto cartesiano — três
 // módulos, duas filiais e quatro centros viram 24 linhas — e depois a fazer a
-// união de cabeça para saber o que a pessoa pode. Separando ONDE de O QUÊ, o
-// território é escolhido uma vez e a matriz é lida de bate-pronto.
+// união de cabeça para saber o que a pessoa pode.
 //
-// NEM TUDO CABE
-// Concessões gravadas à mão podem dar territórios diferentes por módulo ("edita
-// receita no e-commerce, vê despesas da empresa toda"). Isso é legítimo e o
-// modelo antigo suporta; a matriz não. `lerTerritorio` avisa com `cabe: false`
-// em vez de fingir que coube e apagar metade da permissão de alguém.
+// POR QUE VÁRIAS ÁREAS
+// Uma só não cobre "edita na KING&JOE, mas só vê na MEN HUB". Cada área tem a
+// sua matriz, e elas somam — como as concessões já somavam.
+//
+// A DECOMPOSIÇÃO É SEMPRE POSSÍVEL
+// Todo conjunto de concessões vira áreas: calcula-se a matriz de cada LUGAR
+// (filial × centro) e agrupam-se os lugares que têm matriz idêntica. Nenhuma
+// permissão fica de fora, então a tela nunca precisa recusar um caso.
 // ============================================================================
 
 export const NADA = "nada";
 export const VE = "ve";
 export const EDITA = "edita";
 
-// Filial e centro nulos = todas. É o "tudo" do modelo de concessão.
 export const TUDO = { filial: null, centro: null };
 
 const chaveDoLugar = (filial, centro) => `${filial ?? ""}|${centro ?? ""}`;
+const assinaturaDa = (matriz) => MODULOS.map((modulo) => matriz[modulo.id] ?? NADA).join(",");
 
-function lugaresDe(acessos) {
-  const lugares = new Map();
-  for (const acesso of acessos) {
-    const chave = chaveDoLugar(acesso.filial, acesso.centro);
-    if (!lugares.has(chave)) {
-      lugares.set(chave, { filial: acesso.filial ?? null, centro: acesso.centro ?? null });
-    }
-  }
-  return [...lugares.values()];
-}
-
-// Concessão com `modulo: null` vale para todos — por isso a expansão.
-function modulosDe(acesso) {
-  return acesso.modulo ? [acesso.modulo] : MODULOS.map((modulo) => modulo.id);
-}
-
-/**
- * Concessões → { cabe, territorio, matriz }.
- *
- * `cabe: false` quando os módulos não compartilham o mesmo território: aí a
- * tela precisa cair para a lista antiga, senão salvar por cima perderia parte
- * da permissão.
- */
-export function lerTerritorio(acessos = []) {
-  const territorio = lugaresDe(acessos);
+export function matrizVazia() {
   const matriz = {};
   MODULOS.forEach((modulo) => {
     matriz[modulo.id] = NADA;
   });
+  return matriz;
+}
 
-  // Onde cada módulo aparece. Se um módulo cobre menos lugares que o
-  // território, a permissão dele é mais estreita e a matriz não representa.
-  const lugaresPorModulo = new Map();
+// Concessão com `modulo: null` vale para todos — por isso a expansão.
+const modulosDe = (acesso) => (acesso.modulo ? [acesso.modulo] : MODULOS.map((m) => m.id));
+
+/**
+ * Concessões → lista de áreas.
+ *
+ * Cada área é `{ territorio: [{ filial, centro }], matriz }`. Lugares com a
+ * mesma matriz caem na mesma área, que é o que deixa "as cinco filiais onde ela
+ * só olha" virar uma linha em vez de cinco.
+ */
+export function lerAreas(acessos = []) {
+  const porLugar = new Map();
 
   for (const acesso of acessos) {
-    const lugar = chaveDoLugar(acesso.filial, acesso.centro);
+    const chave = chaveDoLugar(acesso.filial, acesso.centro);
+    if (!porLugar.has(chave)) {
+      porLugar.set(chave, {
+        lugar: { filial: acesso.filial ?? null, centro: acesso.centro ?? null },
+        matriz: matrizVazia(),
+      });
+    }
+    const { matriz } = porLugar.get(chave);
     for (const modulo of modulosDe(acesso)) {
-      if (!lugaresPorModulo.has(modulo)) lugaresPorModulo.set(modulo, new Set());
-      lugaresPorModulo.get(modulo).add(lugar);
       // Vale a mais permissiva, como no resto do modelo.
       if (acesso.podeEditar) matriz[modulo] = EDITA;
       else if (matriz[modulo] === NADA) matriz[modulo] = VE;
     }
   }
 
-  const totalDeLugares = territorio.length;
-  const cabe = [...lugaresPorModulo.values()].every((lugares) => lugares.size === totalDeLugares);
+  const areas = new Map();
+  for (const { lugar, matriz } of porLugar.values()) {
+    const assinatura = assinaturaDa(matriz);
+    if (!areas.has(assinatura)) areas.set(assinatura, { territorio: [], matriz });
+    areas.get(assinatura).territorio.push(lugar);
+  }
 
-  return { cabe, territorio: territorio.length ? territorio : [TUDO], matriz };
+  return [...areas.values()];
 }
 
 /**
- * { territorio, matriz } → concessões, no formato que o servidor grava.
+ * Áreas → concessões, no formato que o servidor grava.
  *
- * Uma por lugar × módulo que não esteja em `nada`. Quando TODOS os módulos têm
- * o mesmo estado, colapsa em `modulo: null` — é o que o modelo já entende por
- * "todos", e deixa a lista curta em vez de repetir oito linhas iguais.
+ * Quando TODOS os módulos da área têm o mesmo estado, colapsa em `modulo: null`
+ * — é o que o modelo já entende por "todos", e deixa uma linha no lugar de oito.
  */
-export function gerarConcessoes(territorio, matriz) {
-  const lugares = territorio?.length ? territorio : [TUDO];
-  const ativos = MODULOS.filter((modulo) => (matriz[modulo.id] ?? NADA) !== NADA);
-  if (!ativos.length) return [];
+export function gerarConcessoes(areas = []) {
+  const saida = new Map();
 
-  const estados = new Set(ativos.map((modulo) => matriz[modulo.id]));
-  const todosIguais = ativos.length === MODULOS.length && estados.size === 1;
+  for (const area of areas) {
+    const lugares = area.territorio?.length ? area.territorio : [TUDO];
+    const ativos = MODULOS.filter((modulo) => (area.matriz?.[modulo.id] ?? NADA) !== NADA);
+    if (!ativos.length) continue;
 
-  const concessoes = [];
-  for (const lugar of lugares) {
-    if (todosIguais) {
-      concessoes.push({
-        modulo: null,
-        filial: lugar.filial ?? null,
-        centro: lugar.centro ?? null,
-        podeEditar: matriz[ativos[0].id] === EDITA,
-      });
-      continue;
-    }
-    for (const modulo of ativos) {
-      concessoes.push({
-        modulo: modulo.id,
-        filial: lugar.filial ?? null,
-        centro: lugar.centro ?? null,
-        podeEditar: matriz[modulo.id] === EDITA,
-      });
+    const estados = new Set(ativos.map((modulo) => area.matriz[modulo.id]));
+    const todos = ativos.length === MODULOS.length && estados.size === 1;
+    const alvos = todos ? [{ id: null, estado: area.matriz[ativos[0].id] }] : ativos.map((m) => ({ id: m.id, estado: area.matriz[m.id] }));
+
+    for (const lugar of lugares) {
+      for (const alvo of alvos) {
+        const filial = lugar.filial ?? null;
+        const centro = lugar.centro ?? null;
+        const chave = `${alvo.id ?? ""}|${filial ?? ""}|${centro ?? ""}`;
+        const podeEditar = alvo.estado === EDITA;
+        // Áreas sobrepostas: a coluna é única por (login, módulo, filial,
+        // centro), então a mais permissiva prevalece em vez de a última vencer.
+        if (saida.has(chave) && saida.get(chave).podeEditar) continue;
+        saida.set(chave, { modulo: alvo.id, filial, centro, podeEditar });
+      }
     }
   }
-  return concessoes;
+
+  return [...saida.values()];
 }
 
-// Estado seguinte ao clicar: nada → vê → edita → nada.
-export function proximoEstado(atual) {
-  if (atual === NADA) return VE;
-  if (atual === VE) return EDITA;
-  return NADA;
+export function areaVazia() {
+  return { territorio: [TUDO], matriz: matrizVazia() };
 }

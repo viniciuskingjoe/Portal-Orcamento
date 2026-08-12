@@ -3,19 +3,28 @@ import { useEffect, useState } from "react";
 import Icone from "./Icone.jsx";
 import Seletor from "./Seletor.jsx";
 import { MODULOS } from "../dados/modulos.js";
-import { EDITA, NADA, VE, gerarConcessoes, lerTerritorio, proximoEstado } from "../dados/territorio.js";
+import {
+  EDITA,
+  NADA,
+  VE,
+  areaVazia,
+  gerarConcessoes,
+  lerAreas,
+  matrizVazia,
+} from "../dados/territorio.js";
 
 // ============================================================================
-// PERMISSÃO EM DUAS PERGUNTAS
+// PERMISSÃO POR ÁREA
 //
-// ONDE a pessoa atua, escolhido uma vez, e O QUE ela faz em cada módulo.
+// Cada área responde duas perguntas: ONDE a pessoa atua e O QUE faz lá. Várias
+// áreas somam, que é o que permite "edita na KING&JOE, só vê na MEN HUB" —
+// impossível com um território só.
 //
 // A tela antiga pedia módulo, filial e centro juntos e concedia o produto
 // cartesiano: três módulos, duas filiais e quatro centros viravam 24 linhas que
-// depois ninguém relia. Aqui o território não multiplica, e a matriz responde
-// "o que essa pessoa pode?" de bate-pronto, sem união mental.
+// depois ninguém relia.
 //
-// Grava exatamente as mesmas concessões de antes — muda só a autoria.
+// Grava exatamente as mesmas concessões — muda só a autoria.
 // ============================================================================
 
 const ESTADOS = [
@@ -32,10 +41,9 @@ function LinhaModulo({ modulo, estado, onAlternar }) {
         {modulo.titulo}
       </span>
 
-      {/* Três botões em vez de um que cicla: com o ciclo, chegar em "nada"
-          partindo de "vê" custa dois cliques e um deles concede edição no
-          caminho — numa tela de permissão isso é o tipo de deslize que ninguém
-          percebe ter feito. */}
+      {/* Três botões em vez de um que cicla: com o ciclo, ir de "vê" para
+          "nada" passa por "edita" — numa tela de permissão esse é o deslize que
+          ninguém percebe ter feito. */}
       <span className="matriz-linha__estados" role="group" aria-label={modulo.titulo}>
         {ESTADOS.map((opcao) => (
           <button
@@ -54,33 +62,124 @@ function LinhaModulo({ modulo, estado, onAlternar }) {
   );
 }
 
+function Area({ area, indice, total, catalogos, onMudar, onRemover }) {
+  // Lista vazia = todas. É o "tudo" que o modelo de concessão entende por nulo.
+  const filiais = [...new Set(area.territorio.map((l) => l.filial).filter(Boolean))];
+  const centros = [...new Set(area.territorio.map((l) => l.centro).filter(Boolean))];
+
+  const trocarLugares = (novasFiliais, novosCentros) => {
+    const territorio = [];
+    (novasFiliais.length ? novasFiliais : [null]).forEach((filial) => {
+      (novosCentros.length ? novosCentros : [null]).forEach((centro) => {
+        territorio.push({ filial, centro });
+      });
+    });
+    onMudar({ ...area, territorio });
+  };
+
+  const marcarTodos = (estado) => {
+    const matriz = matrizVazia();
+    MODULOS.forEach((modulo) => {
+      matriz[modulo.id] = estado;
+    });
+    onMudar({ ...area, matriz });
+  };
+
+  return (
+    <div className="area-permissao">
+      <div className="area-permissao__topo">
+        <h4>{total > 1 ? `Área ${indice + 1}` : "Onde atua"}</h4>
+        {total > 1 ? (
+          <button
+            type="button"
+            className="botao-texto botao-texto--perigo"
+            onClick={onRemover}
+            title="Remover esta área"
+          >
+            Remover área
+          </button>
+        ) : null}
+      </div>
+
+      <div className="editor-permissao__campos">
+        <label>
+          <span>Filial</span>
+          <Seletor
+            multiplo
+            rotuloTodos="todas as filiais"
+            valor={filiais}
+            opcoes={catalogos.filiais.map((item) => ({ valor: item.id, rotulo: item.nome }))}
+            aoEscolher={(novas) => trocarLugares(novas, centros)}
+            buscaVazia="Nenhuma filial com esse nome."
+          />
+        </label>
+        <label>
+          <span>Centro de custo</span>
+          <Seletor
+            multiplo
+            rotuloTodos="todos os centros"
+            valor={centros}
+            opcoes={catalogos.centros.map((item) => ({
+              valor: item.id,
+              rotulo: item.nome,
+              detalhe: item.id,
+            }))}
+            aoEscolher={(novos) => trocarLugares(filiais, novos)}
+            buscaVazia="Nenhum centro com esse nome."
+          />
+        </label>
+      </div>
+
+      <div className="area-permissao__oque">
+        <span className="area-permissao__rotulo">
+          O que faz aqui
+          {/* Marcar oito módulos um a um para dar leitura geral é o caso mais
+              comum, e o mais chato. */}
+          <span className="area-permissao__atalhos">
+            <button type="button" className="botao-texto" onClick={() => marcarTodos(VE)}>
+              tudo: vê
+            </button>
+            <button type="button" className="botao-texto" onClick={() => marcarTodos(EDITA)}>
+              tudo: edita
+            </button>
+            <button type="button" className="botao-texto" onClick={() => marcarTodos(NADA)}>
+              limpar
+            </button>
+          </span>
+        </span>
+
+        <div className="matriz-modulos">
+          {MODULOS.map((modulo) => (
+            <LinhaModulo
+              key={modulo.id}
+              modulo={modulo}
+              estado={area.matriz[modulo.id] ?? NADA}
+              onAlternar={(estado) =>
+                onMudar({ ...area, matriz: { ...area.matriz, [modulo.id]: estado } })
+              }
+            />
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function EditorPermissao({ usuario, catalogos, onSalvar }) {
-  const inicial = lerTerritorio(usuario.acessos ?? []);
-  const [filiais, setFiliais] = useState([]);
-  const [centros, setCentros] = useState([]);
-  const [matriz, setMatriz] = useState(inicial.matriz);
+  const [areas, setAreas] = useState(() => {
+    const lidas = lerAreas(usuario.acessos ?? []);
+    return lidas.length ? lidas : [areaVazia()];
+  });
   const [salvando, setSalvando] = useState(false);
 
   // Trocar de usuário sem fechar o painel precisa recarregar, senão a matriz
   // mostrada é a da pessoa anterior.
   useEffect(() => {
-    const lido = lerTerritorio(usuario.acessos ?? []);
-    setMatriz(lido.matriz);
-    setFiliais([...new Set(lido.territorio.map((l) => l.filial).filter(Boolean))]);
-    setCentros([...new Set(lido.territorio.map((l) => l.centro).filter(Boolean))]);
+    const lidas = lerAreas(usuario.acessos ?? []);
+    setAreas(lidas.length ? lidas : [areaVazia()]);
   }, [usuario.login, usuario.acessos]);
 
-  // Nenhuma filial escolhida = todas; o mesmo para centro. É o "tudo" que o
-  // modelo de concessão já entende como nulo.
-  const territorio = [];
-  const asFiliais = filiais.length ? filiais : [null];
-  const osCentros = centros.length ? centros : [null];
-  asFiliais.forEach((filial) => {
-    osCentros.forEach((centro) => territorio.push({ filial, centro }));
-  });
-
-  const concessoes = gerarConcessoes(territorio, matriz);
-  const nenhum = MODULOS.every((modulo) => (matriz[modulo.id] ?? NADA) === NADA);
+  const concessoes = gerarConcessoes(areas);
 
   async function salvar() {
     setSalvando(true);
@@ -93,62 +192,37 @@ export default function EditorPermissao({ usuario, catalogos, onSalvar }) {
 
   return (
     <div className="editor-permissao">
-      <div className="editor-permissao__onde">
-        <h4>Onde atua</h4>
-        <div className="editor-permissao__campos">
-          <label>
-            <span>Filial</span>
-            <Seletor
-              multiplo
-              rotuloTodos="todas as filiais"
-              valor={filiais}
-              opcoes={catalogos.filiais.map((item) => ({ valor: item.id, rotulo: item.nome }))}
-              aoEscolher={setFiliais}
-              buscaVazia="Nenhuma filial com esse nome."
-            />
-          </label>
-          <label>
-            <span>Centro de custo</span>
-            <Seletor
-              multiplo
-              rotuloTodos="todos os centros"
-              valor={centros}
-              opcoes={catalogos.centros.map((item) => ({
-                valor: item.id,
-                rotulo: item.nome,
-                detalhe: item.id,
-              }))}
-              aoEscolher={setCentros}
-              buscaVazia="Nenhum centro com esse nome."
-            />
-          </label>
-        </div>
-      </div>
+      {areas.map((area, indice) => (
+        <Area
+          key={indice}
+          area={area}
+          indice={indice}
+          total={areas.length}
+          catalogos={catalogos}
+          onMudar={(nova) => setAreas((atuais) => atuais.map((a, i) => (i === indice ? nova : a)))}
+          onRemover={() => setAreas((atuais) => atuais.filter((_, i) => i !== indice))}
+        />
+      ))}
 
-      <div className="editor-permissao__oque">
-        <h4>O que faz em cada módulo</h4>
-        <div className="matriz-modulos">
-          {MODULOS.map((modulo) => (
-            <LinhaModulo
-              key={modulo.id}
-              modulo={modulo}
-              estado={matriz[modulo.id] ?? NADA}
-              onAlternar={(estado) => setMatriz((atual) => ({ ...atual, [modulo.id]: estado }))}
-            />
-          ))}
-        </div>
-      </div>
+      <button
+        type="button"
+        className="botao botao--secundario botao--compacto editor-permissao__nova"
+        onClick={() => setAreas((atuais) => [...atuais, areaVazia()])}
+      >
+        <Icone nome="plus" tamanho={15} />
+        Adicionar área
+      </button>
 
       <div className="editor-permissao__rodape">
         <p className="editor-permissao__previa">
-          {nenhum ? (
-            <>
-              Nenhum módulo marcado — salvar assim <strong>tira todo o acesso</strong> desta pessoa.
-            </>
-          ) : (
+          {concessoes.length ? (
             <>
               Vai gravar {concessoes.length}{" "}
               {concessoes.length === 1 ? "concessão" : "concessões"}.
+            </>
+          ) : (
+            <>
+              Nenhum módulo marcado — salvar assim <strong>tira todo o acesso</strong> desta pessoa.
             </>
           )}
         </p>

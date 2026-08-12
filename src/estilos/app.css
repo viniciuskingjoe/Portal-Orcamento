@@ -3245,6 +3245,55 @@ dialog::backdrop {
   gap: 12px;
 }
 
+/* Cada área é um bloco fechado: o que separa "edita na KING&JOE" de "só vê na
+   MEN HUB" é a borda, não a leitura atenta. */
+.area-permissao {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+}
+
+.area-permissao__topo {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.area-permissao__topo h4 {
+  margin: 0;
+}
+
+.area-permissao__rotulo {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 6px;
+  color: var(--muted);
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+
+.area-permissao__atalhos {
+  display: flex;
+  gap: 12px;
+  letter-spacing: 0;
+  text-transform: none;
+  font-weight: 400;
+}
+
+.editor-permissao__nova {
+  align-self: flex-start;
+}
+
 .matriz-modulos {
   display: flex;
   flex-direction: column;
