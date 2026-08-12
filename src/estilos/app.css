@@ -3218,6 +3218,133 @@ dialog::backdrop {
   color: var(--danger);
 }
 
+/* --- permissão: onde atua + o que faz ----------------------------------- */
+
+.editor-permissao {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface-soft);
+}
+
+.editor-permissao h4 {
+  margin: 0 0 8px;
+  color: var(--muted);
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+
+.editor-permissao__campos {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 12px;
+}
+
+.matriz-modulos {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.matriz-linha {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 38px;
+  padding: 0 10px;
+  border-radius: var(--radius-sm);
+}
+
+.matriz-linha:hover {
+  background: var(--surface-hover);
+}
+
+/* A faixa à esquerda diz o estado sem depender de ler o botão aceso — quem
+   confere uma permissão passa o olho pela coluna, não linha a linha. */
+.matriz-linha--ve {
+  box-shadow: inset 3px 0 0 var(--accent);
+}
+
+.matriz-linha--edita {
+  box-shadow: inset 3px 0 0 var(--success);
+}
+
+.matriz-linha__nome {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-width: 0;
+  font-size: 13px;
+}
+
+.matriz-linha--nada .matriz-linha__nome {
+  color: var(--muted);
+}
+
+.matriz-linha__estados {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 2px;
+  padding: 2px;
+  border-radius: 999px;
+  background: var(--surface);
+}
+
+.matriz-estado {
+  min-width: 52px;
+  padding: 4px 10px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: 0.16s ease;
+}
+
+.matriz-estado:hover {
+  color: var(--text);
+}
+
+.matriz-estado.is-ativo {
+  background: var(--accent);
+  color: #fff;
+}
+
+/* Edita é o estado que dá poder: cor própria para não se confundir com "vê"
+   numa conferência rápida. */
+.matriz-linha--edita .matriz-estado.is-ativo {
+  background: var(--success);
+}
+
+.matriz-linha--nada .matriz-estado.is-ativo {
+  background: var(--border-strong);
+  color: var(--text);
+}
+
+.editor-permissao__rodape {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+
+.editor-permissao__previa {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+
 .nova-concessao {
   display: flex;
   flex-direction: column;

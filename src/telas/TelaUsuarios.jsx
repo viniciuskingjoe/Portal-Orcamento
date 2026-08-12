@@ -3,6 +3,8 @@ import { useEffect, useMemo, useState } from "react";
 import Cabecalho from "../componentes/Cabecalho.jsx";
 import Icone from "../componentes/Icone.jsx";
 import Seletor from "../componentes/Seletor.jsx";
+import EditorPermissao from "../componentes/EditorPermissao.jsx";
+import { lerTerritorio } from "../dados/territorio.js";
 import ModalConfirmacao from "../componentes/ModalConfirmacao.jsx";
 import { AvisoErro, Carregando } from "../componentes/Estados.jsx";
 import { MODULOS } from "../dados/modulos.js";
@@ -464,6 +466,22 @@ export default function TelaUsuarios({ filiais, centros, sessao, onVoltar }) {
                     </p>
                   ) : null}
 
+                  {cabeNaMatriz(usuario) ? (
+                    <EditorPermissao
+                      usuario={usuario}
+                      catalogos={catalogos}
+                      onSalvar={(lista) => executar(api.definirAcessos(usuario.login, lista))}
+                    />
+                  ) : (
+                    <>
+                      {/* Permissao com territorio diferente por modulo nao cabe
+                          na matriz, e salvar por cima apagaria parte dela. Cai
+                          para a lista antiga em vez de simplificar por conta. */}
+                      <p className="sem-contas">
+                        Esta permissao mistura territorios diferentes por modulo, entao o editor
+                        simplificado nao a representa. Revogue as concessoes abaixo para montar de
+                        novo pelo editor.
+                      </p>
                   {(() => {
                     const redundantes = new Set(
                       concessoesRedundantes(usuario.acessos).map((acesso) => acesso.id)
@@ -508,7 +526,9 @@ export default function TelaUsuarios({ filiais, centros, sessao, onVoltar }) {
                     catalogos={catalogos}
                     onConceder={(lista) => executar(api.concederAcessos(usuario.login, lista))}
                   />
-                </div>
+
+                    </>
+                  )}                </div>
               ) : null}
             </section>
           );
@@ -566,4 +586,11 @@ export default function TelaUsuarios({ filiais, centros, sessao, onVoltar }) {
       </div>
     </main>
   );
+}
+
+// Território diferente por módulo é legítimo no modelo antigo, mas a matriz não
+// representa: salvar por cima apagaria parte da permissão. Nesse caso a tela cai
+// para a lista de concessões.
+function cabeNaMatriz(usuario) {
+  return lerTerritorio(usuario.acessos ?? []).cabe;
 }

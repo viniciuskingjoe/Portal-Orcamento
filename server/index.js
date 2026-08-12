@@ -45,6 +45,7 @@ import {
   alterarUsuario,
   concederAcesso,
   concederAcessos,
+  definirAcessos,
   darAcesso,
   listarUsuarios,
   limparSenha,
@@ -451,6 +452,18 @@ app.post(
     // vários centros de uma vez, e meia concessão gravada é pior que nenhuma.
     const lista = Array.isArray(req.body?.acessos) ? req.body.acessos : [req.body ?? {}];
     await concederAcessos(req.params.login, lista, req.sessao.login);
+    res.json({ ok: true, concedidas: lista.length });
+  })
+);
+
+// PUT troca o conjunto inteiro; POST acrescenta. O editor de territorio usa
+// este, porque desmarcar um modulo na matriz precisa TIRAR a permissao.
+app.put(
+  "/api/usuarios/:login/acessos",
+  exigirAdmin,
+  rota(async (req, res) => {
+    const lista = Array.isArray(req.body?.acessos) ? req.body.acessos : [];
+    await definirAcessos(req.params.login, lista, req.sessao.login);
     res.json({ ok: true, concedidas: lista.length });
   })
 );

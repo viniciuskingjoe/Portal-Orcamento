@@ -137,6 +137,12 @@ export const api = {
     buscar(`/api/usuarios/${encodeURIComponent(login)}`, null, { metodo: "DELETE" }),
   concederAcessos: (login, acessos) =>
     buscar(`/api/usuarios/${encodeURIComponent(login)}/acessos`, null, { corpo: { acessos } }),
+  // Substitui tudo o que a pessoa tinha. Ver definirAcessos no servidor.
+  definirAcessos: (login, acessos) =>
+    buscar(`/api/usuarios/${encodeURIComponent(login)}/acessos`, null, {
+      metodo: "PUT",
+      corpo: { acessos },
+    }),
   revogarAcesso: (login, id) =>
     buscar(`/api/usuarios/${encodeURIComponent(login)}/acessos/${id}`, null, { metodo: "DELETE" }),
 

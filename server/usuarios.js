@@ -184,6 +184,23 @@ export async function concederAcesso(login, acesso, quem) {
   await concederAcessos(login, [acesso], quem);
 }
 
+// Troca o conjunto inteiro: o que não vier na lista deixa de valer.
+//
+// É o que o editor de território precisa. `concederAcessos` só acrescenta, e
+// com ele desmarcar um módulo na matriz não tiraria nada — a permissão só
+// cresceria, que é exatamente o defeito do modelo antigo.
+//
+// Numa transação só: entre apagar e reinserir, a pessoa ficaria sem acesso
+// nenhum, e uma falha no meio a deixaria assim.
+export async function definirAcessos(login, lista, quem) {
+  await transaction(async ({ query: q }) => {
+    await q("DELETE FROM dbo.KING_PORTAL_ORC_ACESSO WHERE LOGIN = @login", { login });
+    for (const acesso of lista ?? []) {
+      await gravarConcessao(q, login, acesso, quem);
+    }
+  });
+}
+
 function gravarConcessao(executar, login, { modulo, filial, centro, podeEditar }, quem) {
   const vazio = (valor) => (valor === "" || valor === undefined ? null : valor);
 
