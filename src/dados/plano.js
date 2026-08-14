@@ -1,9 +1,5 @@
 import { MESES } from "./seeds.js";
-import {
-  MODULO_BASE_DO_PERCENTUAL,
-  modulo as definicaoDoModulo,
-  ehPercentual,
-} from "./modulos.js";
+import { MODULO_BASE_DO_PERCENTUAL, modulo as definicaoDoModulo, ehPercentual } from "./modulos.js";
 import {
   SEM_CENTRO,
   centrosDaFilial,
@@ -70,8 +66,17 @@ export function chavePlanejado(moduloId, filialId, centroId, conta, mes, receita
   return receita ? `${chave}|${receita}` : chave;
 }
 
+// Quantidade de funcionários: filial, centro e mês, sem módulo nem conta.
+//
+// Não é uma variação de `chavePlanejado` com campos vazios de propósito — o
+// dado é de outra natureza. Uma chave com "|||" no meio convidaria alguém a
+// misturar os dois mapas, e aí gente entraria numa soma de reais.
+export function chaveFuncionario(filialId, centroId, mes) {
+  return `${filialId}|${centroId ?? SEM_CENTRO}|${mes}`;
+}
+
 export function criarPlano(id, nome, ano, visaoId) {
-  return { id, nome, ano, visaoId, planejado: {} };
+  return { id, nome, ano, visaoId, planejado: {}, funcionarios: {} };
 }
 
 // --------------------------------------------------------------------------

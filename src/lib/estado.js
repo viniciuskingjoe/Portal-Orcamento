@@ -52,6 +52,7 @@ export const estado = {
     situacao: (id, situacao) => api.situacaoDoPlano(id, situacao),
     duplicar: (id, novo) => api.duplicarPlano(id, novo),
     planejado: (planoId, celulas) => api.salvarPlanejado(planoId, celulas),
+    funcionarios: (planoId, celulas) => api.salvarFuncionarios(planoId, celulas),
     // Manda o planejado para o orçamento do Linx, de onde o Power BI lê.
     publicar: (planoId) => api.publicarPlano(planoId),
   },
@@ -71,4 +72,11 @@ export function celulaDaChave(chave, valor) {
     mes: Number(mes),
     valor,
   };
+}
+
+// A chave da quantidade é `filial|centro|mes` — três campos, sem módulo nem
+// conta. Ver `chaveFuncionario` em dados/plano.js.
+export function funcionarioDaChave(chave, quantidade) {
+  const [filial, centro, mes] = chave.split("|");
+  return { filial, centro: centro ?? "", mes: Number(mes), quantidade };
 }

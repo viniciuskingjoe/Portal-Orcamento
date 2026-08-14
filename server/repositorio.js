@@ -1,5 +1,5 @@
 import { query, transaction } from "./sqlserver.js";
-import { chavePlanejado } from "../src/dados/plano.js";
+import { chaveFuncionario, chavePlanejado } from "../src/dados/plano.js";
 
 // ============================================================================
 // DADOS DO PORTAL
@@ -41,16 +41,39 @@ async function temColuna(tabela, coluna) {
 const temPublicacao = () => temColuna("dbo.KING_PORTAL_ORC_PLANO", "PUBLICADO_EM");
 const temSituacao = () => temColuna("dbo.KING_PORTAL_ORC_PLANO", "SITUACAO");
 
+// Mesma cautela para a tabela do sql/009: um banco que ficou no 008 responde
+// sem quantidade nenhuma em vez de derrubar a carga inteira.
+const tabelasConhecidas = new Map();
+
+async function temTabela(nome) {
+  if (!tabelasConhecidas.has(nome)) {
+    const [linha] = await query("SELECT OBJECT_ID(@n, 'U') AS tem", { n: nome });
+    tabelasConhecidas.set(nome, linha?.tem != null);
+  }
+  return tabelasConhecidas.get(nome);
+}
+
+const temFuncionarios = () => temTabela("dbo.KING_PORTAL_ORC_FUNCIONARIO");
+
 // --------------------------------------------------------------------------
 // Leitura
 // --------------------------------------------------------------------------
 
 export async function carregarEstado() {
+  const funcionarios = (await temFuncionarios())
+    ? await query(
+        `SELECT PLANO_ID, COD_FILIAL, CENTRO_CUSTO, MES, QUANTIDADE
+           FROM dbo.KING_PORTAL_ORC_FUNCIONARIO`
+      )
+    : [];
+
   const [config, visoes, modulos, centros, contas, sinais, planos, planejado] = await Promise.all([
     query("SELECT CHAVE, VALOR FROM dbo.KING_PORTAL_ORC_CONFIGURACAO"),
     query("SELECT ID, NOME, VISAO_CONTABIL FROM dbo.KING_PORTAL_ORC_VISAO ORDER BY NOME"),
     query("SELECT VISAO_ID, MODULO, USA_CENTRO FROM dbo.KING_PORTAL_ORC_VISAO_MODULO"),
-    query("SELECT VISAO_ID, MODULO, COD_FILIAL, CENTRO_CUSTO FROM dbo.KING_PORTAL_ORC_VISAO_CENTRO"),
+    query(
+      "SELECT VISAO_ID, MODULO, COD_FILIAL, CENTRO_CUSTO FROM dbo.KING_PORTAL_ORC_VISAO_CENTRO"
+    ),
     query(
       `SELECT VISAO_ID, MODULO, COD_FILIAL, CENTRO_CUSTO, CLASSIFICACAO
          FROM dbo.KING_PORTAL_ORC_VISAO_CONTA ORDER BY CLASSIFICACAO`
@@ -137,6 +160,9 @@ export async function carregarEstado() {
         // que ele era antes de existir situacao.
         situacao: linha.SITUACAO ?? "ativo",
         planejado: {},
+        // Mapa separado do planejado: quantidade de pessoas não é dinheiro e
+        // não pode cair numa soma de reais por descuido.
+        funcionarios: {},
       },
     ])
   );
@@ -153,6 +179,13 @@ export async function carregarEstado() {
       linha.RECEITA || null
     );
     plano.planejado[chave] = Number(linha.VALOR);
+  });
+
+  funcionarios.forEach((linha) => {
+    const plano = porPlano.get(linha.PLANO_ID);
+    if (!plano) return;
+    const chave = chaveFuncionario(linha.COD_FILIAL, linha.CENTRO_CUSTO, linha.MES);
+    plano.funcionarios[chave] = Number(linha.QUANTIDADE);
   });
 
   const filiaisAtivas = config.find((linha) => linha.CHAVE === "filiaisAtivas");
@@ -384,7 +417,6 @@ export async function salvarGrupo({ id, nome, centros }, login) {
         { id, centro }
       );
     }
-
   });
 }
 
@@ -430,6 +462,19 @@ export async function duplicarPlano({ id, novoId, nome, ano }, login) {
         WHERE PLANO_ID = @id`,
       { novo: novoId, id, por: login ?? null }
     );
+
+    // A quantidade de funcionários vai junto: um "2026 ajustado" que voltasse
+    // com os centros vazios de gente faria a pessoa redigitar 384 números.
+    if (await temFuncionarios()) {
+      await q(
+        `INSERT INTO dbo.KING_PORTAL_ORC_FUNCIONARIO
+           (PLANO_ID, COD_FILIAL, CENTRO_CUSTO, MES, QUANTIDADE, ALTERADO_POR)
+         SELECT @novo, COD_FILIAL, CENTRO_CUSTO, MES, QUANTIDADE, @por
+           FROM dbo.KING_PORTAL_ORC_FUNCIONARIO
+          WHERE PLANO_ID = @id`,
+        { novo: novoId, id, por: login ?? null }
+      );
+    }
   });
 
   const [{ celulas }] = await query(
@@ -460,10 +505,9 @@ export async function definirSituacaoDoPlano(id, situacao, login) {
       { id, situacao, por: login ?? null }
     );
 
-    const [plano] = await q(
-      "SELECT ID_ORCAMENTO FROM dbo.KING_PORTAL_ORC_PLANO WHERE ID = @id",
-      { id }
-    );
+    const [plano] = await q("SELECT ID_ORCAMENTO FROM dbo.KING_PORTAL_ORC_PLANO WHERE ID = @id", {
+      id,
+    });
     if (plano?.ID_ORCAMENTO) {
       await q("UPDATE dbo.CTB_ORCAMENTO SET INATIVO = @inativo WHERE ID_ORCAMENTO = @orc", {
         orc: plano.ID_ORCAMENTO,
@@ -524,6 +568,63 @@ export async function gravarPlanejado(planoId, celulas, login) {
            (PLANO_ID, MODULO, COD_FILIAL, CENTRO_CUSTO, CLASSIFICACAO, RECEITA, MES, VALOR, ALTERADO_POR)
            VALUES (@plano, @modulo, @filial, @centro, @conta, @receita, @mes, @valor, @por);`,
         { ...alvo, valor: celula.valor, por: login ?? null }
+      );
+    }
+  });
+}
+
+// --------------------------------------------------------------------------
+// Quantidade de funcionários
+//
+// Mesmo desenho de `gravarPlanejado`: MERGE por célula, e apagar em vez de
+// gravar quando o campo fica vazio.
+//
+// A diferença está no zero. No planejado, zero e vazio são a mesma coisa — não
+// há o que orçar. Aqui zero é uma afirmação: o centro existe e não tem ninguém
+// neste mês. Só `null` (campo limpo) apaga a linha.
+// --------------------------------------------------------------------------
+
+export async function gravarFuncionarios(planoId, celulas, login) {
+  if (!(await temFuncionarios())) {
+    const erro = new Error(
+      "A tabela KING_PORTAL_ORC_FUNCIONARIO não existe neste banco — rode o sql/009."
+    );
+    erro.status = 503;
+    throw erro;
+  }
+
+  await transaction(async ({ query: q }) => {
+    for (const celula of celulas ?? []) {
+      const alvo = {
+        plano: planoId,
+        filial: celula.filial,
+        centro: celula.centro ?? SEM_CENTRO,
+        mes: celula.mes,
+      };
+
+      const quantidade = celula.quantidade;
+      if (quantidade == null || !Number.isInteger(quantidade) || quantidade < 0) {
+        await q(
+          `DELETE FROM dbo.KING_PORTAL_ORC_FUNCIONARIO
+            WHERE PLANO_ID = @plano AND COD_FILIAL = @filial
+              AND CENTRO_CUSTO = @centro AND MES = @mes`,
+          alvo
+        );
+        continue;
+      }
+
+      await q(
+        `MERGE dbo.KING_PORTAL_ORC_FUNCIONARIO AS destino
+         USING (SELECT @plano AS PLANO_ID, @filial AS COD_FILIAL,
+                       @centro AS CENTRO_CUSTO, @mes AS MES) AS origem
+            ON destino.PLANO_ID = origem.PLANO_ID AND destino.COD_FILIAL = origem.COD_FILIAL
+           AND destino.CENTRO_CUSTO = origem.CENTRO_CUSTO AND destino.MES = origem.MES
+         WHEN MATCHED THEN UPDATE SET
+           QUANTIDADE = @quantidade, ALTERADO_EM = SYSUTCDATETIME(), ALTERADO_POR = @por
+         WHEN NOT MATCHED THEN INSERT
+           (PLANO_ID, COD_FILIAL, CENTRO_CUSTO, MES, QUANTIDADE, ALTERADO_POR)
+           VALUES (@plano, @filial, @centro, @mes, @quantidade, @por);`,
+        { ...alvo, quantidade, por: login ?? null }
       );
     }
   });
@@ -606,12 +707,17 @@ export async function importar(estado, login) {
 
 // Filial que sai do ERP deixa edições órfãs em todos os planos.
 export async function purgarFilial(filialId) {
+  const tabelas = [
+    "dbo.KING_PORTAL_ORC_PLANEJADO",
+    "dbo.KING_PORTAL_ORC_VISAO_CONTA",
+    "dbo.KING_PORTAL_ORC_VISAO_CENTRO",
+  ];
+  // Deixar a quantidade para trás guardaria pessoas numa filial que o portal
+  // não conhece mais.
+  if (await temFuncionarios()) tabelas.push("dbo.KING_PORTAL_ORC_FUNCIONARIO");
+
   await transaction(async ({ query: q }) => {
-    for (const tabela of [
-      "dbo.KING_PORTAL_ORC_PLANEJADO",
-      "dbo.KING_PORTAL_ORC_VISAO_CONTA",
-      "dbo.KING_PORTAL_ORC_VISAO_CENTRO",
-    ]) {
+    for (const tabela of tabelas) {
       await q(`DELETE FROM ${tabela} WHERE COD_FILIAL = @filial`, { filial: filialId });
     }
   });

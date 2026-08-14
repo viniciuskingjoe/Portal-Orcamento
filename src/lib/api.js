@@ -97,7 +97,10 @@ export const api = {
   estadoVazio: () => buscar("/api/estado/vazio"),
   importarEstado: (dados) => buscar("/api/estado/importar", null, { corpo: dados }),
   salvarConfiguracao: (chave, valor) =>
-    buscar(`/api/configuracao/${encodeURIComponent(chave)}`, null, { metodo: "PUT", corpo: { valor } }),
+    buscar(`/api/configuracao/${encodeURIComponent(chave)}`, null, {
+      metodo: "PUT",
+      corpo: { valor },
+    }),
 
   grupos: () => buscar("/api/grupos"),
   salvarGrupo: (grupo) =>
@@ -108,10 +111,14 @@ export const api = {
     buscar(`/api/visoes/${encodeURIComponent(visao.id)}`, null, { metodo: "PUT", corpo: visao }),
   excluirVisao: (id) => buscar(`/api/visoes/${encodeURIComponent(id)}`, null, { metodo: "DELETE" }),
   salvarModulo: (visaoId, modulo, mudanca) =>
-    buscar(`/api/visoes/${encodeURIComponent(visaoId)}/modulos/${encodeURIComponent(modulo)}`, null, {
-      metodo: "PUT",
-      corpo: mudanca,
-    }),
+    buscar(
+      `/api/visoes/${encodeURIComponent(visaoId)}/modulos/${encodeURIComponent(modulo)}`,
+      null,
+      {
+        metodo: "PUT",
+        corpo: mudanca,
+      }
+    ),
 
   salvarPlano: (plano) =>
     buscar(`/api/planos/${encodeURIComponent(plano.id)}`, null, { metodo: "PUT", corpo: plano }),
@@ -148,6 +155,12 @@ export const api = {
 
   salvarPlanejado: (planoId, celulas) =>
     buscar(`/api/planos/${encodeURIComponent(planoId)}/planejado`, null, {
+      metodo: "PUT",
+      corpo: { celulas },
+    }),
+
+  salvarFuncionarios: (planoId, celulas) =>
+    buscar(`/api/planos/${encodeURIComponent(planoId)}/funcionarios`, null, {
       metodo: "PUT",
       corpo: { celulas },
     }),

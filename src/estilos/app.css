@@ -3867,3 +3867,152 @@ dialog::backdrop {
   border-color: var(--accent);
   box-shadow: 0 0 0 3px var(--accent-soft);
 }
+
+/* --------------------------------------------------------------------------
+   Quantidade de funcionários
+
+   Transposta em relação às outras tabelas do portal: centro na linha, mês na
+   coluna. Doze colunas estreitas de inteiros cabem numa tela, e é assim que se
+   enxerga o degrau de contratação de um centro ao longo do ano.
+   -------------------------------------------------------------------------- */
+
+.aviso-modulo {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 14px;
+  padding: 10px 14px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface-soft);
+  color: var(--muted);
+  font-size: 12.5px;
+}
+
+.aviso-modulo svg {
+  flex: none;
+  color: var(--accent);
+}
+
+.tabela-wrapper {
+  /* A tabela é larga por natureza. Ela rola sozinha, para o corpo da página
+     nunca rolar de lado. */
+  overflow-x: auto;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+}
+
+.tabela-qtde {
+  width: 100%;
+  border-collapse: collapse;
+  font-variant-numeric: tabular-nums;
+}
+
+.tabela-qtde th,
+.tabela-qtde td {
+  padding: 9px 12px;
+  text-align: right;
+  white-space: nowrap;
+  border-bottom: 1px solid var(--border);
+}
+
+.tabela-qtde thead th {
+  position: sticky;
+  top: 0;
+  background: var(--surface-soft);
+  color: var(--muted);
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+/* O nome do centro é o que se procura ao percorrer a tabela: fica à esquerda e
+   não sai da tela quando as doze colunas obrigam a rolar. */
+.tabela-qtde .col-centro {
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  min-width: 210px;
+  text-align: left;
+  background: var(--surface);
+}
+
+.tabela-qtde thead .col-centro {
+  z-index: 2;
+  background: var(--surface-soft);
+}
+
+.tabela-qtde tbody th.col-centro {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.tabela-qtde tbody th.col-centro small {
+  display: block;
+  margin-top: 2px;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--muted);
+}
+
+.tabela-qtde td {
+  font-size: 13.5px;
+  color: var(--text);
+}
+
+.tabela-qtde .col-resumo {
+  color: var(--text-soft);
+  border-left: 1px solid var(--border);
+}
+
+.tabela-qtde tbody tr:hover td,
+.tabela-qtde tbody tr:hover th.col-centro {
+  background: var(--surface-hover);
+}
+
+.tabela-qtde tfoot th,
+.tabela-qtde tfoot td {
+  background: var(--surface-soft);
+  font-weight: 700;
+  border-top: 2px solid var(--border-strong);
+  border-bottom: none;
+}
+
+/* Célula sem número informado. O traço já diz que está vazia; o cinza evita que
+   ele pese tanto quanto um valor de verdade. */
+.celula-qtde.is-vazia {
+  color: var(--muted);
+}
+
+.celula-qtde.is-editavel {
+  cursor: text;
+}
+
+.celula-qtde.is-editavel:hover,
+.celula-qtde.is-editavel:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+  border-radius: 4px;
+}
+
+.celula-qtde.is-editando {
+  padding: 0;
+}
+
+.celula-qtde input {
+  width: 100%;
+  padding: 9px 12px;
+  border: none;
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+  border-radius: 4px;
+  background: var(--surface-hover);
+  color: var(--text);
+  font: inherit;
+  font-size: 13.5px;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}

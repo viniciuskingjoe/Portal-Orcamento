@@ -16,14 +16,16 @@ import TelaVisoes from "./telas/TelaVisoes.jsx";
 import TelaVisao from "./telas/TelaVisao.jsx";
 import TelaVisaoModulo from "./telas/TelaVisaoModulo.jsx";
 import TelaOrcamento, { TODAS_AS_CONTAS } from "./telas/TelaOrcamento.jsx";
+import TelaFuncionarios from "./telas/TelaFuncionarios.jsx";
 import TelaLogin from "./telas/TelaLogin.jsx";
 import TelaTrocarSenha from "./telas/TelaTrocarSenha.jsx";
 import TelaUsuarios from "./telas/TelaUsuarios.jsx";
 
 import { EMPRESA, MESES } from "./dados/seeds.js";
-import { ehModulo, modulo as definicaoDoModulo } from "./dados/modulos.js";
+import { ehModulo, ehQuantidade, modulo as definicaoDoModulo } from "./dados/modulos.js";
 import {
   baseDoPercentual,
+  chaveFuncionario,
   chavePlanejado,
   criarLinhasOrcamento,
   criarPlano,
@@ -881,6 +883,29 @@ function PlanejamentoOrcamentario({ sessao, onSair }) {
     );
   }
 
+  // Quantidade de funcionários. Mapa à parte do planejado: gente e reais não
+  // podem cair na mesma soma por descuido.
+  //
+  // `null` apaga a célula e por isso é gravado como está — trocar por 0 diria
+  // "este centro não tem ninguém", que é outra afirmação.
+  function gravarFuncionarios(celulas) {
+    const alteracoes = Object.fromEntries(
+      celulas.map((celula) => [
+        chaveFuncionario(celula.filial, celula.centro, celula.mes),
+        celula.quantidade,
+      ])
+    );
+
+    setPlanos((atuais) =>
+      atuais.map((plano) =>
+        plano.id === planoAtivoId
+          ? { ...plano, funcionarios: { ...plano.funcionarios, ...alteracoes } }
+          : plano
+      )
+    );
+    gravar(repo.plano.funcionarios(planoAtivoId, celulas));
+  }
+
   // Receita planejada de cada mês, para converter valor digitado em reais no
   // percentual que fica gravado.
   const basePorMes = useMemo(() => {
@@ -1150,6 +1175,29 @@ function PlanejamentoOrcamentario({ sessao, onSair }) {
           onCopiar={pedirCopia}
           onAlternarSituacao={pedirSituacao}
           onAlternarInativos={() => setMostrarInativos((atual) => !atual)}
+        />
+      );
+    }
+
+    // Despesas com pessoal não orça valor: a tela é outra, com centro na linha
+    // e mês na coluna. Sai antes de TelaOrcamento, que pressupõe conta e R$.
+    if (moduloDaTela && visaoDoPlano && ehQuantidade(moduloDaTela.id)) {
+      return exigirErp(
+        <TelaFuncionarios
+          plano={planoAtivo}
+          visao={visaoDoPlano}
+          modulo={moduloDaTela}
+          filiais={filiaisAtivas}
+          centros={centrosPermitidosNaTela}
+          filtros={filtros}
+          onAlterarFiltro={alterarFiltro}
+          podeLancar={podeLancar(sessao, {
+            modulo: moduloDaTela.id,
+            filial: filtros.filial,
+            centro: filtros.centro,
+          })}
+          onGravar={gravarFuncionarios}
+          onVoltar={voltar}
         />
       );
     }

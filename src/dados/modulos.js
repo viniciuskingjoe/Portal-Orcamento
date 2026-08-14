@@ -27,15 +27,69 @@ export const GRUPOS = {
 };
 
 export const MODULOS = [
-  { id: "receita-vendas", titulo: "Receita de vendas", tipo: "receita", grupo: "R", icone: "chart" },
-  { id: "receitas-nao-operacionais", titulo: "Receitas não operacionais", tipo: "receita", grupo: "R", icone: "coins" },
+  {
+    id: "receita-vendas",
+    titulo: "Receita de vendas",
+    tipo: "receita",
+    grupo: "R",
+    icone: "chart",
+  },
+  {
+    id: "receitas-nao-operacionais",
+    titulo: "Receitas não operacionais",
+    tipo: "receita",
+    grupo: "R",
+    icone: "coins",
+  },
   // As contas de dedução (devolução, ICMS/PIS/COFINS sobre vendas) são DV no ERP.
-  { id: "deducoes-vendas", titulo: "Deduções de vendas", tipo: "despesa", grupo: "DV", icone: "trendingDown", percentual: true },
-  { id: "custos-variaveis", titulo: "Custos variáveis", tipo: "despesa", grupo: "DV", icone: "layers", percentual: true },
-  { id: "despesas-variaveis", titulo: "Despesas variáveis", tipo: "despesa", grupo: "DV", icone: "percent" },
-  { id: "despesas-operacionais", titulo: "Despesas operacionais", tipo: "despesa", grupo: "DF", icone: "building" },
-  { id: "outras-despesas", titulo: "Outras despesas", tipo: "despesa", grupo: "DF", icone: "wallet" },
-  { id: "despesas-pessoal", titulo: "Despesas com pessoal", tipo: "despesa", grupo: "DF", icone: "users" },
+  {
+    id: "deducoes-vendas",
+    titulo: "Deduções de vendas",
+    tipo: "despesa",
+    grupo: "DV",
+    icone: "trendingDown",
+    percentual: true,
+  },
+  {
+    id: "custos-variaveis",
+    titulo: "Custos variáveis",
+    tipo: "despesa",
+    grupo: "DV",
+    icone: "layers",
+    percentual: true,
+  },
+  {
+    id: "despesas-variaveis",
+    titulo: "Despesas variáveis",
+    tipo: "despesa",
+    grupo: "DV",
+    icone: "percent",
+  },
+  {
+    id: "despesas-operacionais",
+    titulo: "Despesas operacionais",
+    tipo: "despesa",
+    grupo: "DF",
+    icone: "building",
+  },
+  {
+    id: "outras-despesas",
+    titulo: "Outras despesas",
+    tipo: "despesa",
+    grupo: "DF",
+    icone: "wallet",
+  },
+  // O único módulo que não orça valor: aqui se informa QUANTAS pessoas o centro
+  // tem no mês. O R$ dessas contas fica em Despesas operacionais, onde sempre
+  // esteve — a quantidade é do centro, não da conta, e por isso não cabe lá.
+  {
+    id: "despesas-pessoal",
+    titulo: "Despesas com pessoal",
+    tipo: "despesa",
+    grupo: "DF",
+    icone: "users",
+    quantidade: true,
+  },
 ];
 
 const POR_ID = new Map(MODULOS.map((modulo) => [modulo.id, modulo]));
@@ -56,6 +110,17 @@ export const MODULO_BASE_DO_PERCENTUAL = "receita-vendas";
 export function ehPercentual(id) {
   return POR_ID.get(id)?.percentual === true;
 }
+
+// Módulo que guarda quantidade de pessoas em vez de dinheiro. Não tem conta,
+// não entra na publicação do valor e não soma com os outros — quem pergunta
+// isso antes de tratar um módulo como orçado evita somar gente com reais.
+export function ehQuantidade(id) {
+  return POR_ID.get(id)?.quantidade === true;
+}
+
+// Os módulos que de fato orçam R$. É esta lista que vale para consolidar,
+// publicar e conferir.
+export const MODULOS_DE_VALOR = MODULOS.filter((item) => item.quantidade !== true);
 
 export const MODULOS_RECEITA = MODULOS.filter((item) => item.tipo === "receita");
 export const MODULOS_DESPESA = MODULOS.filter((item) => item.tipo === "despesa");

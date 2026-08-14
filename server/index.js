@@ -36,6 +36,7 @@ import {
   excluirPlano,
   excluirVisao,
   importar,
+  gravarFuncionarios,
   gravarPlanejado,
   salvarConfiguracao,
   salvarPlano,
@@ -320,9 +321,7 @@ app.post(
   exigirEdicao,
   rota(async (req, res) => {
     const { novoId, nome, ano } = req.body ?? {};
-    res.json(
-      await duplicarPlano({ id: req.params.id, novoId, nome, ano }, req.sessao.login)
-    );
+    res.json(await duplicarPlano({ id: req.params.id, novoId, nome, ano }, req.sessao.login));
   })
 );
 
@@ -375,6 +374,34 @@ app.put(
     }
 
     await gravarPlanejado(req.params.id, celulas, req.sessao.login);
+    res.json({ ok: true, gravadas: celulas.length });
+  })
+);
+
+// Quantidade de funcionários. Mesma checagem célula a célula do planejado: não
+// tem valor, mas diz quanta gente há num centro — quem não pode lançar naquele
+// centro também não descreve o quadro dele.
+app.put(
+  "/api/planos/:id/funcionarios",
+  exigirEdicao,
+  rota(async (req, res) => {
+    const celulas = Array.isArray(req.body?.celulas) ? req.body.celulas : [];
+
+    const negada = celulas.find(
+      (celula) =>
+        !podeEditar(req.sessao, {
+          modulo: "despesas-pessoal",
+          filial: celula.filial,
+          centro: celula.centro ?? "",
+        })
+    );
+    if (negada) {
+      const erro = new Error("Você não pode lançar nesta combinação de filial e centro de custo.");
+      erro.status = 403;
+      throw erro;
+    }
+
+    await gravarFuncionarios(req.params.id, celulas, req.sessao.login);
     res.json({ ok: true, gravadas: celulas.length });
   })
 );

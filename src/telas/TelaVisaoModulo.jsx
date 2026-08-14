@@ -13,7 +13,7 @@ import {
   marcarEmCascata,
   resumirSelecao,
 } from "../dados/contas.js";
-import { GRUPOS } from "../dados/modulos.js";
+import { GRUPOS, ehQuantidade } from "../dados/modulos.js";
 import { tipoDaConta } from "../dados/realizado.js";
 import {
   SEM_CENTRO,
@@ -58,7 +58,10 @@ export default function TelaVisaoModulo({
   const editandoCentro = centroId !== SEM_CENTRO;
   // Marcar conta só faz sentido dentro de um centro: a lista da filial é o
   // consolidado deles, não uma escolha.
-  const podeMarcar = !!filialId && editandoCentro;
+  // Despesas com pessoal nao guarda conta: so quais centros informam
+  // quantidade. Oferecer a arvore la faria escolher contas que nada leria.
+  const semContas = ehQuantidade(modulo.id);
+  const podeMarcar = !!filialId && editandoCentro && !semContas;
 
   const catalogo = useMemo(
     () => filtrarPorGrupo(catalogoCompleto, modulo.grupo),
@@ -89,8 +92,7 @@ export default function TelaVisaoModulo({
     return catalogo.lista
       .filter(
         (item) =>
-          item.codigo.toLowerCase().includes(termo) ||
-          item.descricao.toLowerCase().includes(termo)
+          item.codigo.toLowerCase().includes(termo) || item.descricao.toLowerCase().includes(termo)
       )
       .map((item) => ({ ...item, nivel: 0, temFilhos: false, aberto: true }));
   }, [catalogo, expandidos, termo]);
@@ -214,70 +216,72 @@ export default function TelaVisaoModulo({
                 e não algo que se liga: filial → centros → contas de cada um. */}
             <section className="painel-selecao">
               <h3>Centros de custo</h3>
-                <p className="painel-selecao__descricao">
-                  {filialId
-                    ? "Marque os que esta filial usa; clique no nome para escolher as contas dele."
-                    : "Escolha uma filial na lista ao lado."}
-                </p>
+              <p className="painel-selecao__descricao">
+                {filialId
+                  ? semContas
+                    ? "Marque os centros desta filial que informam quantidade de funcionários."
+                    : "Marque os que esta filial usa; clique no nome para escolher as contas dele."
+                  : "Escolha uma filial na lista ao lado."}
+              </p>
 
-                {centros.map((centro) => {
-                  const quantas = filialId
-                    ? contasDoCentro(visao, modulo.id, filialId, centro.id).length
-                    : 0;
-                  const emUso = filialId ? centroEmUso(visao, modulo.id, filialId, centro.id) : false;
+              {centros.map((centro) => {
+                const quantas = filialId
+                  ? contasDoCentro(visao, modulo.id, filialId, centro.id).length
+                  : 0;
+                const emUso = filialId ? centroEmUso(visao, modulo.id, filialId, centro.id) : false;
 
-                  return (
-                    <div
-                      key={centro.id}
-                      className={[
-                        "selecao-item selecao-item--centro",
-                        centro.id === centroId ? "is-active" : "",
-                        !filialId ? "is-bloqueado" : "",
-                      ]
-                        .filter(Boolean)
-                        .join(" ")}
-                    >
-                      {/* A caixa diz se a filial usa o centro. Ligado nasce
+                return (
+                  <div
+                    key={centro.id}
+                    className={[
+                      "selecao-item selecao-item--centro",
+                      centro.id === centroId ? "is-active" : "",
+                      !filialId ? "is-bloqueado" : "",
+                    ]
+                      .filter(Boolean)
+                      .join(" ")}
+                  >
+                    {/* A caixa diz se a filial usa o centro. Ligado nasce
                           vazio: escolher as contas é o passo seguinte, e é o
                           que a árvore à direita faz. */}
-                      <label
-                        className="centro-uso"
-                        title={
-                          emUso
-                            ? "Deixar de usar este centro nesta filial (perde as contas dele)"
-                            : "Usar este centro nesta filial"
-                        }
-                      >
-                        <input
-                          type="checkbox"
-                          checked={emUso}
-                          disabled={!filialId}
-                          onChange={() => {
-                            onDefinirUsoDoCentro(modulo.id, filialId, centro.id, !emUso);
-                            setCentroId(emUso ? SEM_CENTRO : centro.id);
-                          }}
-                        />
-                        <span className="checkbox-visual">
-                          <Icone nome="check" tamanho={13} />
-                        </span>
-                      </label>
+                    <label
+                      className="centro-uso"
+                      title={
+                        emUso
+                          ? "Deixar de usar este centro nesta filial (perde as contas dele)"
+                          : "Usar este centro nesta filial"
+                      }
+                    >
+                      <input
+                        type="checkbox"
+                        checked={emUso}
+                        disabled={!filialId}
+                        onChange={() => {
+                          onDefinirUsoDoCentro(modulo.id, filialId, centro.id, !emUso);
+                          setCentroId(emUso ? SEM_CENTRO : centro.id);
+                        }}
+                      />
+                      <span className="checkbox-visual">
+                        <Icone nome="check" tamanho={13} />
+                      </span>
+                    </label>
 
-                      <button
-                        type="button"
-                        className="centro-nome"
-                        aria-pressed={centro.id === centroId}
-                        onClick={() => setCentroId(centro.id)}
-                        disabled={!emUso}
-                        title={emUso ? centro.nome : "Marque o centro para escolher as contas dele"}
-                      >
-                        <code>{centro.id}</code>
-                        <span>{centro.nome}</span>
-                      </button>
+                    <button
+                      type="button"
+                      className="centro-nome"
+                      aria-pressed={centro.id === centroId}
+                      onClick={() => setCentroId(centro.id)}
+                      disabled={!emUso}
+                      title={emUso ? centro.nome : "Marque o centro para escolher as contas dele"}
+                    >
+                      <code>{centro.id}</code>
+                      <span>{centro.nome}</span>
+                    </button>
 
-                      {quantas ? <b>{quantas}</b> : null}
-                    </div>
-                  );
-                })}
+                    {quantas ? <b>{quantas}</b> : null}
+                  </div>
+                );
+              })}
             </section>
           </aside>
 
@@ -342,9 +346,11 @@ export default function TelaVisaoModulo({
             ) : (
               <p className="modulo-aviso">
                 <Icone nome="info" tamanho={16} />
-                {!filialId
-                  ? "Escolha uma filial na lateral para configurar as contas dela."
-                  : "Este módulo é orçado por centro de custo: marque os centros que esta filial usa e escolha um para lançar as contas dele."}
+                {semContas
+                  ? "Este módulo não guarda contas — o valor das despesas com pessoal é orçado em Despesas operacionais. Aqui basta marcar os centros que informam a quantidade de funcionários."
+                  : !filialId
+                    ? "Escolha uma filial na lateral para configurar as contas dela."
+                    : "Este módulo é orçado por centro de custo: marque os centros que esta filial usa e escolha um para lançar as contas dele."}
               </p>
             )}
 
