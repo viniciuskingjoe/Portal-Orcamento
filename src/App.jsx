@@ -15,7 +15,6 @@ import TelaGrupo from "./telas/TelaGrupo.jsx";
 import TelaVisoes from "./telas/TelaVisoes.jsx";
 import TelaVisao from "./telas/TelaVisao.jsx";
 import TelaVisaoModulo from "./telas/TelaVisaoModulo.jsx";
-import TelaDre from "./telas/TelaDre.jsx";
 import TelaOrcamento, { TODAS_AS_CONTAS } from "./telas/TelaOrcamento.jsx";
 import TelaLogin from "./telas/TelaLogin.jsx";
 import TelaTrocarSenha from "./telas/TelaTrocarSenha.jsx";
@@ -43,7 +42,6 @@ import {
   definirUsoDoCentro,
   usaCentroDeCusto,
 } from "./dados/visao.js";
-import { montarDre } from "./dados/dre.js";
 import {
   centrosPermitidos,
   ehAdmin,
@@ -227,10 +225,6 @@ function PlanejamentoOrcamentario({ sessao, onSair }) {
   // visão geral e a configuração da visão.
   const modulosVisiveis = useMemo(() => modulosPermitidos(sessao, MODULOS), [sessao]);
 
-  // O DRE só faz sentido inteiro: com um módulo de fora, os subtotais deixam de
-  // ser o resultado da empresa e viram um número que não fecha com nada.
-  const podeVerDre = modulosVisiveis.length === MODULOS.length;
-
   // Cadastros do ERP recortados: mostrar filial ou centro que a pessoa não pode
   // ver já é vazamento — o nome deles diz o tamanho da operação.
   const filiaisDoErpVisiveis = useMemo(
@@ -238,7 +232,8 @@ function PlanejamentoOrcamentario({ sessao, onSair }) {
     [sessao, erp.filiais]
   );
   const centrosDoErpVisiveis = useMemo(
-    () => (ehAdmin(sessao) ? erp.centros : centrosPermitidos(sessao, erp.centros, { modulo: null })),
+    () =>
+      ehAdmin(sessao) ? erp.centros : centrosPermitidos(sessao, erp.centros, { modulo: null }),
     [sessao, erp.centros]
   );
 
@@ -263,7 +258,10 @@ function PlanejamentoOrcamentario({ sessao, onSair }) {
 
   useEffect(() => {
     let vivo = true;
-    repo.grupos().then((lista) => vivo && mesclarGrupos(lista)).catch(() => {});
+    repo
+      .grupos()
+      .then((lista) => vivo && mesclarGrupos(lista))
+      .catch(() => {});
     carregarEstado()
       .then((dados) => {
         if (!vivo) return;
@@ -434,30 +432,13 @@ function PlanejamentoOrcamentario({ sessao, onSair }) {
     return fora.map((id) => erp.filiais.find((filial) => filial.id === id) ?? { id });
   }, [realizado.doAno, realizado.doAnoAnterior, filiaisAtivas, erp.filiais]);
 
-  const contasDaTabela =
-    filtros.conta === TODAS_AS_CONTAS ? contasDisponiveis : [filtros.conta];
+  const contasDaTabela = filtros.conta === TODAS_AS_CONTAS ? contasDisponiveis : [filtros.conta];
   // Só recorta quando há uma receita escolhida. Em "Todas as receitas" o
   // planejado cai no fallback (todas as da filial) e o realizado fica com a
   // conta contábil inteira — que é o mesmo número, sem risco de perder o
   // movimento de um centro que a visão não tenha configurado.
   const receitasDaTabela =
-    moduloDaTela?.percentual && filtros.receita !== TODAS_AS_CONTAS
-      ? [filtros.receita]
-      : undefined;
-
-  // DRE consolidado da visão geral. Fica aqui porque depende do mesmo recorte de
-  // filial das telas de módulo — trocar a filial vale para as duas.
-  const dre = useMemo(() => {
-    if (!planoAtivo || !visaoDoPlano) return [];
-    return montarDre({
-      plano: planoAtivo,
-      visao: visaoDoPlano,
-      filiais: filiaisDoFiltro,
-      catalogo: contas.catalogo,
-      realizado: realizado.doAno,
-      realizadoAnterior: realizado.doAnoAnterior,
-    });
-  }, [planoAtivo, visaoDoPlano, filiaisDoFiltro, contas.catalogo, realizado]);
+    moduloDaTela?.percentual && filtros.receita !== TODAS_AS_CONTAS ? [filtros.receita] : undefined;
 
   const linhasOrcamento = useMemo(() => {
     if (!planoAtivo || !moduloDaTela) return [];
@@ -475,7 +456,17 @@ function PlanejamentoOrcamentario({ sessao, onSair }) {
       realizado: realizado.doAno,
       realizadoAnterior: realizado.doAnoAnterior,
     });
-  }, [planoAtivo, visaoDoPlano, moduloDaTela, filiaisDoFiltro, filtros.centro, contasDaTabela, receitasDaTabela, contas.catalogo, realizado]);
+  }, [
+    planoAtivo,
+    visaoDoPlano,
+    moduloDaTela,
+    filiaisDoFiltro,
+    filtros.centro,
+    contasDaTabela,
+    receitasDaTabela,
+    contas.catalogo,
+    realizado,
+  ]);
 
   // --------------------------------------------------------------------------
   // Navegação
@@ -586,7 +577,11 @@ function PlanejamentoOrcamentario({ sessao, onSair }) {
       // A cópia é feita no servidor: são centenas de células, e mandá-las de
       // volta pela rede só para o banco regravá-las seria trabalho à toa.
       try {
-        await repo.plano.duplicar(novoPlano.copiaDe, { novoId: id, nome: novoPlano.nome.trim(), ano });
+        await repo.plano.duplicar(novoPlano.copiaDe, {
+          novoId: id,
+          nome: novoPlano.nome.trim(),
+          ano,
+        });
         const dados = await carregarEstado();
         setPlanos(dados.planos);
         limpar();
@@ -645,7 +640,9 @@ function PlanejamentoOrcamentario({ sessao, onSair }) {
     if (!nome || !modalVisao.visaoContabil) return;
 
     if (modalVisao.id) {
-      gravar(repo.visao.salvar({ id: modalVisao.id, nome, visaoContabil: modalVisao.visaoContabil }));
+      gravar(
+        repo.visao.salvar({ id: modalVisao.id, nome, visaoContabil: modalVisao.visaoContabil })
+      );
       setVisoes((atuais) =>
         atuais.map((visao) => {
           if (visao.id !== modalVisao.id) return visao;
@@ -745,8 +742,7 @@ function PlanejamentoOrcamentario({ sessao, onSair }) {
   // Exclusões
   // --------------------------------------------------------------------------
 
-  const pedirExclusao = (tipo) => (item) =>
-    setConfirmacao({ tipo, id: item.id, nome: item.nome });
+  const pedirExclusao = (tipo) => (item) => setConfirmacao({ tipo, id: item.id, nome: item.nome });
 
   // --------------------------------------------------------------------------
   // Publicar no orçamento do Linx
@@ -1191,31 +1187,12 @@ function PlanejamentoOrcamentario({ sessao, onSair }) {
       );
     }
 
-    if (tela === "dre") {
-      return exigirErp(
-        <TelaDre
-          plano={planoAtivo}
-          visao={visaoDoPlano}
-          dre={dre}
-          filiais={filiaisAtivas}
-          filtroFilial={filtros.filial}
-          onAlterarFiltroFilial={(filial) => alterarFiltro({ filial })}
-          filiaisIgnoradas={filiaisIgnoradas}
-          carregandoRealizado={realizado.carregando || contas.carregando}
-          onAbrirModulo={abrirModulo}
-          onVoltar={voltar}
-        />
-      );
-    }
-
     return (
       <TelaHome
         plano={planoAtivo}
         visao={visaoDoPlano}
         modulosVisiveis={modulosVisiveis}
-        podeVerDre={podeVerDre}
         onAbrirModulo={abrirModulo}
-        onAbrirDre={() => abrirModulo("dre")}
         onVoltar={voltar}
       />
     );
@@ -1231,7 +1208,6 @@ function PlanejamentoOrcamentario({ sessao, onSair }) {
             : filiaisDoErpVisiveis.length + centrosDoErpVisiveis.length
         }
         planoAtivo={planoAtivo}
-        podeVerDre={podeVerDre}
         sessao={sessao}
         onSair={onSair}
         tela={tela}
@@ -1268,10 +1244,18 @@ function PlanejamentoOrcamentario({ sessao, onSair }) {
               estão no banco.
             </span>
             <span className="aviso-fixo__botoes">
-              <button type="button" className="botao botao--primario botao--compacto" onClick={importarLegado}>
+              <button
+                type="button"
+                className="botao botao--primario botao--compacto"
+                onClick={importarLegado}
+              >
                 Importar para o banco
               </button>
-              <button type="button" className="botao botao--secundario botao--compacto" onClick={() => setLegado(null)}>
+              <button
+                type="button"
+                className="botao botao--secundario botao--compacto"
+                onClick={() => setLegado(null)}
+              >
                 Agora não
               </button>
             </span>

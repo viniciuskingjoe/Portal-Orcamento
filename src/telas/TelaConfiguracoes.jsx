@@ -32,7 +32,7 @@ export default function TelaConfiguracoes({
       legenda: grupos.length
         ? `${grupos.length} ${grupos.length === 1 ? "grupo" : "grupos"}`
         : "nenhum grupo ainda",
-      origem: "recorte para ler o DRE",
+      origem: "recorte para ler o orçado",
     },
   ];
 
@@ -64,7 +64,6 @@ export default function TelaConfiguracoes({
           </button>
         ))}
       </div>
-
     </main>
   );
 }

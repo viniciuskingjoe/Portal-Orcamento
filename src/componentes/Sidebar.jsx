@@ -3,7 +3,10 @@ import Icone from "./Icone.jsx";
 // Duas letras do nome, para o avatar. Nome de uma palavra só usa as duas
 // primeiras letras — "V" sozinho num círculo não identifica ninguém.
 function iniciais(nome) {
-  const partes = String(nome ?? "").trim().split(/\s+/).filter(Boolean);
+  const partes = String(nome ?? "")
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean);
   if (!partes.length) return null;
   if (partes.length === 1) return partes[0].slice(0, 2).toUpperCase();
   return (partes[0][0] + partes[partes.length - 1][0]).toUpperCase();
@@ -30,7 +33,6 @@ export default function Sidebar({
   // real, como se o ERP não tivesse filial nenhuma.
   badgeConfiguracoes,
   planoAtivo,
-  podeVerDre = true,
   tela,
   onNavegar,
   tema,
@@ -95,9 +97,8 @@ export default function Sidebar({
         {/* Os oito módulos NÃO entram aqui. A Visão geral já é a lista deles, e
             com mais informação — diz se o módulo está configurado e o resumo de
             cada um. Repetir na sidebar dobrava a altura do menu e dava duas
-            portas para o mesmo lugar.
-            Ficam a Visão geral e o DRE: um é por onde se entra nos módulos, o
-            outro é o fechamento. */}
+            portas para o mesmo lugar. Fica só a Visão geral, que é por onde se
+            entra neles. */}
         {planoAtivo ? (
           <div className="nav-grupo">
             <span className="nav-grupo__titulo">{planoAtivo.nome}</span>
@@ -108,17 +109,6 @@ export default function Sidebar({
               ativo={tela === "home"}
               onNavegar={onNavegar}
             />
-            {/* Some para quem não vê todos os módulos: com um de fora os
-                subtotais deixam de ser o resultado da empresa. */}
-            {podeVerDre ? (
-              <ItemNav
-                id="dre"
-                titulo="DRE"
-                icone="chart"
-                ativo={tela === "dre"}
-                onNavegar={onNavegar}
-              />
-            ) : null}
           </div>
         ) : null}
       </nav>
