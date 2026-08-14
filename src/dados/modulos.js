@@ -89,6 +89,11 @@ export const MODULOS = [
     grupo: "DF",
     icone: "users",
     quantidade: true,
+    // O grupo contábil DF pega de 4.1 a 4.7 — toda a despesa fixa. Folha são
+    // estas três famílias, e são as mesmas que o Scoreplan mostra na tela de
+    // pessoal. Também é por elas que a sincronização acha as linhas do ERP que
+    // recebem a quantidade.
+    prefixos: ["4.2.1.10", "4.3.1.01", "4.4.1.01"],
   },
 ];
 

@@ -9,11 +9,12 @@ import {
   desmarcarEmCascata,
   estadoDaSelecao,
   filtrarPorGrupo,
+  filtrarPorPrefixos,
   linhasDaArvore,
   marcarEmCascata,
   resumirSelecao,
 } from "../dados/contas.js";
-import { GRUPOS, ehQuantidade } from "../dados/modulos.js";
+import { GRUPOS } from "../dados/modulos.js";
 import { tipoDaConta } from "../dados/realizado.js";
 import {
   SEM_CENTRO,
@@ -58,14 +59,15 @@ export default function TelaVisaoModulo({
   const editandoCentro = centroId !== SEM_CENTRO;
   // Marcar conta só faz sentido dentro de um centro: a lista da filial é o
   // consolidado deles, não uma escolha.
-  // Despesas com pessoal nao guarda conta: so quais centros informam
-  // quantidade. Oferecer a arvore la faria escolher contas que nada leria.
-  const semContas = ehQuantidade(modulo.id);
-  const podeMarcar = !!filialId && editandoCentro && !semContas;
+  const podeMarcar = !!filialId && editandoCentro;
 
+  // Dois recortes: o grupo contábil do módulo e, quando o módulo declara, os
+  // ramos do plano de contas que lhe interessam. O grupo sozinho é largo demais
+  // para Despesas com pessoal — "despesa fixa" vai de 4.1 a 4.7, e folha são
+  // três famílias dentro disso.
   const catalogo = useMemo(
-    () => filtrarPorGrupo(catalogoCompleto, modulo.grupo),
-    [catalogoCompleto, modulo.grupo]
+    () => filtrarPorPrefixos(filtrarPorGrupo(catalogoCompleto, modulo.grupo), modulo.prefixos),
+    [catalogoCompleto, modulo.grupo, modulo.prefixos]
   );
 
   const selecionadas = editandoCentro
@@ -218,9 +220,7 @@ export default function TelaVisaoModulo({
               <h3>Centros de custo</h3>
               <p className="painel-selecao__descricao">
                 {filialId
-                  ? semContas
-                    ? "Marque os centros desta filial que informam quantidade de funcionários."
-                    : "Marque os que esta filial usa; clique no nome para escolher as contas dele."
+                  ? "Marque os que esta filial usa; clique no nome para escolher as contas dele."
                   : "Escolha uma filial na lista ao lado."}
               </p>
 
@@ -346,11 +346,9 @@ export default function TelaVisaoModulo({
             ) : (
               <p className="modulo-aviso">
                 <Icone nome="info" tamanho={16} />
-                {semContas
-                  ? "Este módulo não guarda contas — o valor das despesas com pessoal é orçado em Despesas operacionais. Aqui basta marcar os centros que informam a quantidade de funcionários."
-                  : !filialId
-                    ? "Escolha uma filial na lateral para configurar as contas dela."
-                    : "Este módulo é orçado por centro de custo: marque os centros que esta filial usa e escolha um para lançar as contas dele."}
+                {!filialId
+                  ? "Escolha uma filial na lateral para configurar as contas dela."
+                  : "Este módulo é orçado por centro de custo: marque os centros que esta filial usa e escolha um para lançar as contas dele."}
               </p>
             )}
 

@@ -1,5 +1,6 @@
 import { query, transaction } from "./sqlserver.js";
 import { linhasParaOrcamento } from "../src/dados/plano.js";
+import { modulo } from "../src/dados/modulos.js";
 
 // ============================================================================
 // PUBLICAÇÃO DO PLANEJADO NO ORÇAMENTO DO LINX
@@ -50,7 +51,10 @@ const VERSAO_CONTABIL = 1;
 // período — SUM multiplica pelo número de contas.
 // --------------------------------------------------------------------------
 
-const GRUPOS_DE_PESSOAL = ["4.2.1.10", "4.3.1.01", "4.4.1.01"];
+// Os mesmos prefixos que recortam a árvore do módulo na visão. Uma lista só:
+// duas cópias divergiriam no dia em que uma família de folha fosse criada, e a
+// divergência apareceria como quantidade faltando numas contas e não noutras.
+const GRUPOS_DE_PESSOAL = modulo("despesas-pessoal")?.prefixos ?? [];
 
 const filtroDePessoal = GRUPOS_DE_PESSOAL.map(
   (_, i) => `RTRIM(CLASSIFICACAO) LIKE @grupo${i} + '%'`

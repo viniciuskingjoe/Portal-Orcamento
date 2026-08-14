@@ -117,6 +117,37 @@ export function filtrarPorGrupo(catalogo, grupo) {
   return { ...indexarContas(lista), grupo };
 }
 
+// Recorta a árvore a alguns ramos do plano de contas.
+//
+// O grupo contábil sozinho é largo demais para alguns módulos: "despesa fixa"
+// pega de 4.1 a 4.7, e Despesas com pessoal só quer as três famílias de folha.
+// Sem isto, configurar o módulo é procurar três galhos dentro da árvore inteira.
+//
+// Os pais dos ramos escolhidos vêm junto, não selecionáveis, para a hierarquia
+// continuar legível — 441 acima de 441.01, como no plano de contas.
+export function filtrarPorPrefixos(catalogo, prefixos) {
+  if (!prefixos?.length) return catalogo;
+
+  const dentro = (codigo) =>
+    prefixos.some((prefixo) => codigo === prefixo || codigo.startsWith(`${prefixo}.`));
+
+  const manter = new Map();
+  catalogo.lista.forEach((item) => {
+    if (!dentro(item.codigo)) return;
+    manter.set(item.codigo, item);
+    ancestrais(catalogo, item.codigo).forEach((codigo) => {
+      if (manter.has(codigo)) return;
+      const pai = catalogo.porCodigo.get(codigo);
+      if (pai) manter.set(codigo, { ...pai, selecionavel: false });
+    });
+  });
+
+  const lista = catalogo.lista
+    .filter((item) => manter.has(item.codigo))
+    .map((item) => manter.get(item.codigo));
+  return { ...indexarContas(lista), grupo: catalogo.grupo };
+}
+
 // ============================================================================
 // SELEÇÃO EM CASCATA
 //
