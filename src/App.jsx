@@ -81,7 +81,10 @@ const TELAS_ERP = new Set(["filiais", "centros"]);
 // O número do orçamento fica no fim, entre parênteses: é por ele que se confere
 // no SSMS e é por ele que o Power BI filtra, mas não é o que a pessoa quer ler
 // primeiro.
-function resumoDaSincronizacao({ idOrcamento, linhas, inseridas, atualizadas, removidas }, ano) {
+function resumoDaSincronizacao(
+  { idOrcamento, linhas, inseridas, atualizadas, removidas, quantidades },
+  ano
+) {
   if (!linhas) return "Nada a sincronizar — este plano ainda não tem valor lançado.";
 
   const oQue = ano ? `Planejado de ${ano}` : "Planejado";
@@ -91,10 +94,16 @@ function resumoDaSincronizacao({ idOrcamento, linhas, inseridas, atualizadas, re
     removidas ? `${removidas} ${removidas === 1 ? "removido" : "removidos"}` : null,
   ].filter(Boolean);
 
+  // A quantidade é reenviada inteira a cada publicação, não por diferença —
+  // entra como "levou junto" e não como "mudou", que é o que as outras dizem.
+  const comPessoal = quantidades
+    ? ` ${quantidades} ${quantidades === 1 ? "quantidade de funcionários" : "quantidades de funcionários"} também foram enviadas.`
+    : "";
+
   if (!partes.length) {
-    return `${oQue} já estava sincronizado com o Linx — nenhum valor mudou. (orçamento ${idOrcamento})`;
+    return `${oQue} já estava sincronizado com o Linx — nenhum valor mudou.${comPessoal} (orçamento ${idOrcamento})`;
   }
-  return `${oQue} sincronizado com o Linx: ${partes.join(", ")}. (orçamento ${idOrcamento})`;
+  return `${oQue} sincronizado com o Linx: ${partes.join(", ")}.${comPessoal} (orçamento ${idOrcamento})`;
 }
 
 // `undefined` cai no padrao do modal, que fala em exclusao.
