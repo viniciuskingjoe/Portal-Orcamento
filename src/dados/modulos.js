@@ -79,20 +79,24 @@ export const MODULOS = [
     grupo: "DF",
     icone: "wallet",
   },
-  // O único módulo que não orça valor: aqui se informa QUANTAS pessoas o centro
-  // tem no mês. O R$ dessas contas fica em Despesas operacionais, onde sempre
-  // esteve — a quantidade é do centro, não da conta, e por isso não cabe lá.
+  // Único módulo com a dimensão "Nº de funcionários" por centro/mês, ao lado
+  // do R$: além do valor de cada conta (fixo, digitado, ou calculado por
+  // fórmula), guarda quantas pessoas o centro tem — é o que multiplica o
+  // planejado na aba Total. As mesmas contas não podem estar também em
+  // Despesas operacionais para o mesmo centro, senão o valor dobra no DRE e na
+  // publicação para o Linx; `dados/visao.js` garante essa exclusividade.
   {
     id: "despesas-pessoal",
     titulo: "Despesas com pessoal",
     tipo: "despesa",
     grupo: "DF",
     icone: "users",
-    quantidade: true,
+    comFuncionarios: true,
     // O grupo contábil DF pega de 4.1 a 4.7 — toda a despesa fixa. Folha são
     // estas três famílias, e são as mesmas que o Scoreplan mostra na tela de
     // pessoal. Também é por elas que a sincronização acha as linhas do ERP que
-    // recebem a quantidade.
+    // recebem a quantidade, e são as únicas que este módulo aceita — a
+    // exclusividade com Despesas operacionais só faz sentido dentro delas.
     prefixos: ["4.2.1.10", "4.3.1.01", "4.4.1.01"],
   },
 ];
@@ -116,16 +120,18 @@ export function ehPercentual(id) {
   return POR_ID.get(id)?.percentual === true;
 }
 
-// Módulo que guarda quantidade de pessoas em vez de dinheiro. Não tem conta,
-// não entra na publicação do valor e não soma com os outros — quem pergunta
-// isso antes de tratar um módulo como orçado evita somar gente com reais.
-export function ehQuantidade(id) {
-  return POR_ID.get(id)?.quantidade === true;
+// Módulo que, além do R$ de cada conta, guarda Nº de funcionários por
+// centro/mês — dimensão à parte, que multiplica o planejado na aba Total.
+// Hoje só Despesas com pessoal.
+export function comFuncionarios(id) {
+  return POR_ID.get(id)?.comFuncionarios === true;
 }
 
-// Os módulos que de fato orçam R$. É esta lista que vale para consolidar,
-// publicar e conferir.
-export const MODULOS_DE_VALOR = MODULOS.filter((item) => item.quantidade !== true);
+// Todo módulo orça R$ — nome mantido porque é ele que os pontos de
+// consolidação, publicação e conferência devem usar, em vez de `MODULOS`
+// direto: se um dia existir módulo que não orça valor, é aqui que ele sai da
+// lista.
+export const MODULOS_DE_VALOR = MODULOS;
 
 export const MODULOS_RECEITA = MODULOS.filter((item) => item.tipo === "receita");
 export const MODULOS_DESPESA = MODULOS.filter((item) => item.tipo === "despesa");

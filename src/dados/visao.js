@@ -134,6 +134,46 @@ export function definirContasDoCentro(visao, moduloId, filialId, centroId, conta
   return gravarFilial(visao, moduloId, filialId, centros);
 }
 
+// --------------------------------------------------------------------------
+// Exclusividade entre Despesas com pessoal e Despesas operacionais
+//
+// As três famílias de folha (`modulo.prefixos` de despesas-pessoal) só podem
+// estar marcadas num módulo ou no outro para o mesmo centro, nunca nos dois —
+// se estivessem, o DRE e a publicação para o Linx somariam a mesma conta duas
+// vezes (motivo pelo qual a folha nunca migrou de Despesas operacionais).
+// Despesas com pessoal só aceita essas três famílias, então qualquer conta
+// marcada lá é, por definição, conta que precisa sair de Despesas
+// operacionais no mesmo centro — e vice-versa.
+// --------------------------------------------------------------------------
+
+export const MODULO_PESSOAL = "despesas-pessoal";
+export const MODULO_OPERACIONAIS = "despesas-operacionais";
+
+// Grava as contas no módulo pedido e tira as mesmas contas do módulo par, no
+// mesmo filial·centro. Funciona nas duas direções: marcar uma conta em
+// Despesas com pessoal tira ela de Despesas operacionais, e marcá-la de volta
+// em Despesas operacionais tira ela de Despesas com pessoal — sempre "mover",
+// nunca "duplicar". Para qualquer módulo fora do par, é `definirContasDoCentro`
+// puro, sem efeito colateral.
+export function definirContasDoCentroExclusivo(visao, moduloId, filialId, centroId, contas) {
+  const par =
+    moduloId === MODULO_PESSOAL
+      ? MODULO_OPERACIONAIS
+      : moduloId === MODULO_OPERACIONAIS
+        ? MODULO_PESSOAL
+        : null;
+
+  let proxima = definirContasDoCentro(visao, moduloId, filialId, centroId, contas);
+  if (!par) return proxima;
+
+  const doPar = contasDoCentro(proxima, par, filialId, centroId);
+  const semSobreposicao = doPar.filter((codigo) => !contas.includes(codigo));
+  if (semSobreposicao.length !== doPar.length) {
+    proxima = definirContasDoCentro(proxima, par, filialId, centroId, semSobreposicao);
+  }
+  return proxima;
+}
+
 // Contas que valem para uma combinação filial × centro. Sem centro escolhido, é
 // o consolidado da filial — o "Total — todos os centros".
 export function contasEfetivasDoModulo(visao, moduloId, filialId, centroId = SEM_CENTRO) {
@@ -169,6 +209,40 @@ export function definirSinalDaConta(visao, moduloId, codigo, tipo) {
   else delete sinais[codigo];
 
   return { ...visao, modulos: { ...visao.modulos, [moduloId]: { ...modulo, sinais } } };
+}
+
+// --------------------------------------------------------------------------
+// Fórmula por conta (só Despesas com pessoal)
+//
+// Ausência de entrada é conta FIXA — digita o valor, como em qualquer outro
+// módulo. Só existe entrada para conta CALCULADA, e o que se guarda é a
+// própria expressão: um booleano "é calculada" ao lado dela poderia discordar
+// de "tem expressão", e aí qual dos dois vale?
+// --------------------------------------------------------------------------
+
+export function formulasDoModulo(visao, moduloId) {
+  const formulas = moduloDaVisao(visao, moduloId).formulas;
+  return formulas && typeof formulas === "object" ? formulas : {};
+}
+
+export function formulaDaConta(visao, moduloId, codigo) {
+  return formulasDoModulo(visao, moduloId)[codigo] ?? null;
+}
+
+export function contaEhCalculada(visao, moduloId, codigo) {
+  return formulaDaConta(visao, moduloId, codigo) != null;
+}
+
+// `expressao` vazia ou nula volta a conta para fixa.
+export function definirFormulaDaConta(visao, moduloId, codigo, expressao) {
+  const modulo = moduloDaVisao(visao, moduloId);
+  const formulas = { ...formulasDoModulo(visao, moduloId) };
+
+  const texto = String(expressao ?? "").trim();
+  if (texto) formulas[codigo] = { expressao: texto };
+  else delete formulas[codigo];
+
+  return { ...visao, modulos: { ...visao.modulos, [moduloId]: { ...modulo, formulas } } };
 }
 
 // --------------------------------------------------------------------------

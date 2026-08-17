@@ -163,6 +163,15 @@ const DESENHOS = {
     </>
   ),
   moon: <path d="M20 14.5A8.5 8.5 0 0 1 9.5 4a8.5 8.5 0 1 0 10.5 10.5Z" />,
+  // "⋮" — três pontos sólidos, não traços: por isso `fill` em vez de só
+  // `stroke`, senão viram três anéis minúsculos e ilegíveis num botão de 14px.
+  maisVertical: (
+    <>
+      <circle cx="12" cy="5" r="1.6" fill="currentColor" stroke="none" />
+      <circle cx="12" cy="12" r="1.6" fill="currentColor" stroke="none" />
+      <circle cx="12" cy="19" r="1.6" fill="currentColor" stroke="none" />
+    </>
+  ),
 };
 
 export default function Icone({ nome, tamanho = 20 }) {

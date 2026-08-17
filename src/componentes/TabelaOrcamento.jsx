@@ -1,5 +1,6 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
+import CelulaQuantidade, { limparQuantidade } from "./CelulaQuantidade.jsx";
 import { formatarMoeda, formatarPercentual } from "../lib/formato.js";
 
 const LINHAS_RESUMO = new Set(["total", "media"]);
@@ -30,9 +31,20 @@ export default function TabelaOrcamento({
   onCopiarDeCima,
   onPreencherAte,
   prefixoCelula,
+  // Só Despesas com pessoal: { obterValor(mes), podeEditar, onGravar([{mes,
+  // quantidade}]) }. Liga a coluna Nº de funcionários — informativa, ao lado
+  // do Planejado, sem entrar no cálculo dele: o valor digitado em Planejado
+  // já é o total do centro (quem digita já considera quantas pessoas são).
+  colunaFuncionarios,
+  // Avisa o pai (até virar `edicaoAuxiliarEmAndamento` em App.jsx) que a
+  // célula de Nº de funcionários está em edição ou em arrasto — mesmo motivo
+  // do `editingCell` para Planejado, mas essa edição é local a este
+  // componente e o App não a enxergaria sozinho.
+  onFuncionariosEmEdicao,
 }) {
   const ehPercentual = formato === "percentual";
   const formatar = ehPercentual ? formatarPercentual : formatarMoeda;
+  const comFuncionarios = !!colunaFuncionarios;
 
   // Só os meses recebem digitação; total e média são calculados. A ordem desta
   // lista é a ordem da navegação por Enter, Tab e setas.
@@ -40,6 +52,87 @@ export default function TabelaOrcamento({
   const idDaCelula = (linha, campo) => `${prefixoCelula}|${linha.id}|${campo}`;
   const valorDoCampo = (linha, campo) =>
     campo === "reais" ? linha.planejado : (linha.planejadoPercentual ?? 0);
+
+  // --------------------------------------------------------------------------
+  // Nº de funcionários (coluna própria — edição simples de clique/teclado,
+  // mais a alça de arrastar, igual ao Planejado; sem Ctrl+D nem navegação por
+  // seta, que são atalhos do fluxo de digitar doze meses de reais em série)
+  // --------------------------------------------------------------------------
+  const [funcEditando, setFuncEditando] = useState(null);
+  const [funcRascunho, setFuncRascunho] = useState("");
+  const [arrastoFunc, setArrastoFunc] = useState(null);
+  const celulasFunc = useRef([]);
+
+  useEffect(() => {
+    onFuncionariosEmEdicao?.(funcEditando != null || arrastoFunc != null);
+    // Se a tela sair do ar com a célula aberta (trocou de conta, de tela),
+    // a flag não pode ficar travada em "true" para sempre — sem isto a
+    // atualização de fundo do app inteiro parava.
+    return () => onFuncionariosEmEdicao?.(false);
+  }, [funcEditando, arrastoFunc, onFuncionariosEmEdicao]);
+
+  function confirmarFuncionario() {
+    if (funcEditando == null) return;
+    const mes = funcEditando;
+    const atual = colunaFuncionarios.obterValor(mes);
+    const texto = funcRascunho.trim();
+    const novo = texto === "" ? null : Number(texto);
+
+    setFuncEditando(null);
+    setFuncRascunho("");
+    if (novo === atual) return;
+    colunaFuncionarios.onGravar([{ mes, quantidade: novo }]);
+  }
+
+  function indiceNoPontoFunc(clientY) {
+    const visiveis = celulasFunc.current.filter(Boolean);
+    if (!visiveis.length) return null;
+
+    let encontrado = null;
+    celulasFunc.current.forEach((elemento, indice) => {
+      if (!elemento) return;
+      const area = elemento.getBoundingClientRect();
+      if (clientY >= area.top && clientY <= area.bottom) encontrado = indice;
+    });
+    if (encontrado != null) return encontrado;
+
+    const primeira = visiveis[0].getBoundingClientRect();
+    return clientY < primeira.top ? 0 : celulasFunc.current.length - 1;
+  }
+
+  function comecarArrastoFunc(evento, indice) {
+    evento.preventDefault();
+    evento.currentTarget.setPointerCapture(evento.pointerId);
+    setArrastoFunc({ origem: indice, ate: indice });
+  }
+
+  function moverArrastoFunc(evento) {
+    if (!arrastoFunc) return;
+    const indice = indiceNoPontoFunc(evento.clientY);
+    if (indice != null && indice !== arrastoFunc.ate) setArrastoFunc({ ...arrastoFunc, ate: indice });
+  }
+
+  function soltarArrastoFunc() {
+    if (!arrastoFunc) return;
+    if (arrastoFunc.ate !== arrastoFunc.origem) {
+      const origemMes = editaveis[arrastoFunc.origem].id;
+      const finalMes = editaveis[arrastoFunc.ate].id;
+      const valor = colunaFuncionarios.obterValor(origemMes);
+      const [de, ate] = origemMes <= finalMes ? [origemMes, finalMes] : [finalMes, origemMes];
+
+      const celulas = [];
+      for (let mes = de; mes <= ate; mes += 1) {
+        if (mes !== origemMes) celulas.push({ mes, quantidade: valor });
+      }
+      if (celulas.length) colunaFuncionarios.onGravar(celulas);
+    }
+    setArrastoFunc(null);
+  }
+
+  const noArrastoFunc = (indice) =>
+    arrastoFunc != null &&
+    indice >= Math.min(arrastoFunc.origem, arrastoFunc.ate) &&
+    indice <= Math.max(arrastoFunc.origem, arrastoFunc.ate);
 
   // --------------------------------------------------------------------------
   // Alça de preenchimento (o quadradinho do canto, como no Excel)
@@ -238,11 +331,12 @@ export default function TabelaOrcamento({
   }
 
   return (
-    <div className={`tabela-wrap ${arrasto ? "is-arrastando" : ""}`}>
+    <div className={`tabela-wrap ${arrasto || arrastoFunc ? "is-arrastando" : ""}`}>
       <table className="tabela-orcamento">
         <thead>
           <tr>
             <th scope="col">Mês</th>
+            {comFuncionarios ? <th scope="col">Nº funcionários</th> : null}
             {percentual ? <th scope="col">Planejado %</th> : null}
             <th scope="col">Planejado{percentual ? " R$" : ""}</th>
             {/* Realizado sobre a receita REALIZADA do mês, não sobre a planejada:
@@ -268,6 +362,7 @@ export default function TabelaOrcamento({
           {linhas.map((linha) => {
             const ehResumo = LINHAS_RESUMO.has(linha.id);
             const indice = editaveis.indexOf(linha);
+            const indiceFunc = indice;
 
             return (
               <tr key={linha.id} className={ehResumo ? `linha-${linha.id}` : ""}>
@@ -275,6 +370,41 @@ export default function TabelaOrcamento({
                   {linha.label}
                   {linha.nota ? <abbr title={linha.nota}>*</abbr> : null}
                 </th>
+
+                {comFuncionarios ? (
+                  ehResumo ? (
+                    <td />
+                  ) : (
+                    <CelulaQuantidade
+                      valor={colunaFuncionarios.obterValor(linha.id)}
+                      podeEditar={colunaFuncionarios.podeEditar}
+                      editando={funcEditando === linha.id}
+                      rascunho={funcRascunho}
+                      tdRef={(elemento) => {
+                        if (indiceFunc >= 0) celulasFunc.current[indiceFunc] = elemento;
+                      }}
+                      emArrasto={noArrastoFunc(indiceFunc)}
+                      onIniciar={(inicial) => {
+                        setFuncEditando(linha.id);
+                        setFuncRascunho(limparQuantidade(inicial));
+                      }}
+                      onMudar={setFuncRascunho}
+                      onConfirmar={confirmarFuncionario}
+                      onCancelar={() => {
+                        setFuncEditando(null);
+                        setFuncRascunho("");
+                      }}
+                      onComecarArrasto={
+                        colunaFuncionarios.podeEditar && funcEditando !== linha.id
+                          ? (evento) => comecarArrastoFunc(evento, indiceFunc)
+                          : undefined
+                      }
+                      onMoverArrasto={moverArrastoFunc}
+                      onSoltarArrasto={soltarArrastoFunc}
+                      onCancelarArrasto={() => setArrastoFunc(null)}
+                    />
+                  )
+                ) : null}
 
                 {percentual ? (
                   ehResumo ? (

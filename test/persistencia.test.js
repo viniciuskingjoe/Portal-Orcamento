@@ -65,6 +65,7 @@ test("normalizar preserva visão, filiais ativas e planejado", () => {
           "receita-vendas": {
             usaCentro: false,
             sinais: {},
+            formulas: {},
             filiais: { "000025": { contas: ["3.1.1.01.001"], centros: {} } },
           },
         },
@@ -77,6 +78,11 @@ test("normalizar preserva visão, filiais ativas e planejado", () => {
         ano: 2026,
         visaoId: "v1",
         planejado: { "receita-vendas|000025||3.1.1.01.001|1": 1500.5 },
+        funcionarios: {},
+        situacao: "ativo",
+        idOrcamento: null,
+        publicadoEm: null,
+        publicadoLinhas: null,
       },
     ],
   };
@@ -88,6 +94,78 @@ test("normalizar preserva visão, filiais ativas e planejado", () => {
   comArmazenamento(JSON.stringify(estado), () => {
     assert.deepEqual(lerEstadoLegado(), estado);
   });
+});
+
+// Regressão: `normalizarPlano`/`normalizarVisao` reconstruíam o objeto
+// listando os campos um a um, e dois ficaram de fora — `funcionarios` e
+// `formulas` desapareciam a cada recarga (F5, ou a atualização de fundo a
+// cada minuto), mesmo com o valor gravado certinho no banco. A gravação
+// nunca teve bug; a leitura que descartava o que acabou de vir da API.
+test("funcionários e fórmula sobrevivem à normalização — não é o campo `planejado` que a API devolve", () => {
+  const estado = {
+    configuracao: { filiaisAtivas: null },
+    visoes: [
+      {
+        id: "v1",
+        nome: "DRE 2026",
+        visaoContabil: "25",
+        modulos: {
+          "despesas-pessoal": {
+            usaCentro: true,
+            sinais: {},
+            formulas: { "4.2.1.10.001": { expressao: "(V[4.2.1.10.002] + V[4.2.1.10.003]) / 12" } },
+            filiais: { "000001": { contas: ["4.2.1.10.001"], centros: { "002": ["4.2.1.10.001"] } } },
+          },
+        },
+      },
+    ],
+    planos: [
+      {
+        id: "p1",
+        nome: "TESTE",
+        ano: 2026,
+        visaoId: "v1",
+        planejado: {},
+        funcionarios: { "000001|002|1": 10, "000001|002|2": 10 },
+      },
+    ],
+  };
+
+  const normalizado = normalizarEstado(estado);
+  assert.deepEqual(normalizado.planos[0].funcionarios, { "000001|002|1": 10, "000001|002|2": 10 });
+  assert.deepEqual(normalizado.visoes[0].modulos["despesas-pessoal"].formulas, {
+    "4.2.1.10.001": { expressao: "(V[4.2.1.10.002] + V[4.2.1.10.003]) / 12" },
+  });
+});
+
+test("plano sem funcionários/situação/publicação nasce com o default certo, não undefined", () => {
+  const estado = {
+    configuracao: { filiaisAtivas: null },
+    visoes: [],
+    planos: [{ id: "p1", nome: "X", ano: 2026, visaoId: null, planejado: {} }],
+  };
+  const plano = normalizarEstado(estado).planos[0];
+  assert.deepEqual(plano.funcionarios, {});
+  assert.equal(plano.situacao, "ativo");
+  assert.equal(plano.idOrcamento, null);
+  assert.equal(plano.publicadoEm, null);
+  assert.equal(plano.publicadoLinhas, null);
+});
+
+test("visão sem formulas nasce com objeto vazio, não undefined", () => {
+  const estado = {
+    configuracao: { filiaisAtivas: null },
+    visoes: [
+      {
+        id: "v1",
+        nome: "X",
+        visaoContabil: "25",
+        modulos: { "despesas-pessoal": { usaCentro: true, sinais: {}, filiais: {} } },
+      },
+    ],
+    planos: [],
+  };
+  assert.deepEqual(normalizarEstado(estado).visoes[0].modulos["despesas-pessoal"].formulas, {});
 });
 
 test("o que o centro tem é o que vale, e a filial acompanha", () => {

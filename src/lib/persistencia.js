@@ -35,6 +35,20 @@ function normalizarSinais(bruto) {
   return sinais;
 }
 
+// Só Despesas com pessoal: fixa (sem entrada) ou calculada (expressão salva
+// aqui). Mesmo molde de `normalizarSinais` — cai fora se não tiver o formato
+// esperado, em vez de propagar lixo para o avaliador de fórmula.
+function normalizarFormulas(bruto) {
+  const formulas = {};
+  Object.entries(bruto ?? {}).forEach(([codigo, formula]) => {
+    const expressao = formula?.expressao;
+    if (typeof expressao === "string" && expressao.trim()) {
+      formulas[codigo] = { expressao };
+    }
+  });
+  return formulas;
+}
+
 function normalizarConfiguracao(bruta) {
   const filiais = bruta?.filiaisAtivas;
   return { filiaisAtivas: Array.isArray(filiais) ? listaDeTexto(filiais) : null };
@@ -72,6 +86,9 @@ function normalizarVisao(visao) {
       usaCentro,
       // Sinal definido à mão, conta a conta. Só receita/despesa entram.
       sinais: normalizarSinais(bruto?.sinais),
+      // Fixa vs. calculada, só em Despesas com pessoal — mas o formato é
+      // genérico, então normaliza para todo módulo do mesmo jeito que sinais.
+      formulas: normalizarFormulas(bruto?.formulas),
       filiais,
     };
   });
@@ -100,12 +117,29 @@ function normalizarPlano(plano) {
     // contaminaria a coluna inteira.
     if (Number.isFinite(valor)) planejado[chave] = valor;
   });
+
+  // Mapa à parte do planejado — gente não é dinheiro. Mesma checagem de
+  // número finito; `null` (célula apagada) nunca chega aqui porque o backend
+  // já DELETA a linha em vez de gravar nula.
+  const funcionarios = {};
+  Object.entries(plano.funcionarios ?? {}).forEach(([chave, valor]) => {
+    if (Number.isFinite(valor)) funcionarios[chave] = valor;
+  });
+
   return {
     id: plano.id,
     nome: plano.nome,
     ano: plano.ano,
     visaoId: plano.visaoId ?? null,
     planejado,
+    funcionarios,
+    // Sem situação/publicação (banco no sql/003 ou 004 só, antes do sql/005),
+    // os valores abaixo são a mesma leitura que o backend já dá nesse caso:
+    // todo plano ativo, nunca publicado.
+    situacao: plano.situacao === "inativo" ? "inativo" : "ativo",
+    idOrcamento: plano.idOrcamento ?? null,
+    publicadoEm: plano.publicadoEm ?? null,
+    publicadoLinhas: plano.publicadoLinhas ?? null,
   };
 }
 

@@ -16,13 +16,12 @@ import TelaVisoes from "./telas/TelaVisoes.jsx";
 import TelaVisao from "./telas/TelaVisao.jsx";
 import TelaVisaoModulo from "./telas/TelaVisaoModulo.jsx";
 import TelaOrcamento, { TODAS_AS_CONTAS } from "./telas/TelaOrcamento.jsx";
-import TelaFuncionarios from "./telas/TelaFuncionarios.jsx";
 import TelaLogin from "./telas/TelaLogin.jsx";
 import TelaTrocarSenha from "./telas/TelaTrocarSenha.jsx";
 import TelaUsuarios from "./telas/TelaUsuarios.jsx";
 
 import { EMPRESA, MESES } from "./dados/seeds.js";
-import { ehModulo, ehQuantidade, modulo as definicaoDoModulo } from "./dados/modulos.js";
+import { comFuncionarios, ehModulo, modulo as definicaoDoModulo } from "./dados/modulos.js";
 import {
   baseDoPercentual,
   chaveFuncionario,
@@ -35,12 +34,16 @@ import {
 } from "./dados/plano.js";
 import {
   SEM_CENTRO,
+  MODULO_OPERACIONAIS,
+  MODULO_PESSOAL,
   centrosDaFilial,
+  contasDoCentro,
   contasEfetivasDoModulo,
   criarVisao,
+  definirContasDoCentroExclusivo,
+  definirFormulaDaConta,
   definirSinalDaConta,
   sinaisDoModulo,
-  definirContasDoCentro,
   definirUsoDoCentro,
   usaCentroDeCusto,
 } from "./dados/visao.js";
@@ -53,7 +56,6 @@ import {
   resumirEscopo,
 } from "./dados/permissoes.js";
 import { conta as buscarConta } from "./dados/contas.js";
-import { filiaisForaDoUso } from "./dados/realizado.js";
 import { contasDoMapeamento, temMapeamentoPadrao } from "./dados/mapeamentoPadrao.js";
 import { MODULOS } from "./dados/modulos.js";
 import { carregarEstado, celulaDaChave, estado as repo } from "./lib/estado.js";
@@ -192,6 +194,11 @@ function PlanejamentoOrcamentario({ sessao, onSair }) {
   // Guardas da atualização de fundo — ver o efeito mais abaixo.
   const gravacoesEmVoo = useRef(0);
   const editandoAgora = useRef(false);
+  // `editingCell` só cobre a célula de reais (Planejado). Nº de funcionários e
+  // o editor de fórmula têm edição local dentro de TelaOrcamento/TabelaOrcamento
+  // — sem isto a atualização de fundo não sabia que havia algo em aberto ali e
+  // podia trazer o valor antigo por cima no meio da digitação.
+  const edicaoAuxiliarEmAndamento = useRef(false);
 
   const erp = useCadastrosDoErp();
 
@@ -312,7 +319,7 @@ function PlanejamentoOrcamentario({ sessao, onSair }) {
 
     async function atualizar() {
       if (!vivo || document.hidden) return;
-      if (editandoAgora.current || gravacoesEmVoo.current > 0) return;
+      if (editandoAgora.current || edicaoAuxiliarEmAndamento.current || gravacoesEmVoo.current > 0) return;
 
       try {
         const [dados, lista] = await Promise.all([carregarEstado(), repo.grupos()]);
@@ -433,15 +440,6 @@ function PlanejamentoOrcamentario({ sessao, onSair }) {
     });
     return mapa;
   }, [planoAtivo, visaoDoPlano, receitasDisponiveis, filiaisDoFiltro]);
-
-  // Filiais com movimento que ficaram de fora da configuração, no ano do plano OU
-  // no anterior. Sem avisar, o total sai menor que o do ERP e parece erro de
-  // cálculo — e a filial que só tem movimento no ano anterior mexe só na coluna
-  // comparativa, o que é ainda mais difícil de perceber.
-  const filiaisIgnoradas = useMemo(() => {
-    const fora = filiaisForaDoUso([realizado.doAno, realizado.doAnoAnterior], filiaisAtivas);
-    return fora.map((id) => erp.filiais.find((filial) => filial.id === id) ?? { id });
-  }, [realizado.doAno, realizado.doAnoAnterior, filiaisAtivas, erp.filiais]);
 
   const contasDaTabela = filtros.conta === TODAS_AS_CONTAS ? contasDisponiveis : [filtros.conta];
   // Só recorta quando há uma receita escolhida. Em "Todas as receitas" o
@@ -688,6 +686,7 @@ function PlanejamentoOrcamentario({ sessao, onSair }) {
   // a conta, e inventar um centro seria decidir orçamento no lugar de alguém.
   function aplicarMapeamentoPadrao() {
     if (!visaoAberta || !temMapeamentoPadrao(visaoAberta.visaoContabil)) return;
+    const antes = visaoAberta;
 
     atualizarVisaoAberta((visao) => {
       let proxima = visao;
@@ -699,13 +698,32 @@ function PlanejamentoOrcamentario({ sessao, onSair }) {
         const lote = [];
         filiaisAtivas.forEach((filial) => {
           centrosDaFilial(visao, modulo.id, filial.id).forEach((centro) => {
-            proxima = definirContasDoCentro(proxima, modulo.id, filial.id, centro, codigos);
+            // As faixas padrão de Despesas operacionais cobrem a folha
+            // inteira (4.2.1., 4.3.1., 4.4.1.); a variante exclusiva evita
+            // reintroduzir uma conta que alguém já tinha movido para
+            // Despesas com pessoal.
+            proxima = definirContasDoCentroExclusivo(proxima, modulo.id, filial.id, centro, codigos);
             lote.push({ filial: filial.id, centro, contas: codigos });
           });
         });
 
         // Um lote por módulo: centro a centro seriam centenas de requisições.
         if (lote.length) gravar(repo.visao.contasEmLote(visaoAberta.id, modulo.id, lote));
+      });
+
+      // O mapeamento padrão não tem entrada para Despesas com pessoal (não
+      // existe equivalente no Scoreplan), então o lote acima nunca avisa o
+      // backend desse módulo. Se a exclusividade tirou conta dele em algum
+      // centro, avisa aqui — senão o banco fica com uma conta que a tela já
+      // não mostra mais.
+      filiaisAtivas.forEach((filial) => {
+        centrosDaFilial(antes, MODULO_PESSOAL, filial.id).forEach((centro) => {
+          const antesPessoal = contasDoCentro(antes, MODULO_PESSOAL, filial.id, centro);
+          const depoisPessoal = contasDoCentro(proxima, MODULO_PESSOAL, filial.id, centro);
+          if (antesPessoal.length !== depoisPessoal.length) {
+            gravar(repo.visao.contas(visaoAberta.id, MODULO_PESSOAL, filial.id, centro, depoisPessoal));
+          }
+        });
       });
 
       return proxima;
@@ -727,10 +745,14 @@ function PlanejamentoOrcamentario({ sessao, onSair }) {
     );
   }, [visaoAberta, filiaisAtivas]);
 
-  const atualizarVisaoAberta = (transformar) =>
-    setVisoes((atuais) =>
-      atuais.map((visao) => (visao.id === visaoAbertaId ? transformar(visao) : visao))
-    );
+  // `visaoAbertaId` é a visão em edição na seção Visões; `visaoDoPlano` pode
+  // ser outra (ou nenhuma das duas telas estar aberta). As duas apontam para o
+  // mesmo array `visoes`, então a atualização genérica serve às duas — só o id
+  // muda.
+  const atualizarVisao = (visaoId, transformar) =>
+    setVisoes((atuais) => atuais.map((visao) => (visao.id === visaoId ? transformar(visao) : visao)));
+
+  const atualizarVisaoAberta = (transformar) => atualizarVisao(visaoAbertaId, transformar);
 
   // --------------------------------------------------------------------------
   // Configuração: filiais ativas
@@ -1080,10 +1102,26 @@ function PlanejamentoOrcamentario({ sessao, onSair }) {
           erro={contas.erro || erp.erro}
           onRecarregar={contas.recarregar}
           onDefinirContasDoCentro={(moduloId, filialId, centroId, lista) => {
+            // A folha (Despesas com pessoal ↔ Despesas operacionais) é
+            // exclusiva por centro: marcar uma conta de um lado tira ela do
+            // outro, senão o valor dobra no DRE e na publicação para o Linx.
+            const par =
+              moduloId === MODULO_PESSOAL
+                ? MODULO_OPERACIONAIS
+                : moduloId === MODULO_OPERACIONAIS
+                  ? MODULO_PESSOAL
+                  : null;
+            const doParAntes = par ? contasDoCentro(visaoAberta, par, filialId, centroId) : [];
+
             atualizarVisaoAberta((visao) =>
-              definirContasDoCentro(visao, moduloId, filialId, centroId, lista)
+              definirContasDoCentroExclusivo(visao, moduloId, filialId, centroId, lista)
             );
             gravar(repo.visao.contas(visaoAberta.id, moduloId, filialId, centroId, lista));
+
+            const doParDepois = doParAntes.filter((codigo) => !lista.includes(codigo));
+            if (par && doParDepois.length !== doParAntes.length) {
+              gravar(repo.visao.contas(visaoAberta.id, par, filialId, centroId, doParDepois));
+            }
           }}
           onDefinirUsoDoCentro={(moduloId, filialId, centroId, usa) => {
             atualizarVisaoAberta((visao) =>
@@ -1094,6 +1132,10 @@ function PlanejamentoOrcamentario({ sessao, onSair }) {
           onDefinirSinal={(moduloId, codigo, tipo) => {
             atualizarVisaoAberta((visao) => definirSinalDaConta(visao, moduloId, codigo, tipo));
             gravar(repo.visao.sinal(visaoAberta.id, moduloId, codigo, tipo));
+          }}
+          onDefinirFormula={(moduloId, codigo, expressao) => {
+            atualizarVisaoAberta((visao) => definirFormulaDaConta(visao, moduloId, codigo, expressao));
+            gravar(repo.visao.formula(visaoAberta.id, moduloId, codigo, expressao));
           }}
           onVoltar={voltar}
         />
@@ -1188,29 +1230,6 @@ function PlanejamentoOrcamentario({ sessao, onSair }) {
       );
     }
 
-    // Despesas com pessoal não orça valor: a tela é outra, com centro na linha
-    // e mês na coluna. Sai antes de TelaOrcamento, que pressupõe conta e R$.
-    if (moduloDaTela && visaoDoPlano && ehQuantidade(moduloDaTela.id)) {
-      return exigirErp(
-        <TelaFuncionarios
-          plano={planoAtivo}
-          visao={visaoDoPlano}
-          modulo={moduloDaTela}
-          filiais={filiaisAtivas}
-          centros={centrosPermitidosNaTela}
-          filtros={filtros}
-          onAlterarFiltro={alterarFiltro}
-          podeLancar={podeLancar(sessao, {
-            modulo: moduloDaTela.id,
-            filial: filtros.filial,
-            centro: filtros.centro,
-          })}
-          onGravar={gravarFuncionarios}
-          onVoltar={voltar}
-        />
-      );
-    }
-
     if (moduloDaTela && visaoDoPlano) {
       return exigirErp(
         <TelaOrcamento
@@ -1223,7 +1242,6 @@ function PlanejamentoOrcamentario({ sessao, onSair }) {
           contasDisponiveis={contasDisponiveis}
           receitasDisponiveis={receitasDisponiveis}
           totaisDasReceitas={totaisDasReceitas}
-          filiaisIgnoradas={filiaisIgnoradas}
           filtros={filtros}
           onAlterarFiltro={alterarFiltro}
           linhas={linhasOrcamento}
@@ -1238,7 +1256,21 @@ function PlanejamentoOrcamentario({ sessao, onSair }) {
             centro: filtros.centro,
             usaCentro: usaCentroDeCusto(visaoDoPlano, moduloDaTela.id),
           })}
+          onGravarFuncionarios={comFuncionarios(moduloDaTela.id) ? gravarFuncionarios : undefined}
+          onDefinirFormula={
+            comFuncionarios(moduloDaTela.id)
+              ? (codigo, expressao) => {
+                  atualizarVisao(visaoDoPlano.id, (visao) =>
+                    definirFormulaDaConta(visao, moduloDaTela.id, codigo, expressao)
+                  );
+                  gravar(repo.visao.formula(visaoDoPlano.id, moduloDaTela.id, codigo, expressao));
+                }
+              : undefined
+          }
           edicao={edicao}
+          onEdicaoAuxiliarMudou={(emEdicao) => {
+            edicaoAuxiliarEmAndamento.current = emEdicao;
+          }}
           onVoltar={voltar}
         />
       );

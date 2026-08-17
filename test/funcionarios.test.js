@@ -2,25 +2,24 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { filtrarPorPrefixos, indexarContas } from "../src/dados/contas.js";
-import { MODULOS, MODULOS_DE_VALOR, ehQuantidade, modulo } from "../src/dados/modulos.js";
+import { MODULOS, MODULOS_DE_VALOR, comFuncionarios, modulo } from "../src/dados/modulos.js";
 import { chaveFuncionario, chavePlanejado, criarPlano } from "../src/dados/plano.js";
 import { funcionarioDaChave } from "../src/lib/estado.js";
 
-test("só Despesas com pessoal guarda quantidade", () => {
-  const deQuantidade = MODULOS.filter((modulo) => ehQuantidade(modulo.id));
+test("só Despesas com pessoal tem a dimensão Nº de funcionários", () => {
+  const comAba = MODULOS.filter((modulo) => comFuncionarios(modulo.id));
   assert.deepEqual(
-    deQuantidade.map((modulo) => modulo.id),
+    comAba.map((modulo) => modulo.id),
     ["despesas-pessoal"]
   );
 });
 
-// O que sustenta não somar gente com reais em nenhuma consolidação.
-test("os módulos de valor excluem o de quantidade", () => {
-  assert.equal(MODULOS_DE_VALOR.length, MODULOS.length - 1);
-  assert.equal(
-    MODULOS_DE_VALOR.some((modulo) => modulo.id === "despesas-pessoal"),
-    false
-  );
+// Despesas com pessoal orça R$ como qualquer outro módulo — só que também
+// carrega a dimensão Nº de funcionários ao lado. `MODULOS_DE_VALOR` existe
+// para o dia em que algum módulo não orçar valor; hoje, todos orçam.
+test("todo módulo entra em MODULOS_DE_VALOR, despesas com pessoal incluído", () => {
+  assert.equal(MODULOS_DE_VALOR.length, MODULOS.length);
+  assert.ok(MODULOS_DE_VALOR.some((modulo) => modulo.id === "despesas-pessoal"));
 });
 
 test("a chave da quantidade tem três campos, sem módulo nem conta", () => {

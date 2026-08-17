@@ -1,6 +1,7 @@
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import Cabecalho from "../componentes/Cabecalho.jsx";
+import EditorFormula from "../componentes/EditorFormula.jsx";
 import TabelaOrcamento from "../componentes/TabelaOrcamento.jsx";
 import Icone from "../componentes/Icone.jsx";
 import Seletor from "../componentes/Seletor.jsx";
@@ -8,7 +9,8 @@ import { Carregando } from "../componentes/Estados.jsx";
 import { DicaEdicao } from "../componentes/FiltrosOrcamento.jsx";
 import { conta as buscarConta } from "../dados/contas.js";
 import { GRUPOS } from "../dados/modulos.js";
-import { SEM_CENTRO, centrosDaFilial } from "../dados/visao.js";
+import { chaveFuncionario } from "../dados/plano.js";
+import { SEM_CENTRO, centrosDaFilial, contaEhCalculada, formulaDaConta } from "../dados/visao.js";
 import { formatarMoeda } from "../lib/formato.js";
 
 export const TODAS_AS_CONTAS = "__todas";
@@ -16,7 +18,12 @@ export const TODAS_AS_CONTAS = "__todas";
 // Painel de seleção da lateral. Serve às contas do módulo, às receitas que dão
 // base ao percentual e aos centros de custo — é a mesma interação, com rótulos
 // diferentes, e ficar lado a lado é o que deixa as dimensões visíveis de uma vez.
-function PainelSelecao({ titulo, descricao, rotuloTotal, valorTotal, itens, selecionado, aoSelecionar, vazio }) {
+//
+// `acaoItem`, quando existe, some no "Total do módulo" (não é uma conta) e só
+// se aplica ao painel de contas — hoje é o "⋮" de fixo/calculado de Despesas
+// com pessoal. É opcional porque nenhum outro painel (receita, e os outros
+// sete módulos) precisa dele.
+function PainelSelecao({ titulo, descricao, rotuloTotal, valorTotal, itens, selecionado, aoSelecionar, vazio, acaoItem }) {
   return (
     <section className="painel-selecao">
       <h3>{titulo}</h3>
@@ -34,15 +41,8 @@ function PainelSelecao({ titulo, descricao, rotuloTotal, valorTotal, itens, sele
 
       {itens.map((item) => {
         const ativo = selecionado === item.codigo;
-        return (
-          <button
-            type="button"
-            key={item.codigo}
-            className={`selecao-item selecao-item--conta ${ativo ? "is-active" : ""}`}
-            aria-pressed={ativo}
-            onClick={() => aoSelecionar(item.codigo)}
-            title={item.descricao ?? item.codigo}
-          >
+        const conteudo = (
+          <>
             <code>{item.codigo}</code>
             <span>{item.descricao}</span>
             {/* O planejado da receita é a base do percentual: mostrá-lo aqui
@@ -50,7 +50,45 @@ function PainelSelecao({ titulo, descricao, rotuloTotal, valorTotal, itens, sele
             {item.valor != null ? (
               <em className={item.valor ? "" : "is-zerado"}>{formatarMoeda(item.valor)}</em>
             ) : null}
-          </button>
+          </>
+        );
+
+        // Só quando há ação por item o layout muda: o botão de selecionar a
+        // conta some de um `<button>` único para um `<div>` com dois
+        // controles (selecionar + "⋮") — dois botões não cabem um dentro do
+        // outro. Sem `acaoItem` é exatamente o de sempre, para não arriscar
+        // o visual dos outros sete módulos.
+        if (!acaoItem) {
+          return (
+            <button
+              type="button"
+              key={item.codigo}
+              className={`selecao-item selecao-item--conta ${ativo ? "is-active" : ""}`}
+              aria-pressed={ativo}
+              onClick={() => aoSelecionar(item.codigo)}
+              title={item.descricao ?? item.codigo}
+            >
+              {conteudo}
+            </button>
+          );
+        }
+
+        return (
+          <div
+            key={item.codigo}
+            className={`selecao-item selecao-item--conta tem-acao ${ativo ? "is-active" : ""}`}
+          >
+            <button
+              type="button"
+              className="selecao-item__selecionar"
+              aria-pressed={ativo}
+              onClick={() => aoSelecionar(item.codigo)}
+              title={item.descricao ?? item.codigo}
+            >
+              {conteudo}
+            </button>
+            {acaoItem(item)}
+          </div>
         );
       })}
 
@@ -69,7 +107,6 @@ export default function TelaOrcamento({
   contasDisponiveis,
   receitasDisponiveis,
   totaisDasReceitas,
-  filiaisIgnoradas,
   filtros,
   onAlterarFiltro,
   escopo,
@@ -80,10 +117,33 @@ export default function TelaOrcamento({
   linhas,
   carregandoRealizado,
   edicao,
+  onGravarFuncionarios,
+  onDefinirFormula,
+  // Avisa o App que há edição local em andamento aqui dentro (célula de Nº de
+  // funcionários, ou o editor de fórmula aberto) — sem isto, a atualização de
+  // fundo (a cada minuto, ou quando a aba volta o foco) não sabia e podia
+  // trazer o valor antigo por cima no meio da digitação, porque `editingCell`
+  // só cobre a célula de reais.
+  onEdicaoAuxiliarMudou,
   onVoltar,
 }) {
   const grupo = GRUPOS[modulo.grupo];
   const percentual = modulo.percentual === true;
+  const temFuncionarios = modulo.comFuncionarios === true;
+
+  // Código da conta cujo "⋮" foi clicado — não precisa ser a conta
+  // selecionada na tabela; qualquer conta da lista pode virar fixa/calculada
+  // sem trocar o que está em tela.
+  const [editandoFormulaDe, setEditandoFormulaDe] = useState(null);
+  const [funcEmEdicao, setFuncEmEdicao] = useState(false);
+
+  useEffect(() => {
+    onEdicaoAuxiliarMudou?.(editandoFormulaDe != null || funcEmEdicao);
+    // Trocar de módulo desmonta esta tela — sem isto, sair com o editor de
+    // fórmula ou a célula de funcionários abertos deixava a flag travada e a
+    // atualização de fundo parava para o app inteiro, não só para esta tela.
+    return () => onEdicaoAuxiliarMudou?.(false);
+  }, [editandoFormulaDe, funcEmEdicao, onEdicaoAuxiliarMudou]);
 
   // Percentual sobre receita zero não vira valor nenhum. Sem dizer isso, a
   // coluna em reais fica em 0,00 com o percentual digitado ao lado, e parece
@@ -136,6 +196,17 @@ export default function TelaOrcamento({
     contasDisponiveis.length > 0 &&
     filtros.centro !== SEM_CENTRO &&
     (!percentual || (filtros.receita !== TODAS_AS_CONTAS && receitas.length > 0));
+
+  // Nº de funcionários é do CENTRO, não da conta: aparece mesmo vendo "Total
+  // do módulo" (soma das contas), porque a multiplicação distribui — Σ(valor
+  // da conta) × gente = Σ(valor da conta × gente). Só precisa de filial e
+  // centro únicos.
+  const podeMostrarFuncionarios =
+    temFuncionarios && filtros.filial !== "total" && filtros.centro !== SEM_CENTRO;
+  const podeEditarFuncionarios =
+    podeLancar && filtros.filial !== "total" && filtros.centro !== SEM_CENTRO;
+  const contaCalculada =
+    temFuncionarios && filtros.conta !== TODAS_AS_CONTAS && contaEhCalculada(visao, modulo.id, filtros.conta);
 
   const motivo = !podeLancar && filtros.filial !== "total"
     ? "Você tem acesso de leitura nesta combinação — os valores aparecem, mas não podem ser alterados."
@@ -191,6 +262,22 @@ export default function TelaOrcamento({
     selecionado: filtros.conta,
     aoSelecionar: (codigo) => onAlterarFiltro({ conta: codigo }),
     vazio: "Nenhuma conta neste centro. Escolha as contas dele em Visões.",
+    // Só Despesas com pessoal ganha o "⋮": fixo é o padrão de todo módulo, e
+    // só aqui existe a opção de virar calculado.
+    acaoItem:
+      temFuncionarios && onDefinirFormula
+        ? (item) => (
+            <button
+              type="button"
+              className="selecao-item__acao"
+              onClick={() => setEditandoFormulaDe(item.codigo)}
+              title="Escolher se esta conta é valor fixo ou calculado por fórmula"
+              aria-label={`Fixo ou calculado — ${item.codigo}`}
+            >
+              <Icone nome="maisVertical" tamanho={14} />
+            </button>
+          )
+        : undefined,
   });
 
   return (
@@ -292,23 +379,6 @@ export default function TelaOrcamento({
 
       {carregandoRealizado ? <Carregando texto="Carregando realizado do ERP…" /> : null}
 
-      {/* Sem este aviso o total sai menor que o do ERP sem nada na tela explicar
-          por quê — foi exatamente o que gerou dúvida contra o Scoreplan. */}
-      {filiaisIgnoradas?.length ? (
-        <p className="modulo-aviso modulo-aviso--atencao">
-          <Icone nome="info" tamanho={16} />
-          <span>
-            {filiaisIgnoradas.length}{" "}
-            {filiaisIgnoradas.length === 1
-              ? "filial tem movimento em " + plano.ano + " ou em " + (plano.ano - 1) + " e está fora"
-              : "filiais têm movimento em " + plano.ano + " ou em " + (plano.ano - 1) + " e estão fora"}{" "}
-            das filiais em uso, então não entram nestes totais (nem no ano anterior):{" "}
-            <strong>{filiaisIgnoradas.map((f) => f.nome ?? f.id).join(", ")}</strong>. Ajuste em
-            Configurações → Filiais.
-          </span>
-        </p>
-      ) : null}
-
       {/* Os avisos ficam ACIMA do layout de duas colunas, não dentro da coluna
           da direita: dentro dela empurravam a tabela para baixo e o cabeçalho
           não nascia na mesma linha que os painéis. */}
@@ -349,12 +419,46 @@ export default function TelaOrcamento({
           <TabelaOrcamento
             linhas={linhas}
             percentual={percentual}
-            podeEditar={podeEditar}
+            podeEditar={podeEditar && !contaCalculada}
             prefixoCelula={`${modulo.id}|${filtros.filial}|${filtros.centro}|${filtros.conta}|${filtros.receita}`}
+            colunaFuncionarios={
+              podeMostrarFuncionarios
+                ? {
+                    obterValor: (mes) =>
+                      plano.funcionarios?.[chaveFuncionario(filtros.filial, filtros.centro, mes)] ?? null,
+                    podeEditar: podeEditarFuncionarios,
+                    onGravar: (celulas) =>
+                      onGravarFuncionarios?.(
+                        celulas.map((celula) => ({
+                          ...celula,
+                          filial: filtros.filial,
+                          centro: filtros.centro,
+                        }))
+                      ),
+                  }
+                : undefined
+            }
+            onFuncionariosEmEdicao={setFuncEmEdicao}
             {...edicao}
           />
         </section>
       </div>
+
+      {editandoFormulaDe ? (
+        <EditorFormula
+          conta={editandoFormulaDe}
+          descricao={buscarConta(catalogo, editandoFormulaDe)?.descricao ?? ""}
+          contasDisponiveis={contasDisponiveis
+            .filter((codigo) => codigo !== editandoFormulaDe)
+            .map((codigo) => ({
+              codigo,
+              descricao: buscarConta(catalogo, codigo)?.descricao ?? codigo,
+            }))}
+          formulaAtual={formulaDaConta(visao, modulo.id, editandoFormulaDe)}
+          onSalvar={(expressao) => onDefinirFormula(editandoFormulaDe, expressao)}
+          onFechar={() => setEditandoFormulaDe(null)}
+        />
+      ) : null}
     </main>
   );
 }

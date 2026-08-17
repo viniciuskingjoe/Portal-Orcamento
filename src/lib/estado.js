@@ -38,6 +38,8 @@ export const estado = {
       api.salvarModulo(visaoId, modulo, { filial, centro, usoDoCentro: usa }),
     sinal: (visaoId, modulo, conta, tipo) =>
       api.salvarModulo(visaoId, modulo, { sinal: { conta, tipo } }),
+    formula: (visaoId, modulo, conta, expressao) =>
+      api.salvarModulo(visaoId, modulo, { formula: { conta, expressao } }),
   },
 
   grupos: () => api.grupos(),

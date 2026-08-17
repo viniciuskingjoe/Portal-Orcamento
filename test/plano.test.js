@@ -2,20 +2,25 @@ import { strict as assert } from "node:assert";
 import { test } from "node:test";
 
 import {
+  chaveFuncionario,
   chavePlanejado,
   criarLinhasOrcamento,
   linhasParaOrcamento,
   valorParaGravar,
+  valorPlanejadoDaConta,
   criarPlano,
   purgarFilialDosPlanos,
   receitasDaBase,
+  totaisDoModuloNoAno,
   totalPlanejadoNoAno,
 } from "../src/dados/plano.js";
 import { indexarRealizado } from "../src/dados/realizado.js";
 import {
   SEM_CENTRO,
+  MODULO_PESSOAL,
   criarVisao,
   definirContasDoCentro,
+  definirFormulaDaConta,
 } from "../src/dados/visao.js";
 import { indexarContas } from "../src/dados/contas.js";
 
@@ -718,6 +723,117 @@ test("valor é arredondado em duas casas, como a coluna do ERP", () => {
 
 test("plano ou visão ausente devolve lista vazia", () => {
   assert.deepEqual(linhasParaOrcamento({ plano: null, visao: null }), []);
+});
+
+// ---------------------------------------------------------------------------
+// Conta calculada (Despesas com pessoal)
+//
+// Ninguém digita nela — o valor sai da fórmula, referenciando outras contas
+// do mesmo módulo, filial, centro e mês.
+// ---------------------------------------------------------------------------
+
+const SALARIO = "4.2.1.10.001";
+const ABONO = "4.2.1.10.002";
+const DECIMO = "4.2.1.10.003";
+
+function visaoDeFolha() {
+  return definirContasDoCentro(criarVisao("v1", "X", "25"), MODULO_PESSOAL, "000001", CENTRO, [
+    SALARIO,
+    ABONO,
+    DECIMO,
+  ]);
+}
+
+test("conta fixa lê o planejado direto — sem fórmula, comportamento de sempre", () => {
+  const p = plano({ [chavePlanejado(MODULO_PESSOAL, "000001", CENTRO, SALARIO, 1)]: 1000 });
+  assert.equal(valorPlanejadoDaConta(p, visaoDeFolha(), MODULO_PESSOAL, "000001", CENTRO, SALARIO, 1), 1000);
+});
+
+test("conta calculada resolve pela fórmula, ignorando o que estiver gravado nela", () => {
+  const visao = definirFormulaDaConta(visaoDeFolha(), MODULO_PESSOAL, DECIMO, "(V[" + SALARIO + "] + V[" + ABONO + "]) / 12");
+  const p = plano({
+    [chavePlanejado(MODULO_PESSOAL, "000001", CENTRO, SALARIO, 1)]: 1200,
+    [chavePlanejado(MODULO_PESSOAL, "000001", CENTRO, ABONO, 1)]: 200,
+    // Lixo de quando a conta era fixa — a fórmula tem que ganhar dele.
+    [chavePlanejado(MODULO_PESSOAL, "000001", CENTRO, DECIMO, 1)]: 999999,
+  });
+
+  assert.equal(
+    valorPlanejadoDaConta(p, visao, MODULO_PESSOAL, "000001", CENTRO, DECIMO, 1),
+    (1200 + 200) / 12
+  );
+});
+
+test("referência circular na fórmula devolve 0 em vez de travar", () => {
+  let visao = visaoDeFolha();
+  visao = definirFormulaDaConta(visao, MODULO_PESSOAL, SALARIO, `V[${ABONO}]`);
+  visao = definirFormulaDaConta(visao, MODULO_PESSOAL, ABONO, `V[${SALARIO}]`);
+
+  assert.equal(valorPlanejadoDaConta(plano(), visao, MODULO_PESSOAL, "000001", CENTRO, SALARIO, 1), 0);
+});
+
+// A partir daqui a publicação entra em cena. Nº de funcionários é dado à
+// parte (`chaveFuncionario`), informativo — não entra na conta: o valor
+// gravado (ou o que a fórmula resolve) já é o total do centro, exatamente
+// como em qualquer outro módulo.
+test("linhasParaOrcamento publica o valor calculado — sem multiplicar por gente nenhuma", () => {
+  const visao = definirFormulaDaConta(visaoDeFolha(), MODULO_PESSOAL, DECIMO, `(V[${SALARIO}] + V[${ABONO}]) / 12`);
+  const p = plano({
+    [chavePlanejado(MODULO_PESSOAL, "000001", CENTRO, SALARIO, 1)]: 1200,
+    [chavePlanejado(MODULO_PESSOAL, "000001", CENTRO, ABONO, 1)]: 200,
+  });
+
+  const linhas = linhasParaOrcamento({ plano: p, visao });
+  const decimo = linhas.find((l) => l.conta === DECIMO && l.mes === 1);
+  assert.ok(decimo, "conta calculada precisa aparecer mesmo sem lançamento manual");
+  assert.equal(decimo.valor, Math.round(((1200 + 200) / 12) * 100) / 100);
+});
+
+test("linhasParaOrcamento ignora o que estiver gravado numa conta que virou calculada", () => {
+  const visao = definirFormulaDaConta(visaoDeFolha(), MODULO_PESSOAL, DECIMO, `V[${SALARIO}] / 12`);
+  const p = plano({
+    [chavePlanejado(MODULO_PESSOAL, "000001", CENTRO, SALARIO, 1)]: 1200,
+    [chavePlanejado(MODULO_PESSOAL, "000001", CENTRO, DECIMO, 1)]: 999999,
+  });
+
+  const linhas = linhasParaOrcamento({ plano: p, visao });
+  const decimo = linhas.find((l) => l.conta === DECIMO);
+  assert.equal(decimo.valor, 100, "1200 / 12, não o lixo gravado antes");
+});
+
+test("conta fixa de Despesas com pessoal publica o que foi digitado, igual qualquer módulo", () => {
+  const visao = visaoDeFolha();
+  const p = plano({ [chavePlanejado(MODULO_PESSOAL, "000001", CENTRO, SALARIO, 1)]: 50000 });
+
+  const linhas = linhasParaOrcamento({ plano: p, visao });
+  const salario = linhas.find((l) => l.conta === SALARIO);
+  assert.equal(salario.valor, 50000);
+});
+
+test("Nº de funcionários é informativo — não muda o que publica", () => {
+  const visao = visaoDeFolha();
+  const p = {
+    ...criarPlano("p1", "Oficial", ANO, "v1"),
+    planejado: { [chavePlanejado(MODULO_PESSOAL, "000001", CENTRO, SALARIO, 1)]: 50000 },
+    funcionarios: { [chaveFuncionario("000001", CENTRO, 1)]: 10 },
+  };
+
+  const linhas = linhasParaOrcamento({ plano: p, visao });
+  const salario = linhas.find((l) => l.conta === SALARIO);
+  assert.equal(salario.valor, 50000, "gente informada ou não, o valor publicado é o mesmo");
+});
+
+test("totaisDoModuloNoAno de Despesas com pessoal soma direto, sem multiplicar por gente", () => {
+  const visao = visaoDeFolha();
+  const p = plano({ [chavePlanejado(MODULO_PESSOAL, "000001", CENTRO, SALARIO, 1)]: 1000 });
+
+  const totais = totaisDoModuloNoAno({
+    plano: p,
+    visao,
+    moduloId: MODULO_PESSOAL,
+    filiais: [FILIAIS[0]],
+  });
+  assert.equal(totais.planejado, 1000);
 });
 
 // ---------------------------------------------------------------------------

@@ -2,13 +2,19 @@ import { MESES } from "./seeds.js";
 import { MODULO_BASE_DO_PERCENTUAL, modulo as definicaoDoModulo, ehPercentual } from "./modulos.js";
 import {
   SEM_CENTRO,
+  MODULO_PESSOAL,
   centrosDaFilial,
   contasDaFilial,
+  contasDoCentro,
   contasEfetivasDoModulo,
+  contaEhCalculada,
+  filiaisDoModulo,
+  formulaDaConta,
   moduloConfigurado,
   sinaisDoModulo,
   usaCentroDeCusto,
 } from "./visao.js";
+import { avaliarFormula } from "./formula.js";
 import { somarRealizado } from "./realizado.js";
 import { mesTemRealizado } from "./calendario.js";
 import { CATALOGO_VAZIO } from "./contas.js";
@@ -100,11 +106,48 @@ function centrosParaLeitura(visao, moduloId, filialId, centroId) {
   return daFilial.length ? daFilial : [SEM_CENTRO];
 }
 
+// Valor em reais de UMA conta, filial, centro e mês: o que está gravado, para
+// conta fixa, ou o resultado da fórmula, para conta calculada (só existe em
+// Despesas com pessoal). As duas pontas que precisam deste número — a tela
+// (`criarLinhasOrcamento`, via `digitadoDoMes`) e a publicação para o Linx
+// (`linhasParaOrcamento`) — chamam a mesma função, para nunca divergir.
+//
+// `emResolucao` guarda a CHAVE INTEIRA (não só o código da conta): duas
+// contas calculadas podem se referenciar em cadeia sem problema, o que não
+// pode é uma cadeia voltar a uma chave que já estava sendo resolvida.
+function valorDaConta(plano, visao, moduloId, filialId, centroId, conta, mes, emResolucao) {
+  const bruto = plano.planejado[chavePlanejado(moduloId, filialId, centroId, conta, mes)] ?? 0;
+  const formula = formulaDaConta(visao, moduloId, conta);
+  if (!formula) return bruto;
+
+  const chave = `${moduloId}|${filialId}|${centroId}|${conta}|${mes}`;
+  if (emResolucao.has(chave)) {
+    throw new Error(`A fórmula de ${conta} depende dela mesma (referência circular).`);
+  }
+  const proxima = new Set(emResolucao).add(chave);
+
+  return avaliarFormula(formula.expressao, (codigo) =>
+    valorDaConta(plano, visao, moduloId, filialId, centroId, codigo, mes, proxima)
+  );
+}
+
+// Fórmula quebrada (referência circular, conta que saiu da visão) não pode
+// derrubar a tela inteira nem travar a publicação de todas as outras contas —
+// vira 0 com o erro visível só para quem edita aquela fórmula, na tela do
+// editor.
+export function valorPlanejadoDaConta(plano, visao, moduloId, filialId, centroId, conta, mes) {
+  try {
+    return valorDaConta(plano, visao, moduloId, filialId, centroId, conta, mes, new Set());
+  } catch {
+    return 0;
+  }
+}
+
 function digitadoDoMes(plano, visao, moduloId, filialId, centroId, contas, mes) {
   let total = 0;
   for (const centro of centrosParaLeitura(visao, moduloId, filialId, centroId)) {
     for (const conta of contas) {
-      total += plano.planejado[chavePlanejado(moduloId, filialId, centro, conta, mes)] ?? 0;
+      total += valorPlanejadoDaConta(plano, visao, moduloId, filialId, centro, conta, mes);
     }
   }
   return total;
@@ -479,15 +522,7 @@ export function totaisDoModuloNoAno({
     MESES.forEach((mes) => {
       centros.forEach((centroId) => {
         const contas = contasEfetivasDoModulo(visao, moduloId, filial.id, centroId);
-        totais.planejado += planejadoDoMes(
-          plano,
-          visao,
-          moduloId,
-          [filial],
-          centroId,
-          contas,
-          mes
-        ).reais;
+        totais.planejado += planejadoDoMes(plano, visao, moduloId, [filial], centroId, contas, mes).reais;
       });
 
       if (mesTemRealizado(ano, mes)) {
@@ -544,6 +579,11 @@ export function linhasParaOrcamento({ plano, visao }) {
     // A conta precisa continuar valendo para esta combinação na visão.
     if (!contasEfetivasDoModulo(visao, moduloId, filialId, centroId).includes(conta)) continue;
 
+    // Conta calculada publica pelo laço dedicado logo abaixo: o que está
+    // gravado aqui pode ser lixo de quando ela era fixa, e o valor de verdade
+    // vem da fórmula.
+    if (contaEhCalculada(visao, moduloId, conta)) continue;
+
     let reais = valor;
     if (ehPercentual(moduloId)) {
       // Sem a receita na chave não há base: é lançamento de antes da regra que
@@ -560,6 +600,28 @@ export function linhasParaOrcamento({ plano, visao }) {
     const destino = `${filialId}|${centroId}|${conta}|${mes}`;
     somado.set(destino, (somado.get(destino) ?? 0) + reais);
   }
+
+  // Conta calculada nunca tem entrada em `plano.planejado` — ninguém digita
+  // nela, o valor sai da fórmula. Sem este passo ela nunca apareceria no laço
+  // acima e o Linx nunca veria, por exemplo, o 13º salário calculado. Só
+  // existe em Despesas com pessoal, mas percorre pela visão em vez de
+  // verificar módulo a módulo: mais direto, e continua certo se outro módulo
+  // ganhar fórmula um dia.
+  filiaisDoModulo(visao, MODULO_PESSOAL).forEach((filialId) => {
+    centrosDaFilial(visao, MODULO_PESSOAL, filialId).forEach((centroId) => {
+      contasDoCentro(visao, MODULO_PESSOAL, filialId, centroId).forEach((conta) => {
+        if (!contaEhCalculada(visao, MODULO_PESSOAL, conta)) return;
+
+        for (let mes = 1; mes <= 12; mes += 1) {
+          const reais = valorPlanejadoDaConta(plano, visao, MODULO_PESSOAL, filialId, centroId, conta, mes);
+          if (!reais) continue;
+
+          const destino = `${filialId}|${centroId}|${conta}|${mes}`;
+          somado.set(destino, (somado.get(destino) ?? 0) + reais);
+        }
+      });
+    });
+  });
 
   return [...somado.entries()]
     .map(([destino, valor]) => {

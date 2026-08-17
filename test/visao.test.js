@@ -4,15 +4,22 @@ import { test } from "node:test";
 import { MODULOS } from "../src/dados/modulos.js";
 import {
   SEM_CENTRO,
+  MODULO_OPERACIONAIS,
+  MODULO_PESSOAL,
   centrosDaFilial,
   contasDaFilial,
   contasDoCentro,
   contasEfetivasDoModulo,
+  contaEhCalculada,
   criarVisao,
   definirContasDoCentro,
+  definirContasDoCentroExclusivo,
+  definirFormulaDaConta,
   definirUsoDoCentro,
   centroEmUso,
   filiaisDoModulo,
+  formulaDaConta,
+  formulasDoModulo,
   moduloConfigurado,
   modulosDaVisao,
   resumoDaVisao,
@@ -172,4 +179,79 @@ test("os oito módulos fixos têm tipo e grupo contábil", () => {
     assert.ok(["receita", "despesa"].includes(item.tipo), `${item.id} sem tipo`);
     assert.ok(["R", "DV", "DF"].includes(item.grupo), `${item.id} sem grupo`);
   });
+});
+
+// ---------------------------------------------------------------------------
+// Exclusividade entre Despesas com pessoal e Despesas operacionais
+//
+// As três famílias de folha não podem estar somadas nos dois módulos ao mesmo
+// tempo para o mesmo centro, senão o DRE e a publicação para o Linx dobram o
+// valor — ver [[pessoal-nao-migrar-de-operacionais]].
+// ---------------------------------------------------------------------------
+
+const FOLHA = "4.2.1.10.001";
+
+test("marcar a conta em Despesas com pessoal tira ela de Despesas operacionais no mesmo centro", () => {
+  let visao = definirContasDoCentro(nova(), MODULO_OPERACIONAIS, FILIAL, CENTRO, [FOLHA, "4.4.1.01.001"]);
+  visao = definirContasDoCentroExclusivo(visao, MODULO_PESSOAL, FILIAL, CENTRO, [FOLHA]);
+
+  assert.deepEqual(contasDoCentro(visao, MODULO_PESSOAL, FILIAL, CENTRO), [FOLHA]);
+  assert.deepEqual(contasDoCentro(visao, MODULO_OPERACIONAIS, FILIAL, CENTRO), ["4.4.1.01.001"]);
+});
+
+test("marcar a conta de volta em Despesas operacionais tira ela de Despesas com pessoal", () => {
+  let visao = definirContasDoCentroExclusivo(nova(), MODULO_PESSOAL, FILIAL, CENTRO, [FOLHA]);
+  visao = definirContasDoCentroExclusivo(visao, MODULO_OPERACIONAIS, FILIAL, CENTRO, [FOLHA]);
+
+  assert.deepEqual(contasDoCentro(visao, MODULO_OPERACIONAIS, FILIAL, CENTRO), [FOLHA]);
+  assert.deepEqual(contasDoCentro(visao, MODULO_PESSOAL, FILIAL, CENTRO), []);
+});
+
+test("exclusividade não mexe em outro centro nem em outro módulo", () => {
+  let visao = definirContasDoCentro(nova(), MODULO_OPERACIONAIS, FILIAL, "999", [FOLHA]);
+  visao = definirContasDoCentro(visao, MODULO, FILIAL, CENTRO, ["3.1.1.01.001"]);
+  visao = definirContasDoCentroExclusivo(visao, MODULO_PESSOAL, FILIAL, CENTRO, [FOLHA]);
+
+  assert.deepEqual(contasDoCentro(visao, MODULO_OPERACIONAIS, FILIAL, "999"), [FOLHA]);
+  assert.deepEqual(contasDoCentro(visao, MODULO, FILIAL, CENTRO), ["3.1.1.01.001"]);
+});
+
+test("módulo fora do par não sofre nem causa exclusão", () => {
+  const visao = definirContasDoCentroExclusivo(nova(), MODULO, FILIAL, CENTRO, ["3.1.1.01.001"]);
+  assert.deepEqual(contasDoCentro(visao, MODULO, FILIAL, CENTRO), ["3.1.1.01.001"]);
+});
+
+// ---------------------------------------------------------------------------
+// Fórmula por conta
+// ---------------------------------------------------------------------------
+
+test("conta nasce fixa: sem fórmula, não calculada", () => {
+  const visao = nova();
+  assert.equal(formulaDaConta(visao, MODULO_PESSOAL, FOLHA), null);
+  assert.equal(contaEhCalculada(visao, MODULO_PESSOAL, FOLHA), false);
+});
+
+test("definir a fórmula marca a conta como calculada", () => {
+  const visao = definirFormulaDaConta(nova(), MODULO_PESSOAL, FOLHA, "(V[a] + V[b]) / 12");
+  assert.equal(contaEhCalculada(visao, MODULO_PESSOAL, FOLHA), true);
+  assert.deepEqual(formulaDaConta(visao, MODULO_PESSOAL, FOLHA), { expressao: "(V[a] + V[b]) / 12" });
+});
+
+test("expressão vazia ou nula volta a conta para fixa", () => {
+  let visao = definirFormulaDaConta(nova(), MODULO_PESSOAL, FOLHA, "V[a]/12");
+  visao = definirFormulaDaConta(visao, MODULO_PESSOAL, FOLHA, "");
+  assert.equal(contaEhCalculada(visao, MODULO_PESSOAL, FOLHA), false);
+
+  visao = definirFormulaDaConta(definirFormulaDaConta(nova(), MODULO_PESSOAL, FOLHA, "V[a]"), MODULO_PESSOAL, FOLHA, null);
+  assert.equal(contaEhCalculada(visao, MODULO_PESSOAL, FOLHA), false);
+});
+
+test("fórmula é por módulo: a mesma conta pode ser fixa num módulo e calculada noutro", () => {
+  const visao = definirFormulaDaConta(nova(), MODULO_PESSOAL, FOLHA, "V[a]/12");
+  assert.equal(contaEhCalculada(visao, MODULO_PESSOAL, FOLHA), true);
+  assert.equal(contaEhCalculada(visao, MODULO_OPERACIONAIS, FOLHA), false);
+});
+
+test("formulasDoModulo nunca devolve undefined, mesmo sem nada definido", () => {
+  assert.deepEqual(formulasDoModulo(nova(), MODULO_PESSOAL), {});
 });

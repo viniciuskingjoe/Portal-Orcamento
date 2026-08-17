@@ -25,6 +25,7 @@ import {
 import {
   carregarEstado,
   definirContas,
+  definirFormula,
   definirSinal,
   definirUsoDoCentro,
   bancoVazio,
@@ -277,7 +278,7 @@ app.put(
   "/api/visoes/:id/modulos/:modulo",
   exigirAdmin,
   rota(async (req, res) => {
-    const { filial, centro, contas, lotes, usoDoCentro, sinal } = req.body ?? {};
+    const { filial, centro, contas, lotes, usoDoCentro, sinal, formula } = req.body ?? {};
     // Lote existe para o mapeamento padrão, que aplica as mesmas contas em todas
     // as filiais de uma vez — sem ele seriam 25 requisições por módulo.
     for (const lote of lotes ?? []) {
@@ -291,6 +292,15 @@ app.put(
     }
     if (sinal !== undefined) {
       await definirSinal(req.params.id, req.params.modulo, sinal.conta, sinal.tipo);
+    }
+    if (formula !== undefined) {
+      await definirFormula(
+        req.params.id,
+        req.params.modulo,
+        formula.conta,
+        formula.expressao,
+        req.sessao.login
+      );
     }
     res.json({ ok: true });
   })

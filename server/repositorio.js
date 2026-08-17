@@ -54,6 +54,7 @@ async function temTabela(nome) {
 }
 
 const temFuncionarios = () => temTabela("dbo.KING_PORTAL_ORC_FUNCIONARIO");
+const temFormulas = () => temTabela("dbo.KING_PORTAL_ORC_VISAO_FORMULA");
 
 // --------------------------------------------------------------------------
 // Leitura
@@ -64,6 +65,13 @@ export async function carregarEstado() {
     ? await query(
         `SELECT PLANO_ID, COD_FILIAL, CENTRO_CUSTO, MES, QUANTIDADE
            FROM dbo.KING_PORTAL_ORC_FUNCIONARIO`
+      )
+    : [];
+
+  const formulas = (await temFormulas())
+    ? await query(
+        `SELECT VISAO_ID, MODULO, CLASSIFICACAO, EXPRESSAO
+           FROM dbo.KING_PORTAL_ORC_VISAO_FORMULA`
       )
     : [];
 
@@ -101,7 +109,7 @@ export async function carregarEstado() {
   const moduloDe = (visaoId, moduloId) => {
     const visao = porVisao.get(visaoId);
     if (!visao) return null;
-    visao.modulos[moduloId] ??= { sinais: {}, filiais: {} };
+    visao.modulos[moduloId] ??= { sinais: {}, formulas: {}, filiais: {} };
     return visao.modulos[moduloId];
   };
   const filialDe = (visaoId, moduloId, filialId) => {
@@ -141,6 +149,11 @@ export async function carregarEstado() {
   sinais.forEach((linha) => {
     const modulo = moduloDe(linha.VISAO_ID, linha.MODULO);
     if (modulo) modulo.sinais[linha.CLASSIFICACAO] = linha.TIPO;
+  });
+
+  formulas.forEach((linha) => {
+    const modulo = moduloDe(linha.VISAO_ID, linha.MODULO);
+    if (modulo) modulo.formulas[linha.CLASSIFICACAO] = { expressao: linha.EXPRESSAO };
   });
 
   const porPlano = new Map(
@@ -348,6 +361,30 @@ export async function definirSinal(visaoId, modulo, classificacao, tipo) {
      WHEN NOT MATCHED THEN INSERT (VISAO_ID, MODULO, CLASSIFICACAO, TIPO)
        VALUES (@visao, @modulo, @conta, @tipo);`,
     { visao: visaoId, modulo, conta: classificacao, tipo }
+  );
+}
+
+// Fixa (ausência de linha) ou calculada (expressão gravada). `expressao` vazia
+// ou `null` volta a conta para fixa — mesma convenção de `definirSinal`.
+export async function definirFormula(visaoId, modulo, classificacao, expressao, login) {
+  if (!expressao) {
+    await query(
+      `DELETE FROM dbo.KING_PORTAL_ORC_VISAO_FORMULA
+        WHERE VISAO_ID = @visao AND MODULO = @modulo AND CLASSIFICACAO = @conta`,
+      { visao: visaoId, modulo, conta: classificacao }
+    );
+    return;
+  }
+
+  await query(
+    `MERGE dbo.KING_PORTAL_ORC_VISAO_FORMULA AS destino
+     USING (SELECT @visao AS VISAO_ID, @modulo AS MODULO, @conta AS CLASSIFICACAO) AS origem
+        ON destino.VISAO_ID = origem.VISAO_ID AND destino.MODULO = origem.MODULO
+       AND destino.CLASSIFICACAO = origem.CLASSIFICACAO
+     WHEN MATCHED THEN UPDATE SET EXPRESSAO = @expressao, ATUALIZADO_EM = SYSUTCDATETIME(), ATUALIZADO_POR = @login
+     WHEN NOT MATCHED THEN INSERT (VISAO_ID, MODULO, CLASSIFICACAO, EXPRESSAO, ATUALIZADO_POR)
+       VALUES (@visao, @modulo, @conta, @expressao, @login);`,
+    { visao: visaoId, modulo, conta: classificacao, expressao, login: login ?? null }
   );
 }
 
