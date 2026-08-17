@@ -3973,6 +3973,36 @@ dialog::backdrop {
   background: var(--surface-hover);
 }
 
+/* Cabeçalho de filial na visão "Total" — mesmo tom de grupo da árvore de
+   contas (.arvore-conta.is-grupo), pra não inventar um segundo estilo pra
+   "isto é uma dobradiça, não um dado". */
+.linha-grupo-filial th {
+  background: var(--surface-tint);
+  padding: 7px 12px;
+  border-bottom: 1px solid var(--border);
+  text-align: left;
+}
+
+.grupo-filial-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  text-align: left;
+}
+
+.grupo-filial-toggle:hover {
+  color: var(--accent);
+}
+
 .tabela-qtde tfoot th,
 .tabela-qtde tfoot td {
   background: var(--surface-soft);

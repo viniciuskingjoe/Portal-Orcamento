@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { Fragment, useMemo, useState } from "react";
 
 import Cabecalho from "../componentes/Cabecalho.jsx";
 import Icone from "../componentes/Icone.jsx";
@@ -125,6 +125,35 @@ export default function TelaFuncionarios({
     return resultado;
   }, [visao, modulo.id, filiaisMostradas, centros]);
 
+  // Uma "filial" por grupo, na ordem em que já aparecem em `linhas`. Com uma
+  // única filial escolhida no filtro, o grupo é só um — o cabeçalho dele fica
+  // implícito no filtro acima e não se repete na tabela.
+  const grupos = useMemo(() => {
+    const porFilial = new Map();
+    linhas.forEach((linha) => {
+      if (!porFilial.has(linha.filialId)) {
+        porFilial.set(linha.filialId, {
+          filialId: linha.filialId,
+          filialNome: linha.filialNome,
+          centros: [],
+        });
+      }
+      porFilial.get(linha.filialId).centros.push(linha);
+    });
+    return [...porFilial.values()];
+  }, [linhas]);
+
+  // Fechadas, não abertas: assim toda filial nasce expandida sem precisar
+  // semear o Set com os ids antes de saber quais são.
+  const [filiaisFechadas, setFiliaisFechadas] = useState(() => new Set());
+  const alternarFilial = (filialId) =>
+    setFiliaisFechadas((atual) => {
+      const proximo = new Set(atual);
+      if (proximo.has(filialId)) proximo.delete(filialId);
+      else proximo.add(filialId);
+      return proximo;
+    });
+
   const quantidade = (filialId, centroId, mes) =>
     plano.funcionarios?.[chaveFuncionario(filialId, centroId, mes)] ?? null;
 
@@ -224,49 +253,80 @@ export default function TelaFuncionarios({
             </thead>
 
             <tbody>
-              {linhas.map((linha) => {
-                const media = mediaDaLinha(linha);
+              {grupos.map((grupo) => {
+                const fechada = !umaFilial && filiaisFechadas.has(grupo.filialId);
                 return (
-                  <tr key={`${linha.filialId}|${linha.centroId}`}>
-                    <th scope="row" className="col-centro">
-                      <span>{linha.centroNome}</span>
-                      <small>
-                        {umaFilial ? linha.centroId : `${linha.filialNome} · ${linha.centroId}`}
-                      </small>
-                    </th>
+                  <Fragment key={grupo.filialId}>
+                    {!umaFilial ? (
+                      <tr className="linha-grupo-filial">
+                        <th scope="rowgroup" colSpan={2 + MESES.length}>
+                          <button
+                            type="button"
+                            className="grupo-filial-toggle"
+                            onClick={() => alternarFilial(grupo.filialId)}
+                            aria-expanded={!fechada}
+                          >
+                            <span className={`arvore-chevron ${!fechada ? "is-aberto" : ""}`}>
+                              <Icone nome="chevron" tamanho={13} />
+                            </span>
+                            <span>{grupo.filialNome}</span>
+                            <span className="arvore-contagem">
+                              {grupo.centros.length}{" "}
+                              {grupo.centros.length === 1 ? "centro" : "centros"}
+                            </span>
+                          </button>
+                        </th>
+                      </tr>
+                    ) : null}
 
-                    {MESES.map((mes) => {
-                      const ehEsta =
-                        editando?.filialId === linha.filialId &&
-                        editando?.centroId === linha.centroId &&
-                        editando?.mes === mes;
-                      return (
-                        <Celula
-                          key={mes}
-                          valor={quantidade(linha.filialId, linha.centroId, mes)}
-                          podeEditar={podeEditar}
-                          editando={ehEsta}
-                          rascunho={rascunho}
-                          onIniciar={(inicial) => {
-                            setEditando({
-                              filialId: linha.filialId,
-                              centroId: linha.centroId,
-                              mes,
-                            });
-                            setRascunho(limpar(inicial));
-                          }}
-                          onMudar={setRascunho}
-                          onConfirmar={confirmar}
-                          onCancelar={() => {
-                            setEditando(null);
-                            setRascunho("");
-                          }}
-                        />
-                      );
-                    })}
+                    {fechada
+                      ? null
+                      : grupo.centros.map((linha) => {
+                          const media = mediaDaLinha(linha);
+                          return (
+                            <tr key={`${linha.filialId}|${linha.centroId}`}>
+                              <th scope="row" className="col-centro">
+                                <span>{linha.centroNome}</span>
+                                <small>{linha.centroId}</small>
+                              </th>
 
-                    <td className="col-resumo">{media == null ? "—" : media.toFixed(1)}</td>
-                  </tr>
+                              {MESES.map((mes) => {
+                                const ehEsta =
+                                  editando?.filialId === linha.filialId &&
+                                  editando?.centroId === linha.centroId &&
+                                  editando?.mes === mes;
+                                return (
+                                  <Celula
+                                    key={mes}
+                                    valor={quantidade(linha.filialId, linha.centroId, mes)}
+                                    podeEditar={podeEditar}
+                                    editando={ehEsta}
+                                    rascunho={rascunho}
+                                    onIniciar={(inicial) => {
+                                      setEditando({
+                                        filialId: linha.filialId,
+                                        centroId: linha.centroId,
+                                        mes,
+                                      });
+                                      setRascunho(limpar(inicial));
+                                    }}
+                                    onMudar={setRascunho}
+                                    onConfirmar={confirmar}
+                                    onCancelar={() => {
+                                      setEditando(null);
+                                      setRascunho("");
+                                    }}
+                                  />
+                                );
+                              })}
+
+                              <td className="col-resumo">
+                                {media == null ? "—" : media.toFixed(1)}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                  </Fragment>
                 );
               })}
             </tbody>
