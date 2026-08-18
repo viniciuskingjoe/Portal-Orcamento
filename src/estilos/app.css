@@ -488,12 +488,16 @@ button {
   height: 26px;
 }
 
+/* Ícone base aponta pra DIREITA — +90° vira BAIXO, -90° vira CIMA. O
+   primeiro botão é "mover pra cima" (precisa apontar pra cima, -90°); o
+   `--baixo` é "mover pra baixo" (precisa apontar pra baixo, +90°). Estavam
+   trocados: cima apontava pra baixo e vice-versa. */
 .dre-linha__mover .botao-icone:first-child svg {
-  transform: rotate(90deg);
+  transform: rotate(-90deg);
 }
 
 .botao-icone--baixo svg {
-  transform: rotate(-90deg);
+  transform: rotate(90deg);
 }
 
 .dre-linha__acoes {
