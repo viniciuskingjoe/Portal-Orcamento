@@ -1772,8 +1772,14 @@ td.sem-contas {
    os três agora explícitos em `.tabela-orcamento thead th` — sem forçar
    `height` na 1ª linha (table cell trata `height` como mínimo, não
    garantido, e o valor forçado descolava da altura real, abrindo um vão
-   entre as duas linhas). */
-.tabela-dre thead tr:last-child th {
+   entre as duas linhas).
+
+   Escopado em `.tabela-dre--leitura` (só a tela de leitura, cabeçalho de
+   DUAS linhas) — `.tabela-dre` sozinha também está na tela de configuração,
+   que tem cabeçalho de UMA linha só; lá `tr:last-child` casa com a ÚNICA
+   linha (é ao mesmo tempo primeira e última), e ela ganharia top:35px por
+   engano em vez de top:0. */
+.tabela-dre--leitura thead tr:last-child th {
   top: 35px;
 }
 

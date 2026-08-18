@@ -137,7 +137,7 @@ function BlocoDre({ titulo, linhas, colunas, expandidas, onExpandir, onAbrirModu
     <div className="bloco-dre">
       {titulo ? <h3 className="bloco-dre__titulo">{titulo}</h3> : null}
       <div className="tabela-wrap">
-        <table className="tabela-orcamento tabela-dre">
+        <table className="tabela-orcamento tabela-dre tabela-dre--leitura">
           <thead>
             <tr>
               <th scope="col" rowSpan={2} className="tabela-dre__descricao">
