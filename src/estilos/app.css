@@ -3576,8 +3576,63 @@ dialog::backdrop {
 .cartao-usuario__acoes {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
   flex-wrap: wrap;
+}
+
+/* Ações do usuário viravam quatro links de texto colados um no outro —
+   difícil separar "Tornar admin" de "Apagar senha" de relance. Botão com
+   borda própria deixa cada ação um alvo de clique claro, e a cor já avisa
+   o peso: neutro pra rotina, âmbar pra sensível (senha), vermelho pra
+   destrutivo (remover). */
+.cartao-usuario__acoes .botao-texto {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 6px 12px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--text-soft);
+  font-size: 12px;
+}
+
+.cartao-usuario__acoes .botao-texto:hover:not(:disabled) {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: var(--accent-soft);
+  text-decoration: none;
+}
+
+.cartao-usuario__acoes .botao-texto:disabled {
+  border-color: var(--border);
+  background: var(--surface-soft);
+  opacity: 0.55;
+}
+
+/* Apagar senha não é rotina (derruba sessão, obriga trocar no próximo
+   acesso) nem destrutivo permanente (não perde acesso nem dado) — aviso no
+   meio do caminho entre o botão neutro e o "Remover" vermelho. */
+.cartao-usuario__acoes .botao-texto--aviso {
+  border-color: var(--warning-soft);
+  color: var(--warning);
+}
+
+.cartao-usuario__acoes .botao-texto--aviso:hover:not(:disabled) {
+  border-color: var(--warning);
+  background: var(--warning-soft);
+  color: var(--warning);
+}
+
+.cartao-usuario__acoes .botao-texto--perigo {
+  border-color: var(--danger-soft);
+  color: var(--danger);
+}
+
+.cartao-usuario__acoes .botao-texto--perigo:hover:not(:disabled) {
+  border-color: var(--danger);
+  background: var(--danger-soft);
+  color: var(--danger);
 }
 
 .cartao-usuario__permissoes {

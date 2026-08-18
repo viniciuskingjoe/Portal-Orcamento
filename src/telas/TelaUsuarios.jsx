@@ -273,6 +273,7 @@ export default function TelaUsuarios({ filiais, centros, sessao, onVoltar }) {
                     aria-expanded={expandido}
                     onClick={() => setAberto(expandido ? null : usuario.login)}
                   >
+                    <Icone nome="eye" tamanho={13} />
                     {expandido ? "Fechar" : "Permissões"}
                   </button>
 
@@ -283,6 +284,7 @@ export default function TelaUsuarios({ filiais, centros, sessao, onVoltar }) {
                     title={euMesmo ? "Você não pode alterar o seu próprio acesso" : undefined}
                     onClick={() => executar(api.alterarUsuario(usuario.login, { admin: !usuario.admin }))}
                   >
+                    <Icone nome="settings" tamanho={13} />
                     {usuario.admin ? "Tirar admin" : "Tornar admin"}
                   </button>
 
@@ -291,9 +293,10 @@ export default function TelaUsuarios({ filiais, centros, sessao, onVoltar }) {
                       em vez de agir no clique. */}
                   <button
                     type="button"
-                    className="botao-texto"
+                    className="botao-texto botao-texto--aviso"
                     onClick={() => setARedefinir(usuario)}
                   >
+                    <Icone nome="chave" tamanho={13} />
                     Apagar senha
                   </button>
 
@@ -304,6 +307,7 @@ export default function TelaUsuarios({ filiais, centros, sessao, onVoltar }) {
                     title={euMesmo ? "Você não pode remover o seu próprio acesso" : undefined}
                     onClick={() => setARemover(usuario)}
                   >
+                    <Icone nome="trash" tamanho={13} />
                     Remover
                   </button>
                 </span>
