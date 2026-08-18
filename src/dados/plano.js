@@ -230,7 +230,11 @@ export function baseDoPercentual(plano, visao, filialId, mes, receitas = null) {
 // receita daquela conta, não sobre a receita total. Aplicar uma base única
 // aqui daria o número errado justamente na tela "Total", que é onde ninguém
 // confere linha a linha.
-function planejadoDoMes(plano, visao, moduloId, filiais, centroId, contas, mes, receitas) {
+//
+// Exportada porque é a única leitura que sabe converter os DOIS formatos de
+// planejado (reais direto, ou percentual sobre a receita) — dados/dre.js
+// reusa em vez de reimplementar a conversão pra montar o DRE.
+export function planejadoDoMes(plano, visao, moduloId, filiais, centroId, contas, mes, receitas) {
   const percentual = ehPercentual(moduloId);
   let digitado = 0;
   let reais = 0;

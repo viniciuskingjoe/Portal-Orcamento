@@ -1,6 +1,6 @@
 import { MODULOS, modulo as definicaoDoModulo } from "./modulos.js";
 import { centrosDaFilial, contasDaFilial, contasDoCentro, filiaisDoModulo } from "./visao.js";
-import { chavePlanejado } from "./plano.js";
+import { planejadoDoMes } from "./plano.js";
 import { somarRealizado } from "./realizado.js";
 import { avaliarFormula } from "./formula.js";
 import { mesTemRealizado } from "./calendario.js";
@@ -75,14 +75,20 @@ function centrosDaLeitura(visao, moduloId, filialId, centrosPermitidos) {
   return todos.filter((centroId) => centrosPermitidos.has(centroId));
 }
 
+// `planejadoDoMes` (dados/plano.js) faz a leitura de verdade — é a única
+// função que sabe converter os DOIS formatos de planejado: reais direto
+// (a maioria dos módulos) ou percentual sobre a receita (Deduções de
+// vendas, Custos variáveis), e também resolve conta calculada (fórmula, em
+// Despesas com pessoal). Ler `plano.planejado[chave]` direto, como esta
+// função fazia antes, pegava só o formato reais — percentual e fórmula
+// sempre voltavam 0 no DRE, mesmo com valor certo na tela do módulo.
 function planejadoDaLinhaModulo(linha, plano, visao, filiais, centrosPermitidos, mes) {
   let total = 0;
   filiais.forEach((filial) => {
     centrosDaLeitura(visao, linha.moduloId, filial.id, centrosPermitidos).forEach((centroId) => {
       valoresDaLinhaNoCentro(linha, visao, filial.id, centroId).forEach(({ codigo, sinal }) => {
-        const valor =
-          plano?.planejado?.[chavePlanejado(linha.moduloId, filial.id, centroId, codigo, mes)] ?? 0;
-        total += (sinal ?? 1) * valor;
+        const { reais } = planejadoDoMes(plano, visao, linha.moduloId, [filial], centroId, [codigo], mes, null);
+        total += (sinal ?? 1) * reais;
       });
     });
   });
@@ -139,8 +145,8 @@ function planejadoDoCodigo(moduloId, codigo, sinal, plano, visao, filiais, centr
   let total = 0;
   filiais.forEach((filial) => {
     centrosDaLeitura(visao, moduloId, filial.id, centrosPermitidos).forEach((centroId) => {
-      const valor = plano?.planejado?.[chavePlanejado(moduloId, filial.id, centroId, codigo, mes)] ?? 0;
-      total += (sinal ?? 1) * valor;
+      const { reais } = planejadoDoMes(plano, visao, moduloId, [filial], centroId, [codigo], mes, null);
+      total += (sinal ?? 1) * reais;
     });
   });
   return total;

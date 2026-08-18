@@ -5,7 +5,7 @@ import { TOTAL_MODULO_TOKEN, calcularDre, mesesDoPeriodo } from "../src/dados/dr
 import { chavePlanejado, criarPlano } from "../src/dados/plano.js";
 import { indexarContas } from "../src/dados/contas.js";
 import { indexarRealizado } from "../src/dados/realizado.js";
-import { criarVisao, definirContasDoCentro } from "../src/dados/visao.js";
+import { MODULO_PESSOAL, criarVisao, definirContasDoCentro, definirFormulaDaConta } from "../src/dados/visao.js";
 
 // Todo módulo é orçado por centro: monta pelo centro, lê pela filial.
 const CENTRO = "002";
@@ -43,7 +43,12 @@ function comLinhas(visao, linhas) {
 const planejado = {
   [chavePlanejado("receita-vendas", "000001", CENTRO, RECEITA, 1)]: 1000,
   [chavePlanejado("receita-vendas", "000001", CENTRO, RECEITA2, 1)]: 300,
-  [chavePlanejado("deducoes-vendas", "000001", CENTRO, DEDUCAO, 1)]: 100,
+  // deducoes-vendas é módulo PERCENTUAL (ehPercentual, dados/modulos.js) —
+  // planejado de verdade tem um 6º segmento na chave (a conta de receita
+  // sobre a qual incide, ver chavePlanejado) e o valor gravado é o
+  // PERCENTUAL, não reais direto. 10% sobre RECEITA (1000) = 100 reais,
+  // pra bater com os testes que já esperavam DEDUCAO = 100.
+  [chavePlanejado("deducoes-vendas", "000001", CENTRO, DEDUCAO, 1, RECEITA)]: 10,
   [chavePlanejado("despesas-operacionais", "000001", CENTRO, DESPESA_OP, 1)]: 150,
 };
 
@@ -103,6 +108,41 @@ test("sinal negativo subtrai, positivo soma", () => {
   const linhas = calcularDre({ visao, plano: plano(), filiais: FILIAIS, meses: [1], catalogo, realizado });
   assert.equal(linha(linhas, "receita").total.planejado, 1000);
   assert.equal(linha(linhas, "deducao").total.planejado, -100);
+});
+
+test("linha modulo lê planejado de módulo PERCENTUAL certo (não só reais direto)", () => {
+  // deducoes-vendas é percentual — dedicar um teste só pra isso, nomeado,
+  // porque o bug real foi o DRE ler só chavePlanejado(...) sem o 6º
+  // segmento (a receita) e sempre achar 0 pra módulo percentual, mesmo com
+  // valor certo digitado na tela do módulo. `planejado` (fixture no topo do
+  // arquivo) já grava DEDUCAO como 10% sobre RECEITA (1000) = 100 reais.
+  const visao = comLinhas(visaoBase(), [
+    { id: "deducao", ordem: 1, titulo: "Dedução", origem: "modulo", moduloId: "deducoes-vendas", valores: [{ codigo: DEDUCAO, sinal: 1 }], mostra: true },
+  ]);
+  const linhas = calcularDre({ visao, plano: plano(), filiais: FILIAIS, meses: [1], catalogo, realizado });
+  assert.equal(linha(linhas, "deducao").total.planejado, 100);
+});
+
+test("linha modulo lê conta CALCULADA (fórmula, Despesas com pessoal), não o valor bruto gravado", () => {
+  const SALARIO = "4.2.1.10.001";
+  const DECIMO = "4.2.1.10.003";
+  let visao = definirContasDoCentro(visaoBase(), MODULO_PESSOAL, "000001", CENTRO, [SALARIO, DECIMO]);
+  visao = definirFormulaDaConta(visao, MODULO_PESSOAL, DECIMO, `V[${SALARIO}]/12`);
+  visao = comLinhas(visao, [
+    { id: "decimo", ordem: 1, titulo: "13º salário", origem: "modulo", moduloId: MODULO_PESSOAL, valores: [{ codigo: DECIMO, sinal: 1 }], mostra: true },
+  ]);
+  const p = {
+    ...plano(),
+    planejado: {
+      ...planejado,
+      [chavePlanejado(MODULO_PESSOAL, "000001", CENTRO, SALARIO, 1)]: 1200,
+      // Lixo de quando a conta era fixa — a fórmula tem que ganhar dele, e
+      // o DRE tem que ler o resultado da fórmula, não este valor bruto.
+      [chavePlanejado(MODULO_PESSOAL, "000001", CENTRO, DECIMO, 1)]: 999999,
+    },
+  };
+  const linhas = calcularDre({ visao, plano: p, filiais: FILIAIS, meses: [1], catalogo, realizado });
+  assert.equal(linha(linhas, "decimo").total.planejado, 100); // 1200 / 12
 });
 
 test("linha com mais de uma conta ganha detalhe (drill-down), uma entrada por conta", () => {
