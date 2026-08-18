@@ -21,15 +21,49 @@ import { CATALOGO_VAZIO } from "./contas.js";
 // ordenada) mora na visão — `visao.dreLinhas`.
 // ============================================================================
 
+// Linha "origem: modulo" sem NENHUMA conta escolhida soma o módulo inteiro
+// — com o sinal único da linha, comportamento de sempre. Dentro da lista de
+// contas escolhidas, porém, dá pra INCLUIR "Total" como uma entrada a mais
+// (`TOTAL_MODULO_TOKEN`) — todas as contas do módulo naquele centro, com o
+// sinal DAQUELA entrada, ao lado de contas específicas com o sinal delas.
+// Ex.: Total (+) e uma conta específica (−) é "tudo, menos essa".
+export const TOTAL_MODULO_TOKEN = "__total__";
+
 // Contas (com o sinal de CADA UMA) que uma linha "origem: modulo" soma num
-// centro: a lista explícita escolhida ao configurar a linha — cada conta com
-// seu próprio +/-, não um sinal só pra linha inteira — ou, se vazia, todas as
-// contas que o módulo tem naquele centro, todas com o sinal único da linha
-// (`linha.sinal`, fallback pra quem não quer recortar).
+// centro — cada conta com seu próprio +/-, não um sinal só pra linha
+// inteira. "Total" expande inline pras contas reais daquele centro.
 function valoresDaLinhaNoCentro(linha, visao, filialId, centroId) {
-  if (linha.valores?.length) return linha.valores;
-  const sinal = linha.sinal ?? 1;
-  return contasDoCentro(visao, linha.moduloId, filialId, centroId).map((codigo) => ({ codigo, sinal }));
+  const contasDoModuloNoCentro = () => contasDoCentro(visao, linha.moduloId, filialId, centroId);
+
+  if (!linha.valores?.length) {
+    const sinal = linha.sinal ?? 1;
+    return contasDoModuloNoCentro().map((codigo) => ({ codigo, sinal }));
+  }
+
+  const resultado = [];
+  linha.valores.forEach((item) => {
+    if (item.codigo === TOTAL_MODULO_TOKEN) {
+      contasDoModuloNoCentro().forEach((codigo) => resultado.push({ codigo, sinal: item.sinal ?? 1 }));
+    } else {
+      resultado.push(item);
+    }
+  });
+  return resultado;
+}
+
+// Contas distintas que uma entrada "Total" cobre, em TODOS os filiais/
+// centros do contexto — cada código uma vez só (a soma de cada um já
+// agrega os centros sozinha, em `valorDoCodigoSeguro`). Usado só pro
+// drill-down: a soma de verdade continua vindo de `valoresDaLinhaNoCentro`,
+// que expande "Total" centro a centro dentro do loop de cálculo.
+function codigosDoTotal(moduloId, sinal, visao, filiais, centrosPermitidos) {
+  const codigos = new Set();
+  filiais.forEach((filial) => {
+    centrosDaLeitura(visao, moduloId, filial.id, centrosPermitidos).forEach((centroId) => {
+      contasDoCentro(visao, moduloId, filial.id, centroId).forEach((codigo) => codigos.add(codigo));
+    });
+  });
+  return [...codigos].map((codigo) => ({ codigo, sinal: sinal ?? 1 }));
 }
 
 // Centros a percorrer: os que a visão deu ao módulo naquela filial, cortados
@@ -382,24 +416,34 @@ export function calcularDre({
     .map((linha) => {
       const { porMes, total } = montarSerie((metrica, mes) => valorSeguro(linha.id, contexto, metrica, mes));
 
-      // Drill-down: só faz sentido com mais de uma conta escolhida — uma
-      // linha com zero ou uma conta não tem o que abrir, o Total já É aquela
-      // conta. `contas: []` (soma o módulo inteiro) também não expande: sem
-      // recorte explícito não há uma lista curta pra mostrar.
-      const detalhe =
-        linha.origem === "modulo" && linha.valores?.length > 1
-          ? linha.valores.map((item) => {
-              const serie = montarSerie((metrica, mes) =>
-                valorDoCodigoSeguro(linha.moduloId, item.codigo, item.sinal, contexto, metrica, mes)
-              );
-              return {
-                codigo: item.codigo,
-                descricao: catalogo?.porCodigo?.get(item.codigo)?.descricao ?? item.codigo,
-                sinal: item.sinal ?? 1,
-                ...serie,
-              };
-            })
-          : null;
+      // Drill-down: qualquer recorte explícito (mesmo uma conta só) pode
+      // expandir — é a única forma de conferir qual conta está por trás do
+      // número sem sair da tela. `valores: []` (soma o módulo inteiro, sem
+      // recorte nenhum) não expande: não há uma lista curta pra mostrar.
+      // "Total" dentro do recorte expande pras contas reais que ele cobre —
+      // cada uma, uma vez, com o sinal daquela entrada "Total".
+      const itensDeDetalhe =
+        linha.origem === "modulo" && linha.valores?.length
+          ? linha.valores.flatMap((item) =>
+              item.codigo === TOTAL_MODULO_TOKEN
+                ? codigosDoTotal(linha.moduloId, item.sinal, contexto.visao, contexto.filiais, contexto.centrosPermitidos)
+                : [item]
+            )
+          : [];
+
+      const detalhe = itensDeDetalhe.length
+        ? itensDeDetalhe.map((item) => {
+            const serie = montarSerie((metrica, mes) =>
+              valorDoCodigoSeguro(linha.moduloId, item.codigo, item.sinal, contexto, metrica, mes)
+            );
+            return {
+              codigo: item.codigo,
+              descricao: catalogo?.porCodigo?.get(item.codigo)?.descricao ?? item.codigo,
+              sinal: item.sinal ?? 1,
+              ...serie,
+            };
+          })
+        : null;
 
       return {
         id: linha.id,

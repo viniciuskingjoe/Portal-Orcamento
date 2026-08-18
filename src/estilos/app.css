@@ -2043,6 +2043,13 @@ dialog::backdrop {
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
   overflow: hidden;
+  /* Dentro do modal (flex-column), sem isto o flexbox reduz esta caixa
+     quando o conteúdo do modal não cabe inteiro — e como `overflow: hidden`
+     é só pro cantos arredondados, o corte vira definitivo: a lista de
+     contas escolhidas perde linhas de baixo sem jeito de rolar até elas.
+     `flex-shrink: 0` garante a altura natural; quem rola o resto é o
+     `.modal__conteudo`. */
+  flex-shrink: 0;
 }
 
 .contas-seletor__topo {

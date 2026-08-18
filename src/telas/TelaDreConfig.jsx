@@ -13,6 +13,7 @@ import {
   filtrarPorGrupo,
   filtrarPorPrefixos,
 } from "../dados/contas.js";
+import { TOTAL_MODULO_TOKEN } from "../dados/dre.js";
 import { validarFormula } from "../dados/formula.js";
 import { MODULOS, modulo as definicaoDoModulo } from "../dados/modulos.js";
 import { contasDaFilial, dreLinhasOrdenadas, filiaisDoModulo } from "../dados/visao.js";
@@ -140,13 +141,16 @@ function EditorLinhaDre({ linha, linhasExistentes, catalogo, visao, onSalvar, on
   // seletor — pra trocar o sinal de uma, usa o +/− dela na lista abaixo, não
   // escolhe de novo.
   const escolhidas = new Set(valores.map((item) => item.codigo));
-  const opcoesConta = useMemo(
-    () =>
-      catalogoDoModulo.lista
-        .filter((item) => item.sintetica === false && !escolhidas.has(item.codigo))
-        .map((item) => ({ valor: item.codigo, rotulo: item.descricao, detalhe: item.codigo })),
-    [catalogoDoModulo, valores] // eslint-disable-line react-hooks/exhaustive-deps
-  );
+  const opcoesConta = useMemo(() => {
+    const contas = catalogoDoModulo.lista
+      .filter((item) => item.sintetica === false && !escolhidas.has(item.codigo))
+      .map((item) => ({ valor: item.codigo, rotulo: item.descricao, detalhe: item.codigo }));
+    // "Total" vai primeiro na lista — soma todas as contas do módulo,
+    // combinável com contas específicas (ex.: Total + uma conta específica
+    // em sinal contrário = "tudo, menos essa").
+    if (escolhidas.has(TOTAL_MODULO_TOKEN)) return contas;
+    return [{ valor: TOTAL_MODULO_TOKEN, rotulo: "Total — todas as contas do módulo" }, ...contas];
+  }, [catalogoDoModulo, valores]); // eslint-disable-line react-hooks/exhaustive-deps
 
   function adicionarValor() {
     if (!contaParaAdicionar) return;
@@ -305,8 +309,14 @@ function EditorLinhaDre({ linha, linhasExistentes, catalogo, visao, onSalvar, on
                 {valores.map((item) => (
                   <li key={item.codigo} className="valores-linha__item">
                     <span className="valores-linha__conta">
-                      <code>{item.codigo}</code>
-                      {buscarConta(catalogo, item.codigo)?.descricao ?? ""}
+                      {item.codigo === TOTAL_MODULO_TOKEN ? (
+                        <strong>Total — todas as contas do módulo</strong>
+                      ) : (
+                        <>
+                          <code>{item.codigo}</code>
+                          {buscarConta(catalogo, item.codigo)?.descricao ?? ""}
+                        </>
+                      )}
                     </span>
                     <div className="abas" role="group" aria-label={`Sinal de ${item.codigo}`}>
                       <button

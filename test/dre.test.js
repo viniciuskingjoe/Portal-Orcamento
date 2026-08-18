@@ -1,7 +1,7 @@
 import { strict as assert } from "node:assert";
 import { test } from "node:test";
 
-import { calcularDre, mesesDoPeriodo } from "../src/dados/dre.js";
+import { TOTAL_MODULO_TOKEN, calcularDre, mesesDoPeriodo } from "../src/dados/dre.js";
 import { chavePlanejado, criarPlano } from "../src/dados/plano.js";
 import { indexarContas } from "../src/dados/contas.js";
 import { indexarRealizado } from "../src/dados/realizado.js";
@@ -135,19 +135,55 @@ test("linha com mais de uma conta ganha detalhe (drill-down), uma entrada por co
   assert.equal(doRECEITA.total.planejado + doRECEITA2.total.planejado, receita.total.planejado);
 });
 
-test("linha com zero ou uma conta não ganha detalhe — não há o que expandir", () => {
-  const umaConta = comLinhas(visaoBase(), [
+test("linha com uma conta só também ganha detalhe (1 item) — dá pra conferir sem sair da tela", () => {
+  const visao = comLinhas(visaoBase(), [
     { id: "so-uma", ordem: 1, titulo: "Receita", origem: "modulo", moduloId: "receita-vendas", valores: [{ codigo: RECEITA, sinal: 1 }], mostra: true },
   ]);
-  const semRecorte = comLinhas(visaoBase(), [
+  const linhas = calcularDre({ visao, plano: plano(), filiais: FILIAIS, meses: [1], catalogo, realizado });
+  const soUma = linha(linhas, "so-uma");
+  assert.equal(soUma.detalhe.length, 1);
+  assert.equal(soUma.detalhe[0].codigo, RECEITA);
+  assert.equal(soUma.detalhe[0].total.planejado, soUma.total.planejado);
+});
+
+test("linha sem recorte (soma o módulo inteiro) não ganha detalhe — não há lista curta pra mostrar", () => {
+  const visao = comLinhas(visaoBase(), [
     { id: "modulo-inteiro", ordem: 1, titulo: "Operacionais", origem: "modulo", moduloId: "despesas-operacionais", valores: [], sinal: -1, mostra: true },
   ]);
+  const linhas = calcularDre({ visao, plano: plano(), filiais: FILIAIS, meses: [1], catalogo, realizado });
+  assert.equal(linha(linhas, "modulo-inteiro").detalhe, null);
+});
 
-  const linhas1 = calcularDre({ visao: umaConta, plano: plano(), filiais: FILIAIS, meses: [1], catalogo, realizado });
-  const linhas2 = calcularDre({ visao: semRecorte, plano: plano(), filiais: FILIAIS, meses: [1], catalogo, realizado });
+test('"Total" dentro do recorte expande pras contas reais do módulo no centro, com o sinal daquela entrada', () => {
+  const visao = comLinhas(visaoBase(), [
+    {
+      id: "total-menos-uma",
+      ordem: 1,
+      titulo: "Tudo, menos o saldo",
+      origem: "modulo",
+      moduloId: "receita-vendas",
+      valores: [
+        { codigo: TOTAL_MODULO_TOKEN, sinal: 1 },
+        { codigo: RECEITA2, sinal: -1 },
+      ],
+      mostra: true,
+    },
+  ]);
+  const linhas = calcularDre({ visao, plano: plano(), filiais: FILIAIS, meses: [1], catalogo, realizado });
+  const total = linha(linhas, "total-menos-uma");
 
-  assert.equal(linha(linhas1, "so-uma").detalhe, null);
-  assert.equal(linha(linhas2, "modulo-inteiro").detalhe, null);
+  // Total (RECEITA 1000 + RECEITA2 300 = 1300) - RECEITA2 (300) = 1000.
+  assert.equal(total.total.planejado, 1000);
+
+  // Detalhe mostra as DUAS parcelas do "Total" (uma por conta do módulo
+  // nesse centro) MAIS a entrada explícita de RECEITA2 — sem juntar as
+  // duas aparições de RECEITA2, porque é isso que cancela ela no total.
+  assert.equal(total.detalhe.length, 3);
+  const doTotal = total.detalhe.filter((item) => item.sinal === 1);
+  const daExplicita = total.detalhe.filter((item) => item.sinal === -1);
+  assert.equal(doTotal.length, 2);
+  assert.equal(daExplicita.length, 1);
+  assert.equal(daExplicita[0].codigo, RECEITA2);
 });
 
 test("cada conta escolhida tem o próprio sinal, não um sinal só pra linha inteira", () => {
