@@ -1545,6 +1545,11 @@ td.sem-contas {
   font-weight: 700;
   letter-spacing: 0.06em;
   text-transform: uppercase;
+  /* Explícito, não herdado — o cabeçalho de 2 linhas do DRE precisa saber a
+     altura EXATA da 1ª linha pra grudar a 2ª logo abaixo dela (ver
+     `.tabela-dre thead tr:last-child th`); com line-height implícito essa
+     altura varia por navegador e os dois nunca batem certo. */
+  line-height: 15px;
 }
 
 .tabela-orcamento thead th:first-child,
@@ -1754,20 +1759,20 @@ td.sem-contas {
 }
 
 /* Cabeçalho de dois níveis: mês/Total agrupando as 4 colunas, célula única
-   embaixo dizendo qual é qual — mesmo padrão do Scoreplan. Altura fixa (não
-   medida) na 1ª linha: é o que deixa a 2ª linha saber exatamente onde
-   grudar embaixo dela ao rolar (ver `.tabela-dre thead tr:last-child th`
-   logo abaixo) — sem isto as duas linhas tentam grudar no mesmo `top: 0`
-   e uma cobre a outra na rolagem vertical. */
+   embaixo dizendo qual é qual — mesmo padrão do Scoreplan. */
 .tabela-dre thead th[scope="colgroup"] {
-  height: 35px;
   text-align: center;
   border-left: 1px solid var(--border);
 }
 
 /* A 2ª linha do cabeçalho gruda logo abaixo da 1ª, não em cima dela —
    `top: 0` (herdado de `.tabela-orcamento thead th`) faria as duas
-   disputarem o mesmo lugar. */
+   disputarem o mesmo lugar e uma cobrir a outra na rolagem vertical. 35px
+   é a altura real da 1ª linha: padding (10px + 10px) + line-height (15px),
+   os três agora explícitos em `.tabela-orcamento thead th` — sem forçar
+   `height` na 1ª linha (table cell trata `height` como mínimo, não
+   garantido, e o valor forçado descolava da altura real, abrindo um vão
+   entre as duas linhas). */
 .tabela-dre thead tr:last-child th {
   top: 35px;
 }
