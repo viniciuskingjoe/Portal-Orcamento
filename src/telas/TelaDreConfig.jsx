@@ -32,6 +32,26 @@ function gerarId() {
   return `dre-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
 }
 
+// Códigos que o módulo já usa nesta visão — união de todas as filiais. Usado
+// tanto pra recortar a árvore de contas quando a linha é "módulo" quanto
+// pra listar contas clicáveis na fórmula (V[código], qualquer módulo).
+function codigosConfiguradosDoModulo(visao, moduloId) {
+  if (!visao || !moduloId) return [];
+  const codigos = new Set();
+  filiaisDoModulo(visao, moduloId).forEach((filialId) => {
+    contasDaFilial(visao, moduloId, filialId).forEach((codigo) => codigos.add(codigo));
+  });
+  return [...codigos];
+}
+
+// Sem nenhuma conta configurada ainda pro módulo (visão nova), cai no grupo
+// contábil inteiro — melhor mostrar demais do que nada.
+function catalogoDoRecorte(catalogo, moduloDefinicao, codigosConfigurados) {
+  if (!moduloDefinicao) return catalogo;
+  if (codigosConfigurados.length) return filtrarPorCodigos(catalogo, codigosConfigurados);
+  return filtrarPorPrefixos(filtrarPorGrupo(catalogo, moduloDefinicao.grupo), moduloDefinicao.prefixos);
+}
+
 // Reordenar sem arrastar: dois botões por linha bastam para qualquer ordem
 // final, e não exigem tratar pointer/drag events — mais simples de manter e
 // funciona por teclado, o que um handle de arrasto sozinho não dá de graça.
@@ -86,25 +106,32 @@ function EditorLinhaDre({ linha, linhasExistentes, catalogo, visao, onSalvar, on
 
   const moduloEscolhido = definicaoDoModulo(moduloId);
 
-  // As contas que o módulo já tem nesta visão — união de todas as filiais —
-  // porque o grupo contábil sozinho é largo demais: "Deduções de vendas" e
-  // "Custos variáveis" dividem o mesmo grupo DV, então filtrar só por grupo
-  // misturaria as duas. Sem nenhuma conta configurada ainda (visão nova),
-  // cai no grupo contábil inteiro — melhor mostrar demais do que nada.
-  const codigosDoModulo = useMemo(() => {
-    if (!moduloEscolhido || !visao) return [];
-    const codigos = new Set();
-    filiaisDoModulo(visao, moduloEscolhido.id).forEach((filialId) => {
-      contasDaFilial(visao, moduloEscolhido.id, filialId).forEach((codigo) => codigos.add(codigo));
-    });
-    return [...codigos];
-  }, [visao, moduloEscolhido]);
+  // As contas que o módulo já tem nesta visão — porque o grupo contábil
+  // sozinho é largo demais: "Deduções de vendas" e "Custos variáveis"
+  // dividem o mesmo grupo DV, então filtrar só por grupo misturaria as duas.
+  const codigosDoModulo = useMemo(() => codigosConfiguradosDoModulo(visao, moduloEscolhido?.id), [visao, moduloEscolhido]);
+  const catalogoDoModulo = useMemo(
+    () => catalogoDoRecorte(catalogo, moduloEscolhido, codigosDoModulo),
+    [catalogo, moduloEscolhido, codigosDoModulo]
+  );
 
-  const catalogoDoModulo = useMemo(() => {
-    if (!moduloEscolhido) return catalogo;
-    if (codigosDoModulo.length) return filtrarPorCodigos(catalogo, codigosDoModulo);
-    return filtrarPorPrefixos(filtrarPorGrupo(catalogo, moduloEscolhido.grupo), moduloEscolhido.prefixos);
-  }, [catalogo, moduloEscolhido, codigosDoModulo]);
+  // Fórmula também referencia conta direto (V[código], não só L[linha]) —
+  // este é o módulo escolhido só pra listar contas clicáveis; a fórmula em
+  // si acha sozinha em qual módulo cada V[código] mora (dados/dre.js).
+  const [moduloReferenciaId, setModuloReferenciaId] = useState(MODULOS[0]?.id ?? "");
+  const moduloReferencia = definicaoDoModulo(moduloReferenciaId);
+  const codigosDaReferencia = useMemo(
+    () => codigosConfiguradosDoModulo(visao, moduloReferencia?.id),
+    [visao, moduloReferencia]
+  );
+  const catalogoDaReferencia = useMemo(
+    () => catalogoDoRecorte(catalogo, moduloReferencia, codigosDaReferencia),
+    [catalogo, moduloReferencia, codigosDaReferencia]
+  );
+  const contasParaReferenciar = useMemo(
+    () => catalogoDaReferencia.lista.filter((item) => item.sintetica === false),
+    [catalogoDaReferencia]
+  );
 
   // Escolha simples — uma conta por vez, não em árvore — porque a linha do
   // DRE não recorta por hierarquia, recorta a lista final que vai somar (ou
@@ -314,8 +341,10 @@ function EditorLinhaDre({ linha, linhasExistentes, catalogo, visao, onSalvar, on
         ) : (
           <>
             <p className="campo__ajuda">
-              Soma ou subtrai outras linhas deste demonstrativo — referencie pelo código com{" "}
-              <code>L[código]</code>, ex.: <code>L[receita]-L[deducao]</code>.
+              Soma ou subtrai outras linhas deste demonstrativo (<code>L[código]</code>) ou contas
+              direto de qualquer módulo (<code>V[código]</code>), ex.: <code>L[receita]-L[deducao]</code>.
+              Referenciar uma conta que já entra numa linha "módulo" soma ela duas vezes — confere
+              antes de salvar.
             </p>
             <label className="campo">
               <span>Fórmula</span>
@@ -323,7 +352,7 @@ function EditorLinhaDre({ linha, linhasExistentes, catalogo, visao, onSalvar, on
                 rows={3}
                 value={formula}
                 onChange={(evento) => setFormula(evento.target.value)}
-                placeholder="L[receita]-L[deducao]"
+                placeholder="Ex: L[receita]-L[deducao]"
                 aria-invalid={erroFormula ? "true" : "false"}
               />
             </label>
@@ -363,7 +392,7 @@ function EditorLinhaDre({ linha, linhasExistentes, catalogo, visao, onSalvar, on
                       className="botao-texto"
                       title={item.titulo}
                       onClick={() =>
-                        setFormula((atual) => `${atual}${atual.trim() ? "" : ""}L[${item.id}]`)
+                        setFormula((atual) => `${atual}${atual.trim() ? " " : ""}L[${item.id}]`)
                       }
                     >
                       <code>{item.id}</code> {item.titulo}
@@ -374,6 +403,38 @@ function EditorLinhaDre({ linha, linhasExistentes, catalogo, visao, onSalvar, on
             ) : (
               <p className="sem-contas">Nenhuma outra linha ainda — cria as de baixo primeiro.</p>
             )}
+
+            <div className="editor-formula__referencias">
+              <span>Contas para referenciar</span>
+              <label className="campo">
+                <span>Módulo</span>
+                <Seletor
+                  valor={moduloReferenciaId}
+                  opcoes={MODULOS.map((item) => ({ valor: item.id, rotulo: item.titulo }))}
+                  aoEscolher={setModuloReferenciaId}
+                  buscaVazia="Nenhum módulo com esse nome."
+                />
+              </label>
+              <div className="editor-formula__lista">
+                {contasParaReferenciar.length ? (
+                  contasParaReferenciar.map((item) => (
+                    <button
+                      type="button"
+                      key={item.codigo}
+                      className="botao-texto"
+                      title={item.descricao}
+                      onClick={() =>
+                        setFormula((atual) => `${atual}${atual.trim() ? " " : ""}V[${item.codigo}]`)
+                      }
+                    >
+                      <code>{item.codigo}</code> {item.descricao}
+                    </button>
+                  ))
+                ) : (
+                  <p className="sem-contas">{moduloReferencia?.titulo} não tem conta nesta visão ainda.</p>
+                )}
+              </div>
+            </div>
           </>
         )}
 

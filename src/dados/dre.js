@@ -1,5 +1,5 @@
-import { modulo as definicaoDoModulo } from "./modulos.js";
-import { SEM_CENTRO, centrosDaFilial, contasDoCentro } from "./visao.js";
+import { MODULOS, modulo as definicaoDoModulo } from "./modulos.js";
+import { centrosDaFilial, contasDaFilial, contasDoCentro, filiaisDoModulo } from "./visao.js";
 import { chavePlanejado } from "./plano.js";
 import { somarRealizado } from "./realizado.js";
 import { avaliarFormula } from "./formula.js";
@@ -168,7 +168,11 @@ function valorDaLinhaNoMes(linhaId, contexto, metrica, mes, emResolucao) {
     });
   }
 
-  // origem: "formula" — referencia outras linhas, nunca contas diretamente.
+  // origem: "formula" — soma/subtrai outras linhas (L[]) ou contas direto
+  // (V[], sem sinal próprio — o sinal vem do operador na própria expressão,
+  // igual em Despesas com pessoal). Referenciar a MESMA conta que já entra
+  // numa linha "módulo" que esta fórmula também soma é conta duas vezes —
+  // a tela não impede, é decisão de quem monta o demonstrativo.
   const chave = `${linhaId}|${mes}|${metrica}`;
   if (emResolucao.has(chave)) {
     throw new Error(`A fórmula de "${linha.titulo}" depende dela mesma (referência circular).`);
@@ -176,10 +180,51 @@ function valorDaLinhaNoMes(linhaId, contexto, metrica, mes, emResolucao) {
   const proxima = new Set(emResolucao).add(chave);
 
   return avaliarFormula(linha.formula, (codigo, prefixo) => {
-    if (prefixo !== "L") {
-      throw new Error(`Fórmula de linha do DRE só referencia outras linhas — "${prefixo}[${codigo}]" não vale aqui.`);
+    if (prefixo === "L") {
+      return valorDaLinhaNoMes(codigo, contexto, metrica, mes, proxima);
     }
-    return valorDaLinhaNoMes(codigo, contexto, metrica, mes, proxima);
+    if (prefixo === "V") {
+      return valorDaContaNoMes(codigo, contexto, metrica, mes);
+    }
+    throw new Error(`Fórmula de linha do DRE só referencia linhas (L[]) ou contas (V[]) — "${prefixo}[${codigo}]" não vale aqui.`);
+  });
+}
+
+// Em que módulo esta conta está configurada nesta visão — procura nos oito
+// módulos fixos porque a fórmula de uma linha não escolhe módulo (só a
+// linha "origem: modulo" escolhe). Uma conta normalmente mora em um só
+// módulo; sem achar em nenhum (conta não configurada, ou removida depois
+// que a fórmula foi escrita), vale 0 em vez de quebrar o demonstrativo.
+function moduloDaConta(visao, codigo) {
+  for (const modulo of MODULOS) {
+    const usaEmAlgumaFilial = filiaisDoModulo(visao, modulo.id).some((filialId) =>
+      contasDaFilial(visao, modulo.id, filialId).includes(codigo)
+    );
+    if (usaEmAlgumaFilial) return modulo.id;
+  }
+  return null;
+}
+
+function valorDaContaNoMes(codigo, contexto, metrica, mes) {
+  const moduloId = moduloDaConta(contexto.visao, codigo);
+  if (!moduloId) return 0;
+
+  if (metrica === "planejado") {
+    return planejadoDoCodigo(moduloId, codigo, 1, contexto.plano, contexto.visao, contexto.filiais, contexto.centrosPermitidos, mes);
+  }
+  const indice = metrica === "realizado" ? contexto.realizado : contexto.realizadoAnterior;
+  return realizadoDoCodigo({
+    moduloId,
+    codigo,
+    sinal: 1,
+    visao: contexto.visao,
+    filiais: contexto.filiais,
+    centrosPermitidos: contexto.centrosPermitidos,
+    catalogo: contexto.catalogo,
+    sinais: contexto.sinais,
+    visaoContabil: contexto.visaoContabil,
+    indice,
+    mes,
   });
 }
 

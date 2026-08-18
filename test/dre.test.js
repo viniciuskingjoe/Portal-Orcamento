@@ -205,9 +205,35 @@ test("linha fórmula soma/subtrai outras linhas por L[id]", () => {
   assert.equal(linha(linhas, "rol").total.planejado, 900);
 });
 
-test("fórmula de linha não aceita V[conta] — só L[linha]", () => {
+test("fórmula de linha aceita V[conta] direto, além de L[linha] — acha o módulo sozinha", () => {
   const visao = comLinhas(visaoBase(), [
-    { id: "estranha", ordem: 1, titulo: "Estranha", origem: "formula", formula: `V[${RECEITA}]`, mostra: true },
+    { id: "direto", ordem: 1, titulo: "Receita direto da conta", origem: "formula", formula: `V[${RECEITA}]`, mostra: true },
+  ]);
+  const linhas = calcularDre({ visao, plano: plano(), filiais: FILIAIS, meses: [1], catalogo, realizado });
+  assert.equal(linha(linhas, "direto").total.planejado, 1000);
+});
+
+test("fórmula de linha mistura V[conta] e L[linha] na mesma expressão", () => {
+  const visao = comLinhas(visaoBase(), [
+    { id: "deducao", ordem: 1, titulo: "Dedução", origem: "modulo", moduloId: "deducoes-vendas", valores: [{ codigo: DEDUCAO, sinal: -1 }], mostra: true },
+    { id: "misto", ordem: 2, titulo: "Receita direto + linha", origem: "formula", formula: `V[${RECEITA}]+L[deducao]`, mostra: true },
+  ]);
+  const linhas = calcularDre({ visao, plano: plano(), filiais: FILIAIS, meses: [1], catalogo, realizado });
+  // 1000 (V[RECEITA], direto) + (-100) (L[deducao], já com o sinal da linha) = 900.
+  assert.equal(linha(linhas, "misto").total.planejado, 900);
+});
+
+test("V[conta] de conta que não está configurada em nenhum módulo vale 0, não quebra", () => {
+  const visao = comLinhas(visaoBase(), [
+    { id: "orfa", ordem: 1, titulo: "Órfã", origem: "formula", formula: "V[9.9.9.99.999]", mostra: true },
+  ]);
+  const linhas = calcularDre({ visao, plano: plano(), filiais: FILIAIS, meses: [1], catalogo, realizado });
+  assert.equal(linha(linhas, "orfa").total.planejado, 0);
+});
+
+test("fórmula de linha rejeita prefixo que não é L nem V", () => {
+  const visao = comLinhas(visaoBase(), [
+    { id: "estranha", ordem: 1, titulo: "Estranha", origem: "formula", formula: `X[${RECEITA}]`, mostra: true },
   ]);
   const linhas = calcularDre({ visao, plano: plano(), filiais: FILIAIS, meses: [1], catalogo, realizado });
   // Fórmula quebrada não derruba o demonstrativo — vira 0.
