@@ -15,13 +15,18 @@ import {
   definirContasDoCentro,
   definirContasDoCentroExclusivo,
   definirFormulaDaConta,
+  definirLinhaDre,
   definirUsoDoCentro,
+  dreLinha,
+  dreLinhasOrdenadas,
   centroEmUso,
   filiaisDoModulo,
   formulaDaConta,
   formulasDoModulo,
   moduloConfigurado,
   modulosDaVisao,
+  removerLinhaDre,
+  reordenarDreLinhas,
   resumoDaVisao,
   usaCentroDeCusto,
 } from "../src/dados/visao.js";
@@ -254,4 +259,72 @@ test("fórmula é por módulo: a mesma conta pode ser fixa num módulo e calcula
 
 test("formulasDoModulo nunca devolve undefined, mesmo sem nada definido", () => {
   assert.deepEqual(formulasDoModulo(nova(), MODULO_PESSOAL), {});
+});
+
+// ---------------------------------------------------------------------------
+// Linhas do DRE
+// ---------------------------------------------------------------------------
+
+const LINHA_RECEITA = {
+  id: "receita",
+  ordem: 0,
+  titulo: "Receita",
+  origem: "modulo",
+  moduloId: MODULO,
+  sinal: 1,
+  contas: ["3.1.1.01.001"],
+  formula: null,
+  mostra: true,
+  destaca: false,
+  baseAnaliseVertical: false,
+  linhaPrincipal: false,
+};
+
+test("visão nova não tem linha de DRE nenhuma", () => {
+  assert.deepEqual(dreLinhasOrdenadas(nova()), []);
+  assert.equal(dreLinha(nova(), "receita"), null);
+});
+
+test("definirLinhaDre adiciona uma linha nova", () => {
+  const visao = definirLinhaDre(nova(), LINHA_RECEITA);
+  assert.deepEqual(dreLinha(visao, "receita"), LINHA_RECEITA);
+  assert.equal(dreLinhasOrdenadas(visao).length, 1);
+});
+
+test("definirLinhaDre com o mesmo id substitui a linha inteira", () => {
+  let visao = definirLinhaDre(nova(), LINHA_RECEITA);
+  visao = definirLinhaDre(visao, { ...LINHA_RECEITA, titulo: "Receita bruta", destaca: true });
+  assert.equal(dreLinhasOrdenadas(visao).length, 1);
+  assert.equal(dreLinha(visao, "receita").titulo, "Receita bruta");
+  assert.equal(dreLinha(visao, "receita").destaca, true);
+});
+
+test("dreLinhasOrdenadas respeita o campo ordem, não a ordem de inserção", () => {
+  let visao = definirLinhaDre(nova(), { ...LINHA_RECEITA, id: "b", ordem: 1 });
+  visao = definirLinhaDre(visao, { ...LINHA_RECEITA, id: "a", ordem: 0 });
+  assert.deepEqual(dreLinhasOrdenadas(visao).map((l) => l.id), ["a", "b"]);
+});
+
+test("removerLinhaDre tira só a linha pedida", () => {
+  let visao = definirLinhaDre(nova(), { ...LINHA_RECEITA, id: "a" });
+  visao = definirLinhaDre(visao, { ...LINHA_RECEITA, id: "b" });
+  visao = removerLinhaDre(visao, "a");
+  assert.deepEqual(dreLinhasOrdenadas(visao).map((l) => l.id), ["b"]);
+});
+
+test("reordenarDreLinhas reescreve ordem a partir da posição no array de ids", () => {
+  let visao = definirLinhaDre(nova(), { ...LINHA_RECEITA, id: "a", ordem: 0 });
+  visao = definirLinhaDre(visao, { ...LINHA_RECEITA, id: "b", ordem: 1 });
+  visao = definirLinhaDre(visao, { ...LINHA_RECEITA, id: "c", ordem: 2 });
+
+  visao = reordenarDreLinhas(visao, ["c", "a", "b"]);
+  const linhas = dreLinhasOrdenadas(visao);
+  assert.deepEqual(linhas.map((l) => l.id), ["c", "a", "b"]);
+  assert.deepEqual(linhas.map((l) => l.ordem), [0, 1, 2]);
+});
+
+test("reordenarDreLinhas ignora id que não existe mais", () => {
+  let visao = definirLinhaDre(nova(), { ...LINHA_RECEITA, id: "a", ordem: 0 });
+  visao = reordenarDreLinhas(visao, ["a", "fantasma"]);
+  assert.deepEqual(dreLinhasOrdenadas(visao).map((l) => l.id), ["a"]);
 });

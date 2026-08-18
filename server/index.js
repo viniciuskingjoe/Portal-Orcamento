@@ -34,12 +34,15 @@ import {
   listarGrupos,
   salvarGrupo,
   excluirGrupo,
+  excluirLinhaDre,
   excluirPlano,
   excluirVisao,
   importar,
   gravarFuncionarios,
   gravarPlanejado,
+  reordenarLinhasDre,
   salvarConfiguracao,
+  salvarLinhaDre,
   salvarPlano,
   salvarVisao,
 } from "./repositorio.js";
@@ -302,6 +305,37 @@ app.put(
         req.sessao.login
       );
     }
+    res.json({ ok: true });
+  })
+);
+
+// Linhas do DRE — cada uma soma um recorte de contas de um módulo, ou é
+// fórmula referenciando outras linhas. Mesmo admin-only de módulos/contas:
+// é configuração da visão, não lançamento.
+app.put(
+  "/api/visoes/:id/dre/linhas/:linhaId",
+  exigirAdmin,
+  rota(async (req, res) => {
+    await salvarLinhaDre(req.params.id, { id: req.params.linhaId, ...req.body }, req.sessao.login);
+    res.json({ ok: true });
+  })
+);
+
+app.delete(
+  "/api/visoes/:id/dre/linhas/:linhaId",
+  exigirAdmin,
+  rota(async (req, res) => {
+    await excluirLinhaDre(req.params.id, req.params.linhaId);
+    res.json({ ok: true });
+  })
+);
+
+app.put(
+  "/api/visoes/:id/dre/ordem",
+  exigirAdmin,
+  rota(async (req, res) => {
+    const ordem = Array.isArray(req.body?.ordem) ? req.body.ordem : [];
+    await reordenarLinhasDre(req.params.id, ordem);
     res.json({ ok: true });
   })
 );

@@ -15,6 +15,8 @@ import TelaGrupo from "./telas/TelaGrupo.jsx";
 import TelaVisoes from "./telas/TelaVisoes.jsx";
 import TelaVisao from "./telas/TelaVisao.jsx";
 import TelaVisaoModulo from "./telas/TelaVisaoModulo.jsx";
+import TelaDreConfig from "./telas/TelaDreConfig.jsx";
+import TelaDre from "./telas/TelaDre.jsx";
 import TelaOrcamento, { TODAS_AS_CONTAS } from "./telas/TelaOrcamento.jsx";
 import TelaLogin from "./telas/TelaLogin.jsx";
 import TelaTrocarSenha from "./telas/TelaTrocarSenha.jsx";
@@ -42,7 +44,10 @@ import {
   criarVisao,
   definirContasDoCentroExclusivo,
   definirFormulaDaConta,
+  definirLinhaDre,
   definirSinalDaConta,
+  removerLinhaDre,
+  reordenarDreLinhas,
   sinaisDoModulo,
   definirUsoDoCentro,
   usaCentroDeCusto,
@@ -242,6 +247,9 @@ function PlanejamentoOrcamentario({ sessao, onSair }) {
   // Módulos que o escopo deixa ver — vale para a barra lateral, os cartões da
   // visão geral e a configuração da visão.
   const modulosVisiveis = useMemo(() => modulosPermitidos(sessao, MODULOS), [sessao]);
+  // O DRE só faz sentido inteiro: com um módulo de fora, os subtotais deixam
+  // de ser o resultado da empresa.
+  const podeVerDre = modulosVisiveis.length === MODULOS.length;
 
   // Cadastros do ERP recortados: mostrar filial ou centro que a pessoa não pode
   // ver já é vazamento — o nome deles diz o tamanho da operação.
@@ -264,8 +272,8 @@ function PlanejamentoOrcamentario({ sessao, onSair }) {
   // orçando um plano. O grupo não entra aqui — ele só junta centros de custo, e
   // quais contas aparecem é decisão da visão do plano em que o DRE for lido.
   const visaoContabil =
-    (tela === "visao" || tela === "visao-modulo" ? visaoAberta : visaoDoPlano)?.visaoContabil ??
-    null;
+    (tela === "visao" || tela === "visao-modulo" || tela === "visao-dre" ? visaoAberta : visaoDoPlano)
+      ?.visaoContabil ?? null;
 
   const contas = useContas(visaoContabil);
   const realizado = useRealizado(planoAtivo?.ano ?? null, visaoDoPlano?.visaoContabil ?? null);
@@ -540,6 +548,8 @@ function PlanejamentoOrcamentario({ sessao, onSair }) {
 
   function voltar() {
     if (tela === "visao-modulo") return navegar("visao");
+    if (tela === "visao-dre") return navegar("visao");
+    if (tela === "dre") return navegar("home");
     if (tela === "visao") return navegar("visoes");
     if (tela === "grupo") return sairDoGrupo();
     if (tela === "grupos") return navegar("configuracoes");
@@ -1079,6 +1089,10 @@ function PlanejamentoOrcamentario({ sessao, onSair }) {
             setTela("visao-modulo");
             irParaTopo();
           }}
+          onAbrirDre={() => {
+            setTela("visao-dre");
+            irParaTopo();
+          }}
           onRenomear={() => abrirModalVisao(visaoAberta)}
           onAplicarMapeamento={
             temMapeamentoPadrao(visaoAberta.visaoContabil) && !contas.carregando
@@ -1136,6 +1150,36 @@ function PlanejamentoOrcamentario({ sessao, onSair }) {
           onDefinirFormula={(moduloId, codigo, expressao) => {
             atualizarVisaoAberta((visao) => definirFormulaDaConta(visao, moduloId, codigo, expressao));
             gravar(repo.visao.formula(visaoAberta.id, moduloId, codigo, expressao));
+          }}
+          onVoltar={voltar}
+        />
+      );
+    }
+
+    if (tela === "visao-dre" && visaoAberta) {
+      return (
+        <TelaDreConfig
+          visao={visaoAberta}
+          catalogo={contas.catalogo}
+          carregando={contas.carregando}
+          erro={contas.erro}
+          onRecarregar={contas.recarregar}
+          onDefinirLinha={(linha) => {
+            atualizarVisaoAberta((visao) => definirLinhaDre(visao, linha));
+            gravar(repo.visao.dre.salvarLinha(visaoAberta.id, linha));
+          }}
+          onRemoverLinha={(linhaId) => {
+            atualizarVisaoAberta((visao) => removerLinhaDre(visao, linhaId));
+            gravar(repo.visao.dre.excluirLinha(visaoAberta.id, linhaId));
+          }}
+          onReordenar={(ordemDeIds) => {
+            atualizarVisaoAberta((visao) => reordenarDreLinhas(visao, ordemDeIds));
+            gravar(
+              repo.visao.dre.reordenar(
+                visaoAberta.id,
+                ordemDeIds.map((id, indice) => ({ id, ordem: indice }))
+              )
+            );
           }}
           onVoltar={voltar}
         />
@@ -1276,12 +1320,30 @@ function PlanejamentoOrcamentario({ sessao, onSair }) {
       );
     }
 
+    if (tela === "dre") {
+      return exigirErp(
+        <TelaDre
+          plano={planoAtivo}
+          visao={visaoDoPlano}
+          filiais={filiaisAtivas}
+          grupos={grupos}
+          catalogo={contas.catalogo}
+          realizado={realizado}
+          carregandoContas={contas.carregando}
+          onAbrirModulo={abrirModulo}
+          onVoltar={voltar}
+        />
+      );
+    }
+
     return (
       <TelaHome
         plano={planoAtivo}
         visao={visaoDoPlano}
         modulosVisiveis={modulosVisiveis}
+        podeVerDre={podeVerDre}
         onAbrirModulo={abrirModulo}
+        onAbrirDre={() => navegar("dre")}
         onVoltar={voltar}
       />
     );
@@ -1303,6 +1365,7 @@ function PlanejamentoOrcamentario({ sessao, onSair }) {
         onNavegar={navegar}
         tema={tema}
         onAlternarTema={() => setTema((atual) => (atual === "dark" ? "light" : "dark"))}
+        podeVerDre={podeVerDre}
       />
 
       <div className="area-conteudo">

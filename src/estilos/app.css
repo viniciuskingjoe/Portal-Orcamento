@@ -465,6 +465,47 @@ button {
   color: var(--danger);
 }
 
+.botao-icone:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.botao-icone:disabled:hover {
+  background: transparent;
+  border-color: transparent;
+  color: var(--muted);
+}
+
+/* Reordenar sem arrastar: dois botões pequenos por linha (cima/baixo) em vez
+   de um handle de arrasto — mais simples, e funciona por teclado. */
+.dre-linha__mover {
+  display: inline-flex;
+  gap: 2px;
+}
+
+.dre-linha__mover .botao-icone {
+  width: 26px;
+  height: 26px;
+}
+
+.dre-linha__mover .botao-icone:first-child svg {
+  transform: rotate(90deg);
+}
+
+.botao-icone--baixo svg {
+  transform: rotate(-90deg);
+}
+
+.dre-linha__acoes {
+  display: inline-flex;
+  gap: 4px;
+}
+
+.dre-linha__acoes .botao-icone {
+  width: 30px;
+  height: 30px;
+}
+
 /* ==========================================================================
    Planos
    ========================================================================== */
@@ -1060,6 +1101,13 @@ button {
   font-size: 12.5px;
 }
 
+/* Linha vazia de uma tabela (colSpan inteiro) centra — é um aviso sozinho na
+   largura toda, não o começo de uma lista como nos outros usos da classe. */
+td.sem-contas {
+  text-align: center;
+  padding: 28px 18px;
+}
+
 /* --- contas que compõem o módulo, no orçamento -------------------------- */
 
 .contas-do-modulo {
@@ -1169,6 +1217,46 @@ button {
   flex: 1 1 340px;
   align-self: flex-end;
   min-height: 40px;
+}
+
+/* Mês não é lista longa nem texto livre: cabe no espaço de um dado fixo, não
+   na largura mínima dos demais filtros. */
+.filtros-orcamento label.filtro-periodo {
+  min-width: 0;
+}
+
+.filtros-orcamento label.filtro-periodo select {
+  width: 110px;
+}
+
+/* Um bloco por filial quando há comparação — lado a lado, cada um com sua
+   própria rolagem horizontal, sem que um vá espremer o outro. */
+.blocos-dre {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 24px;
+  align-items: flex-start;
+}
+
+.bloco-dre {
+  flex: 1 1 520px;
+  min-width: 0;
+}
+
+/* A tabela do DRE é alta (uma linha por conta do demonstrativo) e larga (um
+   bloco de 4 colunas por mês) ao mesmo tempo — sem limitar a altura, a barra
+   de rolagem horizontal nasce no fim da tabela, bem abaixo da tela, e fica
+   inalcançável sem rolar a página inteira primeiro. Travando a altura aqui a
+   barra fica sempre à vista, e o cabeçalho (já sticky) continua fixo ao
+   rolar as linhas verticalmente dentro da caixa. */
+.bloco-dre .tabela-wrap {
+  max-height: calc(100vh - 320px);
+  overflow-y: auto;
+}
+
+.bloco-dre__titulo {
+  margin: 0 0 10px;
+  font-size: 14px;
 }
 
 .filtros-orcamento span {
@@ -1595,6 +1683,70 @@ button {
   min-width: 240px;
 }
 
+/* Larguras fixas pro `<colgroup>` — sem elas `table-layout: fixed` divide o
+   espaço igual entre colunas, e os offsets `left` das células sticky do
+   Total (calculados em TelaDre.jsx a partir destes mesmos números) deixam de
+   bater com a posição real. */
+.tabela-dre--leitura {
+  table-layout: fixed;
+  width: auto;
+}
+
+.tabela-dre__col-descricao {
+  width: 240px;
+}
+
+.tabela-dre__col-moeda {
+  width: 150px;
+}
+
+.tabela-dre__col-pct {
+  width: 90px;
+}
+
+/* Mês a mês some pra direita rápido — a Descrição some junto, e a linha vira
+   ilegível sem saber de qual conta é o número. Sticky à esquerda resolve;
+   precisa de fundo opaco senão o texto de trás transparece ao rolar. */
+.tabela-dre .tabela-dre__descricao {
+  position: sticky;
+  left: 0;
+  z-index: 2;
+  background: var(--surface);
+}
+
+.tabela-dre thead .tabela-dre__descricao {
+  z-index: 4;
+  background: var(--surface-soft);
+}
+
+.tabela-dre .linha-dre--destaque .tabela-dre__descricao {
+  background: var(--surface-accent);
+}
+
+/* Cabeçalho de dois níveis: mês/Total agrupando as 4 colunas, célula única
+   embaixo dizendo qual é qual — mesmo padrão do Scoreplan. */
+.tabela-dre thead th[scope="colgroup"] {
+  text-align: center;
+  border-left: 1px solid var(--border);
+}
+
+/* O bloco Total (4 colunas: Planejado/% AV/Realizado/% AV) fica fixo junto
+   com a Descrição ao rolar pelos meses — senão comparar um mês contra o
+   Total exige voltar pro início da tabela toda vez. `left` de cada célula
+   vem de `OFFSETS_TOTAL` em TelaDre.jsx, alinhado com as larguras acima. */
+.tabela-dre__fixo {
+  z-index: 1;
+  background: var(--surface-soft);
+}
+
+.tabela-dre thead .tabela-dre__fixo {
+  z-index: 3;
+}
+
+.tabela-dre .linha-dre--destaque .tabela-dre__fixo {
+  background: var(--surface-accent);
+}
+
 /* O subtotal fecha um bloco: a linha acima dele é a última parcela, e a régua
    marca onde a conta virou resultado. */
 .tabela-dre .linha-dre--subtotal th,
@@ -1791,6 +1943,30 @@ dialog::backdrop {
   font-size: 12px;
 }
 
+/* Mesma cor cinza do código — o nome da conta não é o foco da tela (a
+   fórmula é), então não compete pela cor de destaque do texto normal. Peso
+   maior é o destaque, não a cor. */
+.editor-formula__conta span {
+  color: var(--muted);
+  font-weight: 700;
+}
+
+/* Tradução ao vivo de V[código] pra V[descrição] — só aparece com uma
+   fórmula real digitada, pra confirmar que a conta certa foi referenciada. */
+.editor-formula__descricao {
+  margin: -4px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+  font-style: italic;
+}
+
+.editor-formula__funcionarios {
+  display: inline-flex;
+  align-items: center;
+  align-self: flex-start;
+  gap: 6px;
+}
+
 .editor-formula__referencias {
   display: flex;
   flex-direction: column;
@@ -1888,6 +2064,63 @@ dialog::backdrop {
 /* Na tela do módulo a lista é o conteúdo principal, não um campo do modal. */
 .contas-seletor__lista--alta {
   max-height: min(60vh, 620px);
+}
+
+/* Linha do DRE: escolher UMA conta por vez (não em árvore, cada uma com seu
+   próprio sinal), diferente do recorte em cascata das telas de módulo. */
+.valores-linha__adicionar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--border);
+}
+
+.valores-linha__adicionar .seletor {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.valores-linha__lista {
+  max-height: 260px;
+  overflow-y: auto;
+}
+
+.valores-linha__item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 14px;
+  border-bottom: 1px solid var(--border);
+}
+
+.valores-linha__item:last-child {
+  border-bottom: 0;
+}
+
+.valores-linha__conta {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: 13px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.valores-linha__conta code {
+  margin-right: 6px;
+  color: var(--muted);
+  font-size: 11.5px;
+}
+
+.valores-linha__item .abas {
+  padding: 2px;
+}
+
+.valores-linha__item .abas button {
+  min-height: 26px;
+  min-width: 32px;
+  padding: 0 10px;
 }
 
 .conta-checkbox {

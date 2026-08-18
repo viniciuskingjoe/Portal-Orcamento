@@ -69,6 +69,7 @@ test("normalizar preserva visão, filiais ativas e planejado", () => {
             filiais: { "000025": { contas: ["3.1.1.01.001"], centros: {} } },
           },
         },
+        dreLinhas: [],
       },
     ],
     planos: [
@@ -136,6 +137,120 @@ test("funcionários e fórmula sobrevivem à normalização — não é o campo 
   assert.deepEqual(normalizado.visoes[0].modulos["despesas-pessoal"].formulas, {
     "4.2.1.10.001": { expressao: "(V[4.2.1.10.002] + V[4.2.1.10.003]) / 12" },
   });
+});
+
+// Mesma classe de bug do teste acima, agora para o modelo de DRE — escrito
+// antes de `dreLinhas` existir de verdade na tela, pra não repetir o mesmo
+// ciclo (gravar certo, sumir na próxima recarga).
+test("linhas do DRE sobrevivem à normalização", () => {
+  const estado = {
+    configuracao: { filiaisAtivas: null },
+    visoes: [
+      {
+        id: "v1",
+        nome: "DRE 2026",
+        visaoContabil: "25",
+        modulos: {},
+        dreLinhas: [
+          {
+            id: "receita",
+            ordem: 0,
+            titulo: "Receita",
+            origem: "modulo",
+            moduloId: "receita-vendas",
+            sinal: 1,
+            valores: [{ codigo: "3.1.1.01.001", sinal: 1 }],
+            formula: null,
+            mostra: true,
+            destaca: false,
+            baseAnaliseVertical: true,
+            linhaPrincipal: false,
+            unidade: "moeda",
+          },
+          {
+            id: "resultado",
+            ordem: 1,
+            titulo: "Resultado",
+            origem: "formula",
+            moduloId: null,
+            sinal: null,
+            valores: [],
+            formula: "L[receita]",
+            mostra: true,
+            destaca: true,
+            baseAnaliseVertical: false,
+            linhaPrincipal: true,
+            unidade: "moeda",
+          },
+        ],
+      },
+    ],
+    planos: [],
+  };
+
+  const normalizado = normalizarEstado(estado);
+  assert.deepEqual(normalizado.visoes[0].dreLinhas, estado.visoes[0].dreLinhas);
+});
+
+test("valores da linha de DRE: item sem código cai fora, sinal fora de 1/-1 vira 1", () => {
+  const estado = {
+    configuracao: { filiaisAtivas: null },
+    visoes: [
+      {
+        id: "v1",
+        nome: "X",
+        visaoContabil: "25",
+        modulos: {},
+        dreLinhas: [
+          {
+            id: "linha",
+            titulo: "Linha",
+            origem: "modulo",
+            moduloId: "receita-vendas",
+            valores: [{ codigo: "3.1.1.01.001", sinal: -1 }, { codigo: "3.1.1.01.002" }, { sinal: 1 }],
+          },
+        ],
+      },
+    ],
+    planos: [],
+  };
+  const [linha] = normalizarEstado(estado).visoes[0].dreLinhas;
+  assert.deepEqual(linha.valores, [
+    { codigo: "3.1.1.01.001", sinal: -1 },
+    { codigo: "3.1.1.01.002", sinal: 1 },
+  ]);
+});
+
+test("visão sem dreLinhas nasce com lista vazia, não undefined", () => {
+  const estado = {
+    configuracao: { filiaisAtivas: null },
+    visoes: [{ id: "v1", nome: "X", visaoContabil: "25", modulos: {} }],
+    planos: [],
+  };
+  assert.deepEqual(normalizarEstado(estado).visoes[0].dreLinhas, []);
+});
+
+test("linha de DRE com origem inválida é descartada, não propaga lixo", () => {
+  const estado = {
+    configuracao: { filiaisAtivas: null },
+    visoes: [
+      {
+        id: "v1",
+        nome: "X",
+        visaoContabil: "25",
+        modulos: {},
+        dreLinhas: [
+          { id: "boa", titulo: "Boa", origem: "formula", formula: "1+1" },
+          { id: "ruim", titulo: "Ruim", origem: "algo-estranho" },
+          { semId: true },
+        ],
+      },
+    ],
+    planos: [],
+  };
+  const linhas = normalizarEstado(estado).visoes[0].dreLinhas;
+  assert.equal(linhas.length, 1);
+  assert.equal(linhas[0].id, "boa");
 });
 
 test("plano sem funcionários/situação/publicação nasce com o default certo, não undefined", () => {

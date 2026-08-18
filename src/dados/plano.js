@@ -81,6 +81,12 @@ export function chaveFuncionario(filialId, centroId, mes) {
   return `${filialId}|${centroId ?? SEM_CENTRO}|${mes}`;
 }
 
+// Código reservado — dentro de uma fórmula de conta calculada, `V[funcionarios]`
+// não busca uma conta: resolve para o Nº de funcionários do centro no mês, do
+// jeito que `V[código]` resolve para outra conta. Não colide com código real —
+// nenhuma classificação do plano de contas é a palavra "funcionarios" sozinha.
+export const FUNCIONARIOS_TOKEN = "funcionarios";
+
 export function criarPlano(id, nome, ano, visaoId) {
   return { id, nome, ano, visaoId, planejado: {}, funcionarios: {} };
 }
@@ -116,6 +122,10 @@ function centrosParaLeitura(visao, moduloId, filialId, centroId) {
 // contas calculadas podem se referenciar em cadeia sem problema, o que não
 // pode é uma cadeia voltar a uma chave que já estava sendo resolvida.
 function valorDaConta(plano, visao, moduloId, filialId, centroId, conta, mes, emResolucao) {
+  if (conta === FUNCIONARIOS_TOKEN) {
+    return plano.funcionarios?.[chaveFuncionario(filialId, centroId, mes)] ?? 0;
+  }
+
   const bruto = plano.planejado[chavePlanejado(moduloId, filialId, centroId, conta, mes)] ?? 0;
   const formula = formulaDaConta(visao, moduloId, conta);
   if (!formula) return bruto;

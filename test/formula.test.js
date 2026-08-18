@@ -87,3 +87,46 @@ test("erro de referência circular do resolvedor atravessa a avaliação", () =>
   }
   assert.throws(() => resolver("a"), /circular/i);
 });
+
+// ---------------------------------------------------------------------------
+// L[linha] — mesma gramática, usada pelo DRE para referenciar outras linhas
+// do demonstrativo em vez de contas do plano de contas.
+// ---------------------------------------------------------------------------
+
+test("L[] funciona igual V[], só que é outro prefixo", () => {
+  const valor = avaliarFormula("L[311] - L[312]", (codigo) =>
+    resolverDe({ 311: 1000, 312: 100 })(codigo)
+  );
+  assert.equal(valor, 900);
+});
+
+test("o resolvedor recebe o prefixo como segundo argumento", () => {
+  const vistos = [];
+  avaliarFormula("V[a] + L[b]", (codigo, prefixo) => {
+    vistos.push(`${prefixo}[${codigo}]`);
+    return 1;
+  });
+  assert.deepEqual(vistos, ["V[a]", "L[b]"]);
+});
+
+test("resolvedor que ignora o prefixo (assinatura antiga) continua funcionando", () => {
+  // Despesas com pessoal só passa `(codigo) => ...` — sem o segundo
+  // argumento. JS não reclama de argumento a mais não declarado.
+  const resolverAntigo = (codigo) => resolverDe({ "4.2.1.10.001": 500 })(codigo);
+  assert.equal(avaliarFormula("V[4.2.1.10.001] / 2", resolverAntigo), 250);
+});
+
+test("V[] e L[] misturados na mesma expressão", () => {
+  const valor = avaliarFormula("V[conta1] + L[linha1]", (codigo, prefixo) =>
+    prefixo === "V" ? 100 : 50
+  );
+  assert.equal(valor, 150);
+});
+
+test("prefixo desconhecido (ex.: X[algo]) é rejeitado como caractere inesperado", () => {
+  assert.throws(() => analisarFormula("X[1]"), /inesperado/i);
+});
+
+test("colchete vazio reclama do prefixo certo (L[], não sempre V[])", () => {
+  assert.throws(() => analisarFormula("L[]"), /L\[\]/);
+});

@@ -1,8 +1,10 @@
 import { useState } from "react";
 
 import Botao from "./Botao.jsx";
+import Icone from "./Icone.jsx";
 import Modal from "./Modal.jsx";
 import { validarFormula } from "../dados/formula.js";
+import { FUNCIONARIOS_TOKEN } from "../dados/plano.js";
 
 // ============================================================================
 // EDITOR DE FÓRMULA (Despesas com pessoal)
@@ -24,6 +26,18 @@ export default function EditorFormula({ conta, descricao, contasDisponiveis, for
 
   const erro = tipo === "calculado" ? validarFormula(expressao) : null;
   const referencias = (contasDisponiveis ?? []).filter((item) => item.codigo !== conta);
+
+  // Traduz V[código] pro nome da conta, pra quem está lendo confirmar que
+  // referenciou a certa — só da fórmula REAL digitada, não do placeholder de
+  // exemplo (que nem chega a ser uma fórmula válida).
+  function comDescricoes(bruta) {
+    return bruta.replace(/V\[([^\]]*)\]/g, (encontrado, codigo) => {
+      if (codigo === FUNCIONARIOS_TOKEN) return "V[Nº de funcionários]";
+      const item = (contasDisponiveis ?? []).find((c) => c.codigo === codigo);
+      return `V[${item?.descricao ?? codigo}]`;
+    });
+  }
+  const descricaoDaFormula = expressao.trim() ? comDescricoes(expressao) : "";
 
   async function salvar() {
     if (tipo === "calculado" && erro) return;
@@ -64,16 +78,11 @@ export default function EditorFormula({ conta, descricao, contasDisponiveis, for
         </div>
 
         {tipo === "fixo" ? (
-          <p className="campo__ajuda">
-            Digita normal, na coluna Planejado — igual qualquer outra conta. É o padrão para quem
-            começa.
-          </p>
+          <p className="campo__ajuda">Digita o valor na coluna Planejado.</p>
         ) : (
           <>
             <p className="campo__ajuda">
-              O valor sai desta expressão em vez de ser digitado — já considerando todo mundo do
-              centro, igual seria se você digitasse direto. Referencie outra conta do mesmo centro
-              com <code>V[código]</code>.
+              Valor do Planejado sai desta expressão em vez de ser digitado.
             </p>
 
             <label className="campo">
@@ -82,12 +91,26 @@ export default function EditorFormula({ conta, descricao, contasDisponiveis, for
                 rows={3}
                 value={expressao}
                 onChange={(evento) => setExpressao(evento.target.value)}
-                placeholder={`(V[${referencias[0]?.codigo ?? "código"}] + V[${referencias[1]?.codigo ?? "código"}]) / 12`}
+                placeholder={`Ex: (V[${referencias[0]?.codigo ?? "código"}] + V[${referencias[1]?.codigo ?? "código"}]) / 12`}
                 aria-invalid={erro ? "true" : "false"}
               />
             </label>
 
             {erro ? <p className="erro-campo">{erro}</p> : null}
+            {!erro && descricaoDaFormula ? (
+              <p className="editor-formula__descricao">{descricaoDaFormula}</p>
+            ) : null}
+
+            <button
+              type="button"
+              className="botao-texto editor-formula__funcionarios"
+              onClick={() =>
+                setExpressao((atual) => `${atual}${atual.trim() ? " " : ""}V[${FUNCIONARIOS_TOKEN}]`)
+              }
+            >
+              <Icone nome="users" tamanho={14} />
+              Nº de funcionários
+            </button>
 
             {referencias.length ? (
               <div className="editor-formula__referencias">

@@ -55,6 +55,9 @@ async function temTabela(nome) {
 
 const temFuncionarios = () => temTabela("dbo.KING_PORTAL_ORC_FUNCIONARIO");
 const temFormulas = () => temTabela("dbo.KING_PORTAL_ORC_VISAO_FORMULA");
+const temDre = () => temTabela("dbo.KING_PORTAL_ORC_VISAO_DRE_LINHA");
+const temUnidadeDre = () => temColuna("dbo.KING_PORTAL_ORC_VISAO_DRE_LINHA", "UNIDADE");
+const temSinalContaDre = () => temColuna("dbo.KING_PORTAL_ORC_VISAO_DRE_LINHA_CONTA", "SINAL");
 
 // --------------------------------------------------------------------------
 // Leitura
@@ -74,6 +77,23 @@ export async function carregarEstado() {
            FROM dbo.KING_PORTAL_ORC_VISAO_FORMULA`
       )
     : [];
+
+  const [dreLinhas, dreLinhaContas] = (await temDre())
+    ? await Promise.all([
+        query(
+          `SELECT VISAO_ID, ID, ORDEM, TITULO, ORIGEM, MODULO_ID, SINAL, FORMULA,
+                  MOSTRA, DESTACA, BASE_ANALISE_VERTICAL, LINHA_PRINCIPAL${
+                    (await temUnidadeDre()) ? ", UNIDADE" : ""
+                  }
+             FROM dbo.KING_PORTAL_ORC_VISAO_DRE_LINHA ORDER BY VISAO_ID, ORDEM`
+        ),
+        query(
+          `SELECT VISAO_ID, LINHA_ID, CLASSIFICACAO${
+            (await temSinalContaDre()) ? ", SINAL" : ""
+          } FROM dbo.KING_PORTAL_ORC_VISAO_DRE_LINHA_CONTA`
+        ),
+      ])
+    : [[], []];
 
   const [config, visoes, modulos, centros, contas, sinais, planos, planejado] = await Promise.all([
     query("SELECT CHAVE, VALOR FROM dbo.KING_PORTAL_ORC_CONFIGURACAO"),
@@ -102,7 +122,13 @@ export async function carregarEstado() {
   const porVisao = new Map(
     visoes.map((linha) => [
       linha.ID,
-      { id: linha.ID, nome: linha.NOME, visaoContabil: linha.VISAO_CONTABIL, modulos: {} },
+      {
+        id: linha.ID,
+        nome: linha.NOME,
+        visaoContabil: linha.VISAO_CONTABIL,
+        modulos: {},
+        dreLinhas: [],
+      },
     ])
   );
 
@@ -154,6 +180,33 @@ export async function carregarEstado() {
   formulas.forEach((linha) => {
     const modulo = moduloDe(linha.VISAO_ID, linha.MODULO);
     if (modulo) modulo.formulas[linha.CLASSIFICACAO] = { expressao: linha.EXPRESSAO };
+  });
+
+  const valoresDaLinhaDre = new Map();
+  dreLinhaContas.forEach((linha) => {
+    const chave = `${linha.VISAO_ID}|${linha.LINHA_ID}`;
+    if (!valoresDaLinhaDre.has(chave)) valoresDaLinhaDre.set(chave, []);
+    valoresDaLinhaDre.get(chave).push({ codigo: linha.CLASSIFICACAO, sinal: linha.SINAL ?? 1 });
+  });
+
+  dreLinhas.forEach((linha) => {
+    const visao = porVisao.get(linha.VISAO_ID);
+    if (!visao) return;
+    visao.dreLinhas.push({
+      id: linha.ID,
+      ordem: linha.ORDEM,
+      titulo: linha.TITULO,
+      origem: linha.ORIGEM,
+      moduloId: linha.MODULO_ID ?? null,
+      sinal: linha.SINAL ?? null,
+      formula: linha.FORMULA ?? null,
+      valores: valoresDaLinhaDre.get(`${linha.VISAO_ID}|${linha.ID}`) ?? [],
+      mostra: !!linha.MOSTRA,
+      destaca: !!linha.DESTACA,
+      baseAnaliseVertical: !!linha.BASE_ANALISE_VERTICAL,
+      linhaPrincipal: !!linha.LINHA_PRINCIPAL,
+      unidade: linha.UNIDADE === "percentual" ? "percentual" : "moeda",
+    });
   });
 
   const porPlano = new Map(
@@ -386,6 +439,122 @@ export async function definirFormula(visaoId, modulo, classificacao, expressao, 
        VALUES (@visao, @modulo, @conta, @expressao, @login);`,
     { visao: visaoId, modulo, conta: classificacao, expressao, login: login ?? null }
   );
+}
+
+// --------------------------------------------------------------------------
+// DRE — linhas do demonstrativo, por visão
+//
+// Cada linha soma um recorte de contas de UM módulo (fixo por linha, não o
+// módulo inteiro) ou é uma fórmula que referencia outras linhas — nunca as
+// duas coisas na mesma linha, e o array `contas` é irrelevante quando
+// `origem = 'formula'`.
+//
+// `baseAnaliseVertical`/`linhaPrincipal` valem para uma linha só por visão;
+// o banco não tem como impor isso sozinho (índice único condicional exigiria
+// filtro parcial), então quem grava desliga a marca de qualquer outra linha
+// antes de gravar a nova — dentro da mesma transação, para nunca existirem
+// duas marcadas ao mesmo tempo nem nenhuma por uma falha no meio.
+// --------------------------------------------------------------------------
+
+export async function salvarLinhaDre(visaoId, linha, login) {
+  await transaction(async ({ query: q }) => {
+    if (linha.baseAnaliseVertical) {
+      await q(
+        `UPDATE dbo.KING_PORTAL_ORC_VISAO_DRE_LINHA SET BASE_ANALISE_VERTICAL = 0
+          WHERE VISAO_ID = @visao AND ID <> @id`,
+        { visao: visaoId, id: linha.id }
+      );
+    }
+    if (linha.linhaPrincipal) {
+      await q(
+        `UPDATE dbo.KING_PORTAL_ORC_VISAO_DRE_LINHA SET LINHA_PRINCIPAL = 0
+          WHERE VISAO_ID = @visao AND ID <> @id`,
+        { visao: visaoId, id: linha.id }
+      );
+    }
+
+    const comUnidade = await temUnidadeDre();
+
+    await q(
+      `MERGE dbo.KING_PORTAL_ORC_VISAO_DRE_LINHA AS destino
+       USING (SELECT @visao AS VISAO_ID, @id AS ID) AS origem
+          ON destino.VISAO_ID = origem.VISAO_ID AND destino.ID = origem.ID
+       WHEN MATCHED THEN UPDATE SET
+         ORDEM = @ordem, TITULO = @titulo, ORIGEM = @origemTipo, MODULO_ID = @moduloId,
+         SINAL = @sinal, FORMULA = @formula, MOSTRA = @mostra, DESTACA = @destaca,
+         BASE_ANALISE_VERTICAL = @base, LINHA_PRINCIPAL = @principal${
+           comUnidade ? ", UNIDADE = @unidade" : ""
+         },
+         ATUALIZADO_EM = SYSUTCDATETIME(), ATUALIZADO_POR = @login
+       WHEN NOT MATCHED THEN INSERT
+         (VISAO_ID, ID, ORDEM, TITULO, ORIGEM, MODULO_ID, SINAL, FORMULA, MOSTRA, DESTACA,
+          BASE_ANALISE_VERTICAL, LINHA_PRINCIPAL${comUnidade ? ", UNIDADE" : ""}, ATUALIZADO_POR)
+         VALUES (@visao, @id, @ordem, @titulo, @origemTipo, @moduloId, @sinal, @formula, @mostra,
+                 @destaca, @base, @principal${comUnidade ? ", @unidade" : ""}, @login);`,
+      {
+        visao: visaoId,
+        id: linha.id,
+        ordem: linha.ordem ?? 0,
+        titulo: linha.titulo,
+        origemTipo: linha.origem,
+        moduloId: linha.origem === "modulo" ? (linha.moduloId ?? null) : null,
+        sinal: linha.origem === "modulo" ? (linha.sinal ?? null) : null,
+        formula: linha.origem === "formula" ? (linha.formula ?? null) : null,
+        mostra: linha.mostra !== false,
+        destaca: linha.destaca === true,
+        base: linha.baseAnaliseVertical === true,
+        principal: linha.linhaPrincipal === true,
+        ...(comUnidade ? { unidade: linha.unidade === "percentual" ? "percentual" : "moeda" } : {}),
+        login: login ?? null,
+      }
+    );
+
+    // Contas só fazem sentido em linha "modulo" — mas limpa e regrava sempre,
+    // para uma linha que virou "formula" não deixar contas órfãs pra trás.
+    await q(
+      `DELETE FROM dbo.KING_PORTAL_ORC_VISAO_DRE_LINHA_CONTA WHERE VISAO_ID = @visao AND LINHA_ID = @id`,
+      { visao: visaoId, id: linha.id }
+    );
+    if (linha.origem === "modulo") {
+      const comSinalConta = await temSinalContaDre();
+      for (const item of linha.valores ?? []) {
+        await q(
+          `INSERT INTO dbo.KING_PORTAL_ORC_VISAO_DRE_LINHA_CONTA (VISAO_ID, LINHA_ID, CLASSIFICACAO${
+            comSinalConta ? ", SINAL" : ""
+          })
+           VALUES (@visao, @id, @conta${comSinalConta ? ", @sinal" : ""})`,
+          {
+            visao: visaoId,
+            id: linha.id,
+            conta: item.codigo,
+            ...(comSinalConta ? { sinal: item.sinal === -1 ? -1 : 1 } : {}),
+          }
+        );
+      }
+    }
+  });
+}
+
+export async function excluirLinhaDre(visaoId, linhaId) {
+  await query(
+    `DELETE FROM dbo.KING_PORTAL_ORC_VISAO_DRE_LINHA WHERE VISAO_ID = @visao AND ID = @id`,
+    { visao: visaoId, id: linhaId }
+  );
+}
+
+// `ordem` = [{id, ordem}], a lista inteira reordenada de uma vez — arrastar
+// uma linha desloca todas as outras, e gravar item a item deixaria a ordem
+// inconsistente se a rede caísse no meio.
+export async function reordenarLinhasDre(visaoId, ordem) {
+  await transaction(async ({ query: q }) => {
+    for (const item of ordem ?? []) {
+      await q(
+        `UPDATE dbo.KING_PORTAL_ORC_VISAO_DRE_LINHA SET ORDEM = @ordem
+          WHERE VISAO_ID = @visao AND ID = @id`,
+        { visao: visaoId, id: item.id, ordem: item.ordem }
+      );
+    }
+  });
 }
 
 // --------------------------------------------------------------------------

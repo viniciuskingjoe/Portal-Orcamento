@@ -148,6 +148,33 @@ export function filtrarPorPrefixos(catalogo, prefixos) {
   return { ...indexarContas(lista), grupo: catalogo.grupo };
 }
 
+// Recorta o catálogo a um conjunto exato de códigos (folhas), com os
+// ancestrais junto para a árvore continuar legível. Usado pela linha do DRE:
+// o recorte é sobre as contas que o MÓDULO já tem na visão (o que já foi
+// configurado em cada filial/centro), não sobre o grupo contábil inteiro —
+// "Deduções de vendas" e "Custos variáveis" dividem o mesmo grupo DV, então
+// filtrar só pelo grupo misturaria as duas.
+export function filtrarPorCodigos(catalogo, codigos) {
+  if (!codigos?.length) return catalogo;
+
+  const alvo = new Set(codigos);
+  const manter = new Map();
+  catalogo.lista.forEach((item) => {
+    if (!alvo.has(item.codigo)) return;
+    manter.set(item.codigo, { ...item, selecionavel: true });
+    ancestrais(catalogo, item.codigo).forEach((codigo) => {
+      if (manter.has(codigo)) return;
+      const pai = catalogo.porCodigo.get(codigo);
+      if (pai) manter.set(codigo, { ...pai, selecionavel: false });
+    });
+  });
+
+  const lista = catalogo.lista
+    .filter((item) => manter.has(item.codigo))
+    .map((item) => manter.get(item.codigo));
+  return { ...indexarContas(lista), grupo: catalogo.grupo };
+}
+
 // ============================================================================
 // SELEÇÃO EM CASCATA
 //

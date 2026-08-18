@@ -49,6 +49,49 @@ function normalizarFormulas(bruto) {
   return formulas;
 }
 
+// Contas escolhidas numa linha "modulo", cada uma com o próprio sinal — cai
+// fora item sem código ou com sinal fora de 1/-1, mesmo espírito das demais
+// funções deste arquivo.
+function normalizarValoresDaLinha(bruto) {
+  if (!Array.isArray(bruto)) return [];
+  return bruto
+    .filter((item) => item && typeof item.codigo === "string" && item.codigo.trim())
+    .map((item) => ({ codigo: item.codigo, sinal: item.sinal === -1 ? -1 : 1 }));
+}
+
+// Linhas do DRE, por visão. Mesmo espírito de `normalizarFormulas`: cai fora
+// do que não tem o formato mínimo, em vez de propagar lixo para a tela ou
+// para o avaliador de fórmula entre linhas.
+function normalizarDreLinhas(bruto) {
+  if (!Array.isArray(bruto)) return [];
+  return bruto
+    .filter(
+      (linha) =>
+        linha &&
+        typeof linha.id === "string" &&
+        typeof linha.titulo === "string" &&
+        (linha.origem === "modulo" || linha.origem === "formula")
+    )
+    .map((linha, indice) => ({
+      id: linha.id,
+      ordem: Number.isFinite(linha.ordem) ? linha.ordem : indice,
+      titulo: linha.titulo,
+      origem: linha.origem,
+      moduloId: linha.origem === "modulo" && typeof linha.moduloId === "string" ? linha.moduloId : null,
+      sinal: linha.origem === "modulo" && (linha.sinal === 1 || linha.sinal === -1) ? linha.sinal : null,
+      valores: linha.origem === "modulo" ? normalizarValoresDaLinha(linha.valores) : [],
+      formula:
+        linha.origem === "formula" && typeof linha.formula === "string" && linha.formula.trim()
+          ? linha.formula
+          : null,
+      mostra: linha.mostra !== false,
+      destaca: linha.destaca === true,
+      baseAnaliseVertical: linha.baseAnaliseVertical === true,
+      linhaPrincipal: linha.linhaPrincipal === true,
+      unidade: linha.unidade === "percentual" ? "percentual" : "moeda",
+    }));
+}
+
 function normalizarConfiguracao(bruta) {
   const filiais = bruta?.filiaisAtivas;
   return { filiaisAtivas: Array.isArray(filiais) ? listaDeTexto(filiais) : null };
@@ -98,6 +141,7 @@ function normalizarVisao(visao) {
     nome: visao.nome,
     visaoContabil: typeof visao.visaoContabil === "string" ? visao.visaoContabil : null,
     modulos,
+    dreLinhas: normalizarDreLinhas(visao.dreLinhas),
   };
 }
 

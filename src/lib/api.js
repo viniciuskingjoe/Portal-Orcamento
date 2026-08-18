@@ -120,6 +120,24 @@ export const api = {
       }
     ),
 
+  salvarLinhaDre: (visaoId, linha) =>
+    buscar(
+      `/api/visoes/${encodeURIComponent(visaoId)}/dre/linhas/${encodeURIComponent(linha.id)}`,
+      null,
+      { metodo: "PUT", corpo: linha }
+    ),
+  excluirLinhaDre: (visaoId, linhaId) =>
+    buscar(
+      `/api/visoes/${encodeURIComponent(visaoId)}/dre/linhas/${encodeURIComponent(linhaId)}`,
+      null,
+      { metodo: "DELETE" }
+    ),
+  reordenarLinhasDre: (visaoId, ordem) =>
+    buscar(`/api/visoes/${encodeURIComponent(visaoId)}/dre/ordem`, null, {
+      metodo: "PUT",
+      corpo: { ordem },
+    }),
+
   salvarPlano: (plano) =>
     buscar(`/api/planos/${encodeURIComponent(plano.id)}`, null, { metodo: "PUT", corpo: plano }),
   excluirPlano: (id) => buscar(`/api/planos/${encodeURIComponent(id)}`, null, { metodo: "DELETE" }),

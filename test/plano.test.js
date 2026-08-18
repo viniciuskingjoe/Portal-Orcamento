@@ -2,6 +2,7 @@ import { strict as assert } from "node:assert";
 import { test } from "node:test";
 
 import {
+  FUNCIONARIOS_TOKEN,
   chaveFuncionario,
   chavePlanejado,
   criarLinhasOrcamento,
@@ -762,6 +763,21 @@ test("conta calculada resolve pela fórmula, ignorando o que estiver gravado nel
     valorPlanejadoDaConta(p, visao, MODULO_PESSOAL, "000001", CENTRO, DECIMO, 1),
     (1200 + 200) / 12
   );
+});
+
+test("V[funcionarios] na fórmula resolve pro Nº de funcionários do centro/mês", () => {
+  const visao = definirFormulaDaConta(visaoDeFolha(), MODULO_PESSOAL, DECIMO, `V[${FUNCIONARIOS_TOKEN}] * 350`);
+  const p = {
+    ...criarPlano("p1", "Oficial", ANO, "v1"),
+    funcionarios: { [chaveFuncionario("000001", CENTRO, 1)]: 10 },
+  };
+
+  assert.equal(valorPlanejadoDaConta(p, visao, MODULO_PESSOAL, "000001", CENTRO, DECIMO, 1), 3500);
+});
+
+test("V[funcionarios] sem gente informada naquele mês vale 0, não quebra", () => {
+  const visao = definirFormulaDaConta(visaoDeFolha(), MODULO_PESSOAL, DECIMO, `V[${FUNCIONARIOS_TOKEN}] * 350`);
+  assert.equal(valorPlanejadoDaConta(plano(), visao, MODULO_PESSOAL, "000001", CENTRO, DECIMO, 1), 0);
 });
 
 test("referência circular na fórmula devolve 0 em vez de travar", () => {

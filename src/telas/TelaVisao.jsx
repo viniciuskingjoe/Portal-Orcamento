@@ -37,6 +37,7 @@ export default function TelaVisao({
   visao,
   nomeContabil,
   onAbrirModulo,
+  onAbrirDre,
   onRenomear,
   onAplicarMapeamento,
   modulosVisiveis,
@@ -93,6 +94,30 @@ export default function TelaVisao({
           </div>
         </section>
       ))}
+
+      {/* O DRE não orça: ele lê o que os módulos acima já orçam, então fica
+          numa seção à parte, no fim — é a ordem em que se configura. */}
+      {onAbrirDre ? (
+        <section className="secao-visao">
+          <h2>Demonstrativo</h2>
+          <div className="grid-visao">
+            <button type="button" className="card-visao card-visao--receita is-configurado" onClick={onAbrirDre}>
+              <span className="card-visao__icone">
+                <Icone nome="chart" tamanho={19} />
+              </span>
+              <span className="card-visao__texto">
+                <strong>Configurar DRE</strong>
+                <small>
+                  {(visao.dreLinhas?.length ?? 0) > 0
+                    ? `${visao.dreLinhas.length} ${visao.dreLinhas.length === 1 ? "linha" : "linhas"} configuradas`
+                    : "nenhuma linha ainda"}
+                </small>
+              </span>
+              <Icone nome="chevron" tamanho={16} />
+            </button>
+          </div>
+        </section>
+      ) : null}
     </main>
   );
 }

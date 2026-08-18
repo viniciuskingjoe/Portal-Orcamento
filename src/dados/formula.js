@@ -1,24 +1,26 @@
 // ============================================================================
-// FÓRMULA DE CONTA CALCULADA (Despesas com pessoal)
+// FÓRMULA (Despesas com pessoal e DRE)
 //
-// Uma conta calculada não recebe valor digitado: o valor sai de uma expressão
-// que referencia outras contas do MESMO módulo, formato V[classificacao] —
-// ex.: "(V[4.2.1.10.001] + V[4.2.1.10.002]) / 12" para um 13º salário que soma
-// salário e abono e divide por doze.
+// Uma conta calculada ou uma linha de DRE por fórmula não recebem valor
+// digitado: o valor sai de uma expressão que referencia outra coisa —
+// V[classificacao] para uma conta do plano de contas (Despesas com pessoal:
+// "(V[4.2.1.10.001] + V[4.2.1.10.002]) / 12", um 13º que soma salário e abono
+// e divide por doze) ou L[id] para outra linha do mesmo demonstrativo (DRE:
+// "L[311]-L[312]", uma receita líquida que é receita bruta menos deduções).
 //
 // Interpretador próprio, não `eval`/`Function`: a expressão é texto digitado
 // por quem configura a visão, e o SERVIDOR também avalia isto na publicação
 // para o Linx — rodar como JavaScript de verdade abriria espaço para código
 // arbitrário vindo de um campo de formulário.
 //
-// Este módulo só entende a EXPRESSÃO. Não sabe o que é filial, centro, mês ou
-// referência circular — isso é contexto de dados/plano.js, que chama
-// `avaliarFormula` de novo para cada conta calculada que aparece dentro de
-// outra, e é o único lugar que sabe o suficiente (filial+centro+conta+mês)
-// para dizer com segurança "isto já estava sendo calculado".
+// Este módulo só entende a EXPRESSÃO. Não sabe o que é filial, centro, mês,
+// qual linha vem de qual módulo, ou referência circular — isso é contexto de
+// quem chama `avaliarFormula` (dados/plano.js para V[], dados/dre.js para
+// L[]), que é o único lugar que sabe o suficiente para dizer com segurança
+// "isto já estava sendo calculado".
 // ============================================================================
 
-const TOKEN = /\s*(?:(\d+(?:\.\d+)?)|(V\[[^\]]*\])|([()+\-*/]))/y;
+const TOKEN = /\s*(?:(\d+(?:\.\d+)?)|([VL])\[([^\]]*)\]|([()+\-*/]))/y;
 
 function tokenizar(expressao) {
   const tokens = [];
@@ -32,8 +34,9 @@ function tokenizar(expressao) {
     }
 
     if (casado[1] != null) tokens.push({ tipo: "numero", valor: Number(casado[1]) });
-    else if (casado[2] != null) tokens.push({ tipo: "conta", codigo: casado[2].slice(2, -1).trim() });
-    else if (casado[3] != null) tokens.push({ tipo: casado[3] });
+    else if (casado[2] != null)
+      tokens.push({ tipo: "referencia", prefixo: casado[2], codigo: casado[3].trim() });
+    else if (casado[4] != null) tokens.push({ tipo: casado[4] });
 
     posicao = TOKEN.lastIndex;
   }
@@ -57,10 +60,12 @@ function analisar(tokens) {
       indice += 1;
       return { tipo: "numero", valor: atual.valor };
     }
-    if (atual.tipo === "conta") {
-      if (!atual.codigo) throw new Error("V[] precisa do código de uma conta dentro dos colchetes.");
+    if (atual.tipo === "referencia") {
+      if (!atual.codigo) {
+        throw new Error(`${atual.prefixo}[] precisa de um código dentro dos colchetes.`);
+      }
       indice += 1;
-      return { tipo: "conta", codigo: atual.codigo };
+      return { tipo: "referencia", prefixo: atual.prefixo, codigo: atual.codigo };
     }
     if (atual.tipo === "-") {
       indice += 1;
@@ -112,37 +117,41 @@ export function analisarFormula(expressao) {
   return analisar(tokenizar(texto));
 }
 
-function avaliarNo(no, resolverConta) {
+function avaliarNo(no, resolverReferencia) {
   switch (no.tipo) {
     case "numero":
       return no.valor;
-    case "conta":
-      return resolverConta(no.codigo);
+    case "referencia":
+      // O segundo argumento (prefixo) é opcional pra quem chama: Despesas com
+      // pessoal só tem V[], então o resolvedor de lá nem precisa checá-lo —
+      // continua funcionando exatamente como antes de existir L[].
+      return resolverReferencia(no.codigo, no.prefixo);
     case "negativo":
-      return -avaliarNo(no.valor, resolverConta);
+      return -avaliarNo(no.valor, resolverReferencia);
     case "+":
-      return avaliarNo(no.esquerda, resolverConta) + avaliarNo(no.direita, resolverConta);
+      return avaliarNo(no.esquerda, resolverReferencia) + avaliarNo(no.direita, resolverReferencia);
     case "-":
-      return avaliarNo(no.esquerda, resolverConta) - avaliarNo(no.direita, resolverConta);
+      return avaliarNo(no.esquerda, resolverReferencia) - avaliarNo(no.direita, resolverReferencia);
     case "*":
-      return avaliarNo(no.esquerda, resolverConta) * avaliarNo(no.direita, resolverConta);
+      return avaliarNo(no.esquerda, resolverReferencia) * avaliarNo(no.direita, resolverReferencia);
     case "/": {
-      const divisor = avaliarNo(no.direita, resolverConta);
+      const divisor = avaliarNo(no.direita, resolverReferencia);
       if (!divisor) throw new Error("A fórmula tem uma divisão por zero.");
-      return avaliarNo(no.esquerda, resolverConta) / divisor;
+      return avaliarNo(no.esquerda, resolverReferencia) / divisor;
     }
     default:
       throw new Error(`Nó de fórmula desconhecido: "${no.tipo}".`);
   }
 }
 
-// `resolverConta(codigo)` devolve o valor em reais daquela conta no mesmo
-// contexto (filial, centro, mês) da fórmula — quem chama decide o que isso
-// significa (conta fixa lida do planejado, ou outra calculada resolvida de
-// novo) e é responsável por travar referência circular, porque só ele conhece
-// a chave completa da célula.
-export function avaliarFormula(expressao, resolverConta) {
-  return avaliarNo(analisarFormula(expressao), resolverConta);
+// `resolverReferencia(codigo, prefixo)` devolve o valor daquela referência no
+// mesmo contexto da fórmula — quem chama decide o que "V[codigo]" ou
+// "L[codigo]" significam (conta do plano de contas, linha de um DRE, valor
+// fixo ou recalculado) e é responsável por travar referência circular, porque
+// só ele conhece a chave completa (filial+centro+conta+mês, ou visão+linha+
+// mês+métrica) que identifica "isto já estava sendo calculado".
+export function avaliarFormula(expressao, resolverReferencia) {
+  return avaliarNo(analisarFormula(expressao), resolverReferencia);
 }
 
 // Só valida a sintaxe (sem avaliar contas) — usado pelo editor enquanto a

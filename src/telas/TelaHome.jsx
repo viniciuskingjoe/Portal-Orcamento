@@ -33,7 +33,15 @@ function CardModulo({ modulo, visao, onAbrir }) {
   );
 }
 
-export default function TelaHome({ plano, visao, modulosVisiveis, onAbrirModulo, onVoltar }) {
+export default function TelaHome({
+  plano,
+  visao,
+  modulosVisiveis,
+  podeVerDre = false,
+  onAbrirModulo,
+  onAbrirDre,
+  onVoltar,
+}) {
   // Recorta pelo que a permissão deixa ver. Mostrar o cartão de um módulo que a
   // pessoa não abre é oferecer uma porta trancada.
   const permitido = (lista) =>
@@ -77,6 +85,34 @@ export default function TelaHome({ plano, visao, modulosVisiveis, onAbrirModulo,
               </div>
             </section>
           ))}
+
+          {/* O DRE não é um módulo que se orça: é onde os outros fecham. Fica
+              como seção própria, no fim, que é a ordem em que se usa. Some para
+              quem não vê todos os módulos: sem um deles, os subtotais deixam de
+              ser o resultado da empresa. */}
+          {podeVerDre ? (
+            <section className="secao-modulos">
+              <div className="secao-modulos__cabecalho">
+                <div>
+                  <span className="numero-secao">03</span>
+                  <h2>Resultado</h2>
+                </div>
+                <p>Os módulos acima consolidados, com margem e participação.</p>
+              </div>
+              <div className="grid-modulos grid-modulos--orcamento">
+                <button type="button" className="card-modulo card-modulo--receita" onClick={onAbrirDre}>
+                  <span className="card-modulo__icone">
+                    <Icone nome="chart" tamanho={22} />
+                  </span>
+                  <span className="card-modulo__texto">
+                    <strong>DRE</strong>
+                    <small>planejado, realizado e ano anterior por linha do resultado</small>
+                  </span>
+                  <Icone nome="chevron" tamanho={17} />
+                </button>
+              </div>
+            </section>
+          ) : null}
         </>
       ) : (
         <p className="modulo-aviso">

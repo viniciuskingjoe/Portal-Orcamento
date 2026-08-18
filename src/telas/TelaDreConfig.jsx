@@ -1,0 +1,575 @@
+import { useMemo, useState } from "react";
+
+import Botao from "../componentes/Botao.jsx";
+import Cabecalho from "../componentes/Cabecalho.jsx";
+import { AvisoErro, Carregando } from "../componentes/Estados.jsx";
+import Icone from "../componentes/Icone.jsx";
+import Modal from "../componentes/Modal.jsx";
+import ModalConfirmacao from "../componentes/ModalConfirmacao.jsx";
+import Seletor from "../componentes/Seletor.jsx";
+import {
+  conta as buscarConta,
+  filtrarPorCodigos,
+  filtrarPorGrupo,
+  filtrarPorPrefixos,
+} from "../dados/contas.js";
+import { validarFormula } from "../dados/formula.js";
+import { MODULOS, modulo as definicaoDoModulo } from "../dados/modulos.js";
+import { contasDaFilial, dreLinhasOrdenadas, filiaisDoModulo } from "../dados/visao.js";
+
+// ============================================================================
+// CONFIGURAÇÃO DO DRE
+//
+// O DRE existiu antes com uma linha fixa por módulo (removido de propósito —
+// ver dados/dre.js). Aqui cada linha decide de onde vem: um recorte de contas
+// de UM módulo, ou uma fórmula que soma/subtrai outras linhas. Mesmo espírito
+// de TelaVisaoModulo.jsx (árvore de contas em cascata), só que a seleção não
+// é por filial/centro — é global à visão, porque a linha do DRE não lança
+// nada, só lê o que os módulos já orçam.
+// ============================================================================
+
+function gerarId() {
+  return `dre-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+}
+
+// Reordenar sem arrastar: dois botões por linha bastam para qualquer ordem
+// final, e não exigem tratar pointer/drag events — mais simples de manter e
+// funciona por teclado, o que um handle de arrasto sozinho não dá de graça.
+function BotoesMover({ podeSubir, podeDescer, onSubir, onDescer }) {
+  return (
+    <span className="dre-linha__mover">
+      <button
+        type="button"
+        className="botao-icone"
+        onClick={onSubir}
+        disabled={!podeSubir}
+        aria-label="Mover para cima"
+        title="Mover para cima"
+      >
+        <Icone nome="chevron" tamanho={13} />
+      </button>
+      <button
+        type="button"
+        className="botao-icone botao-icone--baixo"
+        onClick={onDescer}
+        disabled={!podeDescer}
+        aria-label="Mover para baixo"
+        title="Mover para baixo"
+      >
+        <Icone nome="chevron" tamanho={13} />
+      </button>
+    </span>
+  );
+}
+
+// Modal de criar/editar uma linha. `linhasExistentes` serve pra: (a) listar
+// quem uma fórmula pode referenciar e (b) impedir duas linhas com a mesma
+// base de análise vertical / linha principal ao mesmo tempo (a tela desliga a
+// marca da anterior antes de gravar a nova — mesma garantia que o servidor
+// faz por conta própria, ver server/repositorio.js `salvarLinhaDre`).
+function EditorLinhaDre({ linha, linhasExistentes, catalogo, visao, onSalvar, onFechar }) {
+  const [titulo, setTitulo] = useState(linha?.titulo ?? "");
+  const [origem, setOrigem] = useState(linha?.origem ?? "modulo");
+  const [moduloId, setModuloId] = useState(linha?.moduloId ?? MODULOS[0]?.id ?? "");
+  const [sinal, setSinal] = useState(linha?.sinal ?? 1);
+  const [valores, setValores] = useState(() => linha?.valores ?? []);
+  const [contaParaAdicionar, setContaParaAdicionar] = useState("");
+  const [sinalParaAdicionar, setSinalParaAdicionar] = useState(1);
+  const [formula, setFormula] = useState(linha?.formula ?? "");
+  const [unidade, setUnidade] = useState(linha?.unidade ?? "moeda");
+  const [mostra, setMostra] = useState(linha?.mostra !== false);
+  const [destaca, setDestaca] = useState(linha?.destaca === true);
+  const [baseAnaliseVertical, setBaseAnaliseVertical] = useState(linha?.baseAnaliseVertical === true);
+  const [linhaPrincipal, setLinhaPrincipal] = useState(linha?.linhaPrincipal === true);
+  const [salvando, setSalvando] = useState(false);
+  const [erro, setErro] = useState("");
+
+  const moduloEscolhido = definicaoDoModulo(moduloId);
+
+  // As contas que o módulo já tem nesta visão — união de todas as filiais —
+  // porque o grupo contábil sozinho é largo demais: "Deduções de vendas" e
+  // "Custos variáveis" dividem o mesmo grupo DV, então filtrar só por grupo
+  // misturaria as duas. Sem nenhuma conta configurada ainda (visão nova),
+  // cai no grupo contábil inteiro — melhor mostrar demais do que nada.
+  const codigosDoModulo = useMemo(() => {
+    if (!moduloEscolhido || !visao) return [];
+    const codigos = new Set();
+    filiaisDoModulo(visao, moduloEscolhido.id).forEach((filialId) => {
+      contasDaFilial(visao, moduloEscolhido.id, filialId).forEach((codigo) => codigos.add(codigo));
+    });
+    return [...codigos];
+  }, [visao, moduloEscolhido]);
+
+  const catalogoDoModulo = useMemo(() => {
+    if (!moduloEscolhido) return catalogo;
+    if (codigosDoModulo.length) return filtrarPorCodigos(catalogo, codigosDoModulo);
+    return filtrarPorPrefixos(filtrarPorGrupo(catalogo, moduloEscolhido.grupo), moduloEscolhido.prefixos);
+  }, [catalogo, moduloEscolhido, codigosDoModulo]);
+
+  // Escolha simples — uma conta por vez, não em árvore — porque a linha do
+  // DRE não recorta por hierarquia, recorta a lista final que vai somar (ou
+  // subtrair) no resultado. Só as analíticas: sintética não recebe
+  // lançamento, então também não tem o que somar. As já escolhidas somem do
+  // seletor — pra trocar o sinal de uma, usa o +/− dela na lista abaixo, não
+  // escolhe de novo.
+  const escolhidas = new Set(valores.map((item) => item.codigo));
+  const opcoesConta = useMemo(
+    () =>
+      catalogoDoModulo.lista
+        .filter((item) => item.sintetica === false && !escolhidas.has(item.codigo))
+        .map((item) => ({ valor: item.codigo, rotulo: item.descricao, detalhe: item.codigo })),
+    [catalogoDoModulo, valores] // eslint-disable-line react-hooks/exhaustive-deps
+  );
+
+  function adicionarValor() {
+    if (!contaParaAdicionar) return;
+    setValores((atuais) => [...atuais, { codigo: contaParaAdicionar, sinal: sinalParaAdicionar }]);
+    setContaParaAdicionar("");
+    setSinalParaAdicionar(1);
+  }
+
+  function removerValor(codigo) {
+    setValores((atuais) => atuais.filter((item) => item.codigo !== codigo));
+  }
+
+  function definirSinalDoValor(codigo, novoSinal) {
+    setValores((atuais) => atuais.map((item) => (item.codigo === codigo ? { ...item, sinal: novoSinal } : item)));
+  }
+
+  const referenciasDisponiveis = linhasExistentes.filter((item) => item.id !== linha?.id);
+  const erroFormula = origem === "formula" && formula.trim() ? validarFormula(formula) : null;
+
+  async function salvar() {
+    if (!titulo.trim()) return setErro("Dá um nome pra essa linha.");
+    if (origem === "formula" && !formula.trim()) return setErro("Escreve a fórmula, ou troca pra Módulo.");
+    if (origem === "formula" && erroFormula) return setErro(erroFormula);
+    if (origem === "modulo" && !moduloId) return setErro("Escolhe de qual módulo esta linha vem.");
+
+    setSalvando(true);
+    setErro("");
+    try {
+      await onSalvar({
+        id: linha?.id ?? gerarId(),
+        ordem: linha?.ordem ?? linhasExistentes.length,
+        titulo: titulo.trim(),
+        origem,
+        moduloId: origem === "modulo" ? moduloId : null,
+        sinal: origem === "modulo" ? sinal : null,
+        valores: origem === "modulo" ? valores : [],
+        formula: origem === "formula" ? formula.trim() : null,
+        mostra,
+        destaca,
+        baseAnaliseVertical,
+        linhaPrincipal,
+        unidade: origem === "formula" ? unidade : "moeda",
+      });
+      onFechar();
+    } catch (falha) {
+      setErro(falha?.message ?? "Não foi possível salvar.");
+      setSalvando(false);
+    }
+  }
+
+  return (
+    <Modal titulo={linha ? "Editar linha" : "Nova linha"} onFechar={onFechar} largura="720px">
+      <div className="modal__conteudo">
+        <label className="campo">
+          <span>Descrição</span>
+          <input
+            className="campo-fixo campo-fixo--editavel"
+            value={titulo}
+            onChange={(evento) => setTitulo(evento.target.value)}
+            placeholder="Ex.: Receita líquida"
+            autoFocus
+          />
+        </label>
+
+        <div className="abas" role="group" aria-label="De onde vem o valor">
+          <button type="button" className={origem === "modulo" ? "is-active" : ""} onClick={() => setOrigem("modulo")}>
+            Módulo
+          </button>
+          <button type="button" className={origem === "formula" ? "is-active" : ""} onClick={() => setOrigem("formula")}>
+            Fórmula
+          </button>
+        </div>
+
+        {origem === "modulo" ? (
+          <>
+            <div className="campos-duplos">
+              <label className="campo">
+                <span>Módulo</span>
+                <Seletor
+                  valor={moduloId}
+                  opcoes={MODULOS.map((item) => ({ valor: item.id, rotulo: item.titulo }))}
+                  aoEscolher={(valor) => {
+                    setModuloId(valor);
+                    setValores([]);
+                  }}
+                  buscaVazia="Nenhum módulo com esse nome."
+                />
+              </label>
+              <label className="campo">
+                <span title="Vale só quando nenhuma conta é escolhida abaixo">Sinal (módulo inteiro)</span>
+                <div className="abas" role="group" aria-label="Sinal da linha, sem conta escolhida">
+                  <button type="button" className={sinal === 1 ? "is-active" : ""} onClick={() => setSinal(1)}>
+                    + soma
+                  </button>
+                  <button type="button" className={sinal === -1 ? "is-active" : ""} onClick={() => setSinal(-1)}>
+                    − subtrai
+                  </button>
+                </div>
+              </label>
+            </div>
+
+            <p className="campo__ajuda">
+              {codigosDoModulo.length
+                ? `Contas que ${moduloEscolhido?.titulo} já usa nesta visão`
+                : `${moduloEscolhido?.titulo} ainda não tem conta configurada nesta visão — mostrando o grupo contábil inteiro`}{" "}
+              — escolhe uma conta por vez, cada uma com o próprio sinal. Sem nenhuma escolhida, a
+              linha soma o módulo inteiro (sinal ao lado do Módulo).
+            </p>
+
+            <div className="contas-seletor">
+              <div className="contas-seletor__topo">
+                <span>
+                  Contas desta linha
+                  <small className="contas-seletor__origem">
+                    {valores.length
+                      ? `${valores.length} escolhida${valores.length === 1 ? "" : "s"}`
+                      : "nenhuma — soma o módulo inteiro"}
+                  </small>
+                </span>
+                <button type="button" className="botao-texto" onClick={() => setValores([])} disabled={!valores.length}>
+                  Limpar
+                </button>
+              </div>
+
+              <div className="valores-linha__adicionar">
+                <Seletor
+                  valor={contaParaAdicionar}
+                  opcoes={opcoesConta}
+                  aoEscolher={setContaParaAdicionar}
+                  placeholder="Escolher conta…"
+                  buscaVazia="Nenhuma conta com esse nome."
+                />
+                <div className="abas" role="group" aria-label="Sinal da conta escolhida">
+                  <button
+                    type="button"
+                    className={sinalParaAdicionar === 1 ? "is-active" : ""}
+                    onClick={() => setSinalParaAdicionar(1)}
+                  >
+                    + soma
+                  </button>
+                  <button
+                    type="button"
+                    className={sinalParaAdicionar === -1 ? "is-active" : ""}
+                    onClick={() => setSinalParaAdicionar(-1)}
+                  >
+                    − subtrai
+                  </button>
+                </div>
+                <Botao onClick={adicionarValor} disabled={!contaParaAdicionar}>
+                  <Icone nome="plus" tamanho={15} />
+                  Adicionar
+                </Botao>
+              </div>
+
+              <ul className="valores-linha__lista">
+                {valores.map((item) => (
+                  <li key={item.codigo} className="valores-linha__item">
+                    <span className="valores-linha__conta">
+                      <code>{item.codigo}</code>
+                      {buscarConta(catalogo, item.codigo)?.descricao ?? ""}
+                    </span>
+                    <div className="abas" role="group" aria-label={`Sinal de ${item.codigo}`}>
+                      <button
+                        type="button"
+                        className={item.sinal === 1 ? "is-active" : ""}
+                        onClick={() => definirSinalDoValor(item.codigo, 1)}
+                      >
+                        +
+                      </button>
+                      <button
+                        type="button"
+                        className={item.sinal === -1 ? "is-active" : ""}
+                        onClick={() => definirSinalDoValor(item.codigo, -1)}
+                      >
+                        −
+                      </button>
+                    </div>
+                    <button
+                      type="button"
+                      className="botao-icone botao-icone--perigo"
+                      onClick={() => removerValor(item.codigo)}
+                      title="Remover"
+                    >
+                      <Icone nome="trash" tamanho={14} />
+                    </button>
+                  </li>
+                ))}
+                {!valores.length ? <p className="sem-contas">Nenhuma conta escolhida ainda.</p> : null}
+              </ul>
+            </div>
+          </>
+        ) : (
+          <>
+            <p className="campo__ajuda">
+              Soma ou subtrai outras linhas deste demonstrativo — referencie pelo código com{" "}
+              <code>L[código]</code>, ex.: <code>L[receita]-L[deducao]</code>.
+            </p>
+            <label className="campo">
+              <span>Fórmula</span>
+              <textarea
+                rows={3}
+                value={formula}
+                onChange={(evento) => setFormula(evento.target.value)}
+                placeholder="L[receita]-L[deducao]"
+                aria-invalid={erroFormula ? "true" : "false"}
+              />
+            </label>
+            {erroFormula ? <p className="erro-campo">{erroFormula}</p> : null}
+
+            <label className="campo">
+              <span>Formato</span>
+              <div className="abas" role="group" aria-label="Formato do valor calculado">
+                <button type="button" className={unidade === "moeda" ? "is-active" : ""} onClick={() => setUnidade("moeda")}>
+                  Valor (R$)
+                </button>
+                <button
+                  type="button"
+                  className={unidade === "percentual" ? "is-active" : ""}
+                  onClick={() => setUnidade("percentual")}
+                >
+                  Percentual (%)
+                </button>
+              </div>
+            </label>
+            {unidade === "percentual" ? (
+              <p className="campo__ajuda">
+                A fórmula já deve devolver o percentual pronto — ex.:{" "}
+                <code>L[deducao]/L[receita-liquida]*100</code>. A linha aparece na leitura como % , não
+                como R$.
+              </p>
+            ) : null}
+
+            {referenciasDisponiveis.length ? (
+              <div className="editor-formula__referencias">
+                <span>Linhas para referenciar</span>
+                <div className="editor-formula__lista">
+                  {referenciasDisponiveis.map((item) => (
+                    <button
+                      type="button"
+                      key={item.id}
+                      className="botao-texto"
+                      title={item.titulo}
+                      onClick={() =>
+                        setFormula((atual) => `${atual}${atual.trim() ? "" : ""}L[${item.id}]`)
+                      }
+                    >
+                      <code>{item.id}</code> {item.titulo}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ) : (
+              <p className="sem-contas">Nenhuma outra linha ainda — cria as de baixo primeiro.</p>
+            )}
+          </>
+        )}
+
+        <div className="campos-duplos">
+          <label className="check-inline">
+            <input type="checkbox" checked={mostra} onChange={(evento) => setMostra(evento.target.checked)} />
+            <span className="checkbox-visual">
+              <Icone nome="check" tamanho={13} />
+            </span>
+            Mostra no demonstrativo
+          </label>
+          <label className="check-inline">
+            <input type="checkbox" checked={destaca} onChange={(evento) => setDestaca(evento.target.checked)} />
+            <span className="checkbox-visual">
+              <Icone nome="check" tamanho={13} />
+            </span>
+            Destaca (negrito)
+          </label>
+          <label className="check-inline" title="Denominador do % de todas as linhas. Só uma por visão.">
+            <input
+              type="checkbox"
+              checked={baseAnaliseVertical}
+              onChange={(evento) => setBaseAnaliseVertical(evento.target.checked)}
+            />
+            <span className="checkbox-visual">
+              <Icone nome="check" tamanho={13} />
+            </span>
+            Base da análise vertical
+          </label>
+          <label className="check-inline" title="O resultado final do demonstrativo. Só uma por visão.">
+            <input
+              type="checkbox"
+              checked={linhaPrincipal}
+              onChange={(evento) => setLinhaPrincipal(evento.target.checked)}
+            />
+            <span className="checkbox-visual">
+              <Icone nome="check" tamanho={13} />
+            </span>
+            Linha principal (resultado)
+          </label>
+        </div>
+
+        {erro ? <p className="erro-campo">{erro}</p> : null}
+      </div>
+
+      <div className="modal__rodape">
+        <Botao variante="secundario" onClick={onFechar}>
+          Cancelar
+        </Botao>
+        <Botao onClick={salvar} disabled={salvando}>
+          {salvando ? "Salvando…" : "Salvar"}
+        </Botao>
+      </div>
+    </Modal>
+  );
+}
+
+export default function TelaDreConfig({
+  visao,
+  catalogo,
+  carregando,
+  erro,
+  onRecarregar,
+  onDefinirLinha,
+  onRemoverLinha,
+  onReordenar,
+  onVoltar,
+}) {
+  const [editando, setEditando] = useState(null); // linha (edição) ou {} (nova) ou null
+  const [aExcluir, setAExcluir] = useState(null);
+
+  const linhas = dreLinhasOrdenadas(visao);
+
+  function mover(indice, deslocamento) {
+    const alvo = indice + deslocamento;
+    if (alvo < 0 || alvo >= linhas.length) return;
+    const ordem = linhas.map((item) => item.id);
+    [ordem[indice], ordem[alvo]] = [ordem[alvo], ordem[indice]];
+    onReordenar(ordem);
+  }
+
+  return (
+    <main className="conteudo">
+      <Cabecalho
+        titulo="DRE"
+        subtitulo={`Visão ${visao.nome} · linhas do demonstrativo`}
+        onVoltar={onVoltar}
+        acao={
+          <Botao onClick={() => setEditando({})}>
+            <Icone nome="plus" tamanho={18} />
+            Nova linha
+          </Botao>
+        }
+      />
+
+      {carregando ? <Carregando texto="Carregando plano de contas…" /> : null}
+      {erro ? <AvisoErro mensagem={erro} onTentarDeNovo={onRecarregar} /> : null}
+
+      {!carregando && !erro ? (
+        <div className="tabela-wrap">
+          <table className="tabela-orcamento tabela-dre">
+            <thead>
+              <tr>
+                <th scope="col">Descrição</th>
+                <th scope="col">Origem</th>
+                <th scope="col">Mostra</th>
+                <th scope="col">Destaca</th>
+                <th scope="col" aria-label="Mover" />
+                <th scope="col" aria-label="Ações" />
+              </tr>
+            </thead>
+            <tbody>
+              {linhas.map((linha, indice) => (
+                <tr key={linha.id} className={linha.destaca ? "linha-dre--destaque" : ""}>
+                  <th scope="row">
+                    {linha.titulo}
+                    {linha.baseAnaliseVertical ? <span className="chip chip--edicao">Base % vertical</span> : null}
+                    {linha.linhaPrincipal ? <span className="chip chip--edicao">Linha principal</span> : null}
+                  </th>
+                  <td>
+                    {linha.origem === "formula"
+                      ? linha.unidade === "percentual"
+                        ? "Fórmula (%)"
+                        : "Fórmula"
+                      : (definicaoDoModulo(linha.moduloId)?.titulo ?? linha.moduloId)}
+                  </td>
+                  <td>{linha.mostra ? <Icone nome="check" tamanho={15} /> : null}</td>
+                  <td>{linha.destaca ? <Icone nome="check" tamanho={15} /> : null}</td>
+                  <td>
+                    <BotoesMover
+                      podeSubir={indice > 0}
+                      podeDescer={indice < linhas.length - 1}
+                      onSubir={() => mover(indice, -1)}
+                      onDescer={() => mover(indice, 1)}
+                    />
+                  </td>
+                  <td>
+                    <span className="dre-linha__acoes">
+                      <button type="button" className="botao-icone" onClick={() => setEditando(linha)} title="Editar">
+                        <Icone nome="edit" tamanho={15} />
+                      </button>
+                      <button
+                        type="button"
+                        className="botao-icone botao-icone--perigo"
+                        onClick={() => setAExcluir(linha)}
+                        title="Excluir"
+                      >
+                        <Icone nome="trash" tamanho={15} />
+                      </button>
+                    </span>
+                  </td>
+                </tr>
+              ))}
+
+              {!linhas.length ? (
+                <tr>
+                  <td colSpan={6} className="sem-contas">
+                    Nenhuma linha ainda. "Nova linha" pra começar a montar o demonstrativo.
+                  </td>
+                </tr>
+              ) : null}
+            </tbody>
+          </table>
+        </div>
+      ) : null}
+
+      {editando ? (
+        <EditorLinhaDre
+          linha={editando.id ? editando : null}
+          linhasExistentes={linhas}
+          catalogo={catalogo}
+          visao={visao}
+          onSalvar={(linha) => onDefinirLinha(linha)}
+          onFechar={() => setEditando(null)}
+        />
+      ) : null}
+
+      {aExcluir ? (
+        <ModalConfirmacao
+          titulo="Excluir linha"
+          nome={aExcluir.titulo}
+          mensagem={
+            <>
+              Excluir <strong>{aExcluir.titulo}</strong>? Fórmulas de outras linhas que a
+              referenciam (<code>L[{aExcluir.id}]</code>) passam a dar erro até alguém tirar a
+              referência.
+            </>
+          }
+          rotuloConfirmar="Excluir"
+          onConfirmar={() => {
+            onRemoverLinha(aExcluir.id);
+            setAExcluir(null);
+          }}
+          onFechar={() => setAExcluir(null)}
+        />
+      ) : null}
+    </main>
+  );
+}

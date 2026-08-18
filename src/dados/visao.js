@@ -246,6 +246,53 @@ export function definirFormulaDaConta(visao, moduloId, codigo, expressao) {
 }
 
 // --------------------------------------------------------------------------
+// DRE — linhas do demonstrativo, por visão
+//
+// Cada linha soma um recorte de contas de UM módulo, ou é fórmula que
+// referencia outras linhas (ver dados/dre.js e dados/formula.js). Mora aqui,
+// e não em plano.js, pelo mesmo motivo de módulos/contas: é escolha de quem
+// monta a visão, não do plano que a usa.
+// --------------------------------------------------------------------------
+
+export function dreLinhasOrdenadas(visao) {
+  return [...(visao?.dreLinhas ?? [])].sort((a, b) => a.ordem - b.ordem);
+}
+
+export function dreLinha(visao, linhaId) {
+  return (visao?.dreLinhas ?? []).find((linha) => linha.id === linhaId) ?? null;
+}
+
+// Cria ou substitui uma linha inteira. Quem chama monta o objeto completo
+// (a tela do editor sempre tem os campos todos); atualização parcial não
+// existe aqui porque a linha inteira já é o que se grava numa tacada só no
+// servidor (ver `salvarLinhaDre`).
+export function definirLinhaDre(visao, linha) {
+  const atuais = visao.dreLinhas ?? [];
+  const existe = atuais.some((item) => item.id === linha.id);
+  const dreLinhas = existe
+    ? atuais.map((item) => (item.id === linha.id ? linha : item))
+    : [...atuais, linha];
+  return { ...visao, dreLinhas };
+}
+
+export function removerLinhaDre(visao, linhaId) {
+  return { ...visao, dreLinhas: (visao.dreLinhas ?? []).filter((linha) => linha.id !== linhaId) };
+}
+
+// `ordemDeIds` é a lista de ids na nova ordem (o resultado de arrastar na
+// tela) — reescreve `ordem` de cada linha a partir da posição no array.
+export function reordenarDreLinhas(visao, ordemDeIds) {
+  const porId = new Map((visao.dreLinhas ?? []).map((linha) => [linha.id, linha]));
+  const dreLinhas = ordemDeIds
+    .map((id, indice) => {
+      const linha = porId.get(id);
+      return linha ? { ...linha, ordem: indice } : null;
+    })
+    .filter(Boolean);
+  return { ...visao, dreLinhas };
+}
+
+// --------------------------------------------------------------------------
 // Resumos
 // --------------------------------------------------------------------------
 

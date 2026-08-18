@@ -1,4 +1,5 @@
 import { useEffect, useId, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 
 import Icone from "./Icone.jsx";
 
@@ -34,8 +35,11 @@ export default function Seletor({
   const [aberto, setAberto] = useState(false);
   const [termo, setTermo] = useState("");
   const [destacado, setDestacado] = useState(0);
+  const [posicao, setPosicao] = useState(null);
 
   const raiz = useRef(null);
+  const botao = useRef(null);
+  const painel = useRef(null);
   const campo = useRef(null);
   const lista = useRef(null);
   const idBase = useId();
@@ -66,15 +70,41 @@ export default function Seletor({
     );
   }, [opcoes, termo]);
 
-  // Fecha ao clicar fora. Sem isto o painel fica aberto atrás de outra coisa e
-  // o clique seguinte vai para o lugar errado.
+  // Fecha ao clicar fora. O painel é portal pra <body> (ver abaixo), então
+  // "fora" precisa checar os dois: o campo (`raiz`) e o painel (`painel`) —
+  // um clique numa opção não é filho do campo no DOM.
   useEffect(() => {
     if (!aberto) return undefined;
     const aoClicar = (evento) => {
-      if (!raiz.current?.contains(evento.target)) setAberto(false);
+      if (!raiz.current?.contains(evento.target) && !painel.current?.contains(evento.target)) {
+        setAberto(false);
+      }
     };
     document.addEventListener("mousedown", aoClicar);
     return () => document.removeEventListener("mousedown", aoClicar);
+  }, [aberto]);
+
+  // O painel é `position: fixed` a partir daqui — não fica preso pela
+  // `overflow-y: auto` de um modal ou de qualquer contêiner com rolagem no
+  // meio do caminho (é o que cortava a lista pela metade dentro de um modal).
+  // Precisa se realinhar em QUALQUER rolagem, não só a da janela — por isso o
+  // listener vai na fase de captura em `document`, que enxerga a rolagem de
+  // um contêiner interno mesmo sem ela borbulhar até a `window`.
+  useEffect(() => {
+    if (!aberto) return undefined;
+    const medir = () => {
+      const retangulo = botao.current?.getBoundingClientRect();
+      if (retangulo) {
+        setPosicao({ top: retangulo.bottom + 4, left: retangulo.left, width: retangulo.width });
+      }
+    };
+    medir();
+    document.addEventListener("scroll", medir, true);
+    window.addEventListener("resize", medir);
+    return () => {
+      document.removeEventListener("scroll", medir, true);
+      window.removeEventListener("resize", medir);
+    };
   }, [aberto]);
 
   useEffect(() => {
@@ -140,6 +170,7 @@ export default function Seletor({
     <div className={`seletor ${aberto ? "is-aberto" : ""}`} ref={raiz}>
       <button
         type="button"
+        ref={botao}
         className="seletor__campo"
         disabled={desabilitado}
         aria-haspopup="listbox"
@@ -151,69 +182,84 @@ export default function Seletor({
         <Icone nome="chevron" tamanho={14} />
       </button>
 
-      {aberto ? (
-        <div className="seletor__painel">
-          {comBusca ? (
-            <input
-              ref={campo}
-              className="seletor__busca"
-              value={termo}
-              onChange={(evento) => {
-                setTermo(evento.target.value);
-                setDestacado(0);
+      {aberto && posicao
+        ? createPortal(
+            // Dentro de um <dialog> aberto com `showModal()`, o navegador
+            // promove o SUBÁRVORE do diálogo pra "top layer" — um portal pra
+            // `document.body` cairia FORA dela e renderizaria atrás do
+            // modal, mesmo com z-index alto. Portando pro próprio <dialog>
+            // (fora de `.modal__conteudo`, que é quem corta com overflow),
+            // o painel continua na top layer e escapa do corte.
+            <div
+              className="seletor__painel"
+              ref={painel}
+              style={{
+                position: "fixed",
+                top: posicao.top,
+                left: posicao.left,
+                right: "auto",
+                width: posicao.width,
               }}
-              onKeyDown={teclado}
-              placeholder="Filtrar…"
-              aria-label="Filtrar opções"
-            />
-          ) : null}
-
-          {multiplo && marcados.size ? (
-            <button
-              type="button"
-              className="seletor__limpar"
-              onClick={() => aoEscolher([])}
             >
-              Limpar seleção ({marcados.size})
-            </button>
-          ) : null}
+              {comBusca ? (
+                <input
+                  ref={campo}
+                  className="seletor__busca"
+                  value={termo}
+                  onChange={(evento) => {
+                    setTermo(evento.target.value);
+                    setDestacado(0);
+                  }}
+                  onKeyDown={teclado}
+                  placeholder="Filtrar…"
+                  aria-label="Filtrar opções"
+                />
+              ) : null}
 
-          <ul className="seletor__lista" role="listbox" aria-multiselectable={multiplo} ref={lista}>
-            {filtradas.map((opcao, indice) => (
-              <li key={opcao.valor}>
-                <button
-                  type="button"
-                  id={`${idBase}-${indice}`}
-                  data-indice={indice}
-                  role="option"
-                  aria-selected={estaMarcada(opcao)}
-                  className={[
-                    "seletor__opcao",
-                    multiplo ? "seletor__opcao--multipla" : "",
-                    estaMarcada(opcao) ? "is-escolhida" : "",
-                    indice === destacado ? "is-destacada" : "",
-                  ]
-                    .filter(Boolean)
-                    .join(" ")}
-                  onMouseEnter={() => setDestacado(indice)}
-                  onClick={() => escolher(opcao)}
-                >
-                  {multiplo ? (
-                    <span className="checkbox-visual" aria-hidden="true">
-                      {estaMarcada(opcao) ? <Icone nome="check" tamanho={13} /> : null}
-                    </span>
-                  ) : null}
-                  {opcao.detalhe ? <code>{opcao.detalhe}</code> : null}
-                  <span>{opcao.rotulo}</span>
-                  {!multiplo && estaMarcada(opcao) ? <Icone nome="check" tamanho={14} /> : null}
+              {multiplo && marcados.size ? (
+                <button type="button" className="seletor__limpar" onClick={() => aoEscolher([])}>
+                  Limpar seleção ({marcados.size})
                 </button>
-              </li>
-            ))}
+              ) : null}
 
-            {!filtradas.length ? <li className="seletor__vazio-lista">{buscaVazia}</li> : null}
-          </ul>
-        </div>
-      ) : null}
+              <ul className="seletor__lista" role="listbox" aria-multiselectable={multiplo} ref={lista}>
+                {filtradas.map((opcao, indice) => (
+                  <li key={opcao.valor}>
+                    <button
+                      type="button"
+                      id={`${idBase}-${indice}`}
+                      data-indice={indice}
+                      role="option"
+                      aria-selected={estaMarcada(opcao)}
+                      className={[
+                        "seletor__opcao",
+                        multiplo ? "seletor__opcao--multipla" : "",
+                        estaMarcada(opcao) ? "is-escolhida" : "",
+                        indice === destacado ? "is-destacada" : "",
+                      ]
+                        .filter(Boolean)
+                        .join(" ")}
+                      onMouseEnter={() => setDestacado(indice)}
+                      onClick={() => escolher(opcao)}
+                    >
+                      {multiplo ? (
+                        <span className="checkbox-visual" aria-hidden="true">
+                          {estaMarcada(opcao) ? <Icone nome="check" tamanho={13} /> : null}
+                        </span>
+                      ) : null}
+                      {opcao.detalhe ? <code>{opcao.detalhe}</code> : null}
+                      <span>{opcao.rotulo}</span>
+                      {!multiplo && estaMarcada(opcao) ? <Icone nome="check" tamanho={14} /> : null}
+                    </button>
+                  </li>
+                ))}
+
+                {!filtradas.length ? <li className="seletor__vazio-lista">{buscaVazia}</li> : null}
+              </ul>
+            </div>,
+            raiz.current?.closest("dialog") ?? document.body
+          )
+        : null}
     </div>
   );
 }

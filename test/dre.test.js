@@ -1,0 +1,285 @@
+import { strict as assert } from "node:assert";
+import { test } from "node:test";
+
+import { calcularDre, mesesDoPeriodo } from "../src/dados/dre.js";
+import { chavePlanejado, criarPlano } from "../src/dados/plano.js";
+import { indexarContas } from "../src/dados/contas.js";
+import { indexarRealizado } from "../src/dados/realizado.js";
+import { criarVisao, definirContasDoCentro } from "../src/dados/visao.js";
+
+// Todo módulo é orçado por centro: monta pelo centro, lê pela filial.
+const CENTRO = "002";
+const OUTRO_CENTRO = "009";
+const ANO = 2025; // ano fechado: todos os meses têm realizado
+const FILIAIS = [{ id: "000001", nome: "KING&JOE" }];
+
+const RECEITA = "3.1.1.01.001";
+// Segunda conta do MESMO módulo que RECEITA — só existe pra testar sinal por
+// conta dentro da mesma linha, que precisa de duas contas de um módulo só
+// (misturar módulos na mesma linha não é o caso que o recurso cobre).
+const RECEITA2 = "3.1.1.01.002";
+const DEDUCAO = "3.1.2.01.001";
+const DESPESA_OP = "4.4.1.01.001";
+
+const catalogo = indexarContas([
+  { codigo: RECEITA, descricao: "COLEÇÃO", sintetica: false, grupo: "R" },
+  { codigo: RECEITA2, descricao: "SALDO", sintetica: false, grupo: "R" },
+  { codigo: DEDUCAO, descricao: "DEVOLUÇÃO", sintetica: false, grupo: "DV" },
+  { codigo: DESPESA_OP, descricao: "ALUGUEL", sintetica: false, grupo: "DF" },
+]);
+
+function visaoBase() {
+  let visao = criarVisao("v1", "DRE", "25");
+  visao = definirContasDoCentro(visao, "receita-vendas", "000001", CENTRO, [RECEITA, RECEITA2]);
+  visao = definirContasDoCentro(visao, "deducoes-vendas", "000001", CENTRO, [DEDUCAO]);
+  visao = definirContasDoCentro(visao, "despesas-operacionais", "000001", CENTRO, [DESPESA_OP]);
+  return visao;
+}
+
+function comLinhas(visao, linhas) {
+  return { ...visao, dreLinhas: linhas };
+}
+
+const planejado = {
+  [chavePlanejado("receita-vendas", "000001", CENTRO, RECEITA, 1)]: 1000,
+  [chavePlanejado("receita-vendas", "000001", CENTRO, RECEITA2, 1)]: 300,
+  [chavePlanejado("deducoes-vendas", "000001", CENTRO, DEDUCAO, 1)]: 100,
+  [chavePlanejado("despesas-operacionais", "000001", CENTRO, DESPESA_OP, 1)]: 150,
+};
+
+const plano = () => ({ ...criarPlano("p1", "Oficial", ANO, "v1"), planejado });
+
+const realizado = indexarRealizado(
+  [
+    { classificacao: RECEITA, filial: "000001", centro: CENTRO, mes: 1, debito: 0, credito: 2000 },
+    { classificacao: RECEITA2, filial: "000001", centro: CENTRO, mes: 1, debito: 0, credito: 600 },
+    { classificacao: DEDUCAO, filial: "000001", centro: CENTRO, mes: 1, debito: 200, credito: 0 },
+    { classificacao: DESPESA_OP, filial: "000001", centro: CENTRO, mes: 1, debito: 300, credito: 0 },
+  ],
+  "25"
+);
+
+const anterior = indexarRealizado(
+  [{ classificacao: RECEITA, filial: "000001", centro: CENTRO, mes: 1, debito: 0, credito: 1500 }],
+  "25"
+);
+
+const linha = (lista, id) => lista.find((item) => item.id === id);
+
+// ---------------------------------------------------------------------------
+// Linha "origem: modulo"
+// ---------------------------------------------------------------------------
+
+test("linha modulo soma as contas explícitas escolhidas na configuração", () => {
+  const visao = comLinhas(visaoBase(), [
+    {
+      id: "receita",
+      ordem: 1,
+      titulo: "Receita",
+      origem: "modulo",
+      moduloId: "receita-vendas",
+      valores: [{ codigo: RECEITA, sinal: 1 }],
+      mostra: true,
+    },
+  ]);
+  const linhas = calcularDre({ visao, plano: plano(), filiais: FILIAIS, meses: [1], catalogo, realizado });
+  assert.equal(linha(linhas, "receita").total.planejado, 1000);
+});
+
+test("linha modulo sem contas escolhidas cai no módulo inteiro (compatibilidade)", () => {
+  const visao = comLinhas(visaoBase(), [
+    { id: "op", ordem: 1, titulo: "Operacionais", origem: "modulo", moduloId: "despesas-operacionais", valores: [], sinal: -1, mostra: true },
+  ]);
+  const linhas = calcularDre({ visao, plano: plano(), filiais: FILIAIS, meses: [1], catalogo, realizado });
+  // Sinal -1: despesa entra negativa.
+  assert.equal(linha(linhas, "op").total.planejado, -150);
+});
+
+test("sinal negativo subtrai, positivo soma", () => {
+  const visao = comLinhas(visaoBase(), [
+    { id: "receita", ordem: 1, titulo: "Receita", origem: "modulo", moduloId: "receita-vendas", valores: [{ codigo: RECEITA, sinal: 1 }], mostra: true },
+    { id: "deducao", ordem: 2, titulo: "Dedução", origem: "modulo", moduloId: "deducoes-vendas", valores: [{ codigo: DEDUCAO, sinal: -1 }], mostra: true },
+  ]);
+  const linhas = calcularDre({ visao, plano: plano(), filiais: FILIAIS, meses: [1], catalogo, realizado });
+  assert.equal(linha(linhas, "receita").total.planejado, 1000);
+  assert.equal(linha(linhas, "deducao").total.planejado, -100);
+});
+
+test("cada conta escolhida tem o próprio sinal, não um sinal só pra linha inteira", () => {
+  const visao = comLinhas(visaoBase(), [
+    {
+      id: "misto",
+      ordem: 1,
+      titulo: "Uma receita soma, a outra subtrai, na mesma linha",
+      origem: "modulo",
+      moduloId: "receita-vendas",
+      valores: [
+        { codigo: RECEITA, sinal: 1 },
+        { codigo: RECEITA2, sinal: -1 },
+      ],
+      mostra: true,
+    },
+  ]);
+  const linhas = calcularDre({ visao, plano: plano(), filiais: FILIAIS, meses: [1], catalogo, realizado });
+  // 1000 (RECEITA, +) + (-300) (RECEITA2, -) = 700, na MESMA linha.
+  assert.equal(linha(linhas, "misto").total.planejado, 700);
+  // Realizado segue a mesma regra: 2000 - 600 = 1400.
+  assert.equal(linha(linhas, "misto").meses[0].realizado, 1400);
+});
+
+test("realizado e ano anterior vêm dos índices, com o mesmo sinal da linha", () => {
+  const visao = comLinhas(visaoBase(), [
+    { id: "receita", ordem: 1, titulo: "Receita", origem: "modulo", moduloId: "receita-vendas", valores: [{ codigo: RECEITA, sinal: 1 }], mostra: true },
+  ]);
+  const linhas = calcularDre({
+    visao,
+    plano: plano(),
+    filiais: FILIAIS,
+    meses: [1],
+    catalogo,
+    realizado,
+    realizadoAnterior: anterior,
+  });
+  const receita = linha(linhas, "receita");
+  assert.equal(receita.meses[0].realizado, 2000);
+  assert.equal(receita.meses[0].anterior, 1500);
+});
+
+// ---------------------------------------------------------------------------
+// Linha "origem: formula"
+// ---------------------------------------------------------------------------
+
+test("linha fórmula soma/subtrai outras linhas por L[id]", () => {
+  const visao = comLinhas(visaoBase(), [
+    { id: "receita", ordem: 1, titulo: "Receita", origem: "modulo", moduloId: "receita-vendas", valores: [{ codigo: RECEITA, sinal: 1 }], mostra: true },
+    { id: "deducao", ordem: 2, titulo: "Dedução", origem: "modulo", moduloId: "deducoes-vendas", valores: [{ codigo: DEDUCAO, sinal: -1 }], mostra: true },
+    { id: "rol", ordem: 3, titulo: "Receita líquida", origem: "formula", formula: "L[receita]+L[deducao]", mostra: true, destaca: true },
+  ]);
+  const linhas = calcularDre({ visao, plano: plano(), filiais: FILIAIS, meses: [1], catalogo, realizado });
+  // 1000 + (-100) = 900
+  assert.equal(linha(linhas, "rol").total.planejado, 900);
+});
+
+test("fórmula de linha não aceita V[conta] — só L[linha]", () => {
+  const visao = comLinhas(visaoBase(), [
+    { id: "estranha", ordem: 1, titulo: "Estranha", origem: "formula", formula: `V[${RECEITA}]`, mostra: true },
+  ]);
+  const linhas = calcularDre({ visao, plano: plano(), filiais: FILIAIS, meses: [1], catalogo, realizado });
+  // Fórmula quebrada não derruba o demonstrativo — vira 0.
+  assert.equal(linha(linhas, "estranha").total.planejado, 0);
+});
+
+test("referência circular entre linhas fórmula vira 0, não trava", () => {
+  const visao = comLinhas(visaoBase(), [
+    { id: "a", ordem: 1, titulo: "A", origem: "formula", formula: "L[b]", mostra: true },
+    { id: "b", ordem: 2, titulo: "B", origem: "formula", formula: "L[a]", mostra: true },
+  ]);
+  const linhas = calcularDre({ visao, plano: plano(), filiais: FILIAIS, meses: [1], catalogo, realizado });
+  assert.equal(linha(linhas, "a").total.planejado, 0);
+  assert.equal(linha(linhas, "b").total.planejado, 0);
+});
+
+test("fórmula pode encadear (subtotal em cima de subtotal)", () => {
+  const visao = comLinhas(visaoBase(), [
+    { id: "receita", ordem: 1, titulo: "Receita", origem: "modulo", moduloId: "receita-vendas", valores: [{ codigo: RECEITA, sinal: 1 }], mostra: true },
+    { id: "deducao", ordem: 2, titulo: "Dedução", origem: "modulo", moduloId: "deducoes-vendas", valores: [{ codigo: DEDUCAO, sinal: -1 }], mostra: true },
+    { id: "rol", ordem: 3, titulo: "ROL", origem: "formula", formula: "L[receita]+L[deducao]", mostra: true },
+    { id: "op", ordem: 4, titulo: "Operacionais", origem: "modulo", moduloId: "despesas-operacionais", valores: [{ codigo: DESPESA_OP, sinal: -1 }], mostra: true },
+    { id: "resultado", ordem: 5, titulo: "Resultado", origem: "formula", formula: "L[rol]+L[op]", mostra: true, destaca: true },
+  ]);
+  const linhas = calcularDre({ visao, plano: plano(), filiais: FILIAIS, meses: [1], catalogo, realizado });
+  // (1000 - 100) - 150 = 750
+  assert.equal(linha(linhas, "resultado").total.planejado, 750);
+});
+
+// ---------------------------------------------------------------------------
+// Análise vertical
+// ---------------------------------------------------------------------------
+
+test("análise vertical é a participação sobre a linha marcada base", () => {
+  const visao = comLinhas(visaoBase(), [
+    { id: "receita", ordem: 1, titulo: "Receita", origem: "modulo", moduloId: "receita-vendas", valores: [{ codigo: RECEITA, sinal: 1 }], mostra: true, baseAnaliseVertical: true },
+    { id: "deducao", ordem: 2, titulo: "Dedução", origem: "modulo", moduloId: "deducoes-vendas", valores: [{ codigo: DEDUCAO, sinal: -1 }], mostra: true },
+  ]);
+  const linhas = calcularDre({ visao, plano: plano(), filiais: FILIAIS, meses: [1], catalogo, realizado });
+  assert.equal(linha(linhas, "receita").meses[0].analiseVerticalPlanejado, 100);
+  assert.equal(linha(linhas, "deducao").meses[0].analiseVerticalPlanejado, -10);
+});
+
+test("sem linha base, análise vertical fica em zero, não divide por nada", () => {
+  const visao = comLinhas(visaoBase(), [
+    { id: "receita", ordem: 1, titulo: "Receita", origem: "modulo", moduloId: "receita-vendas", valores: [{ codigo: RECEITA, sinal: 1 }], mostra: true },
+  ]);
+  const linhas = calcularDre({ visao, plano: plano(), filiais: FILIAIS, meses: [1], catalogo, realizado });
+  assert.equal(linha(linhas, "receita").meses[0].analiseVerticalPlanejado, 0);
+});
+
+// ---------------------------------------------------------------------------
+// Grupo de centro de custo
+// ---------------------------------------------------------------------------
+
+test("grupo de centro de custo restringe quais centros entram na soma", () => {
+  let visao = visaoBase();
+  visao = definirContasDoCentro(visao, "receita-vendas", "000001", OUTRO_CENTRO, [RECEITA]);
+  const p = {
+    ...criarPlano("p1", "Oficial", ANO, "v1"),
+    planejado: {
+      ...planejado,
+      [chavePlanejado("receita-vendas", "000001", OUTRO_CENTRO, RECEITA, 1)]: 500,
+    },
+  };
+  visao = comLinhas(visao, [
+    { id: "receita", ordem: 1, titulo: "Receita", origem: "modulo", moduloId: "receita-vendas", valores: [{ codigo: RECEITA, sinal: 1 }], mostra: true },
+  ]);
+
+  const semGrupo = calcularDre({ visao, plano: p, filiais: FILIAIS, meses: [1], catalogo, realizado });
+  assert.equal(linha(semGrupo, "receita").total.planejado, 1500, "sem grupo, soma os dois centros");
+
+  const comGrupo = calcularDre({
+    visao,
+    plano: p,
+    filiais: FILIAIS,
+    meses: [1],
+    catalogo,
+    realizado,
+    centrosPermitidos: new Set([CENTRO]),
+  });
+  assert.equal(linha(comGrupo, "receita").total.planejado, 1000, "com grupo, só o centro 002");
+});
+
+// ---------------------------------------------------------------------------
+// Período e casos vazios
+// ---------------------------------------------------------------------------
+
+test("mesesDoPeriodo cobre o intervalo, mesmo se vier invertido", () => {
+  assert.deepEqual(mesesDoPeriodo(3, 6), [3, 4, 5, 6]);
+  assert.deepEqual(mesesDoPeriodo(6, 3), [3, 4, 5, 6]);
+  assert.deepEqual(mesesDoPeriodo(1, 1), [1]);
+});
+
+test("mesesDoPeriodo prende o intervalo entre 1 e 12", () => {
+  assert.deepEqual(mesesDoPeriodo(0, 15), [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]);
+});
+
+test("sem modelo de DRE (dreLinhas vazio), devolve lista vazia", () => {
+  const visao = comLinhas(visaoBase(), []);
+  assert.deepEqual(calcularDre({ visao, plano: plano(), filiais: FILIAIS, meses: [1], catalogo, realizado }), []);
+});
+
+test("sem plano ou sem filial, devolve lista vazia", () => {
+  const visao = comLinhas(visaoBase(), [
+    { id: "receita", ordem: 1, titulo: "Receita", origem: "modulo", moduloId: "receita-vendas", valores: [{ codigo: RECEITA, sinal: 1 }], mostra: true },
+  ]);
+  assert.deepEqual(calcularDre({ visao, plano: null, filiais: FILIAIS, meses: [1] }), []);
+  assert.deepEqual(calcularDre({ visao, plano: plano(), filiais: [], meses: [1] }), []);
+});
+
+test("linha com mostra:false continua calculada (serve de base pra fórmula), só não teria mostra na tela", () => {
+  const visao = comLinhas(visaoBase(), [
+    { id: "receita", ordem: 1, titulo: "Receita", origem: "modulo", moduloId: "receita-vendas", valores: [{ codigo: RECEITA, sinal: 1 }], mostra: false },
+    { id: "dobro", ordem: 2, titulo: "Dobro", origem: "formula", formula: "L[receita]*2", mostra: true },
+  ]);
+  const linhas = calcularDre({ visao, plano: plano(), filiais: FILIAIS, meses: [1], catalogo, realizado });
+  assert.equal(linha(linhas, "receita").mostra, false);
+  assert.equal(linha(linhas, "dobro").total.planejado, 2000);
+});

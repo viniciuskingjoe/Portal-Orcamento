@@ -40,6 +40,11 @@ export const estado = {
       api.salvarModulo(visaoId, modulo, { sinal: { conta, tipo } }),
     formula: (visaoId, modulo, conta, expressao) =>
       api.salvarModulo(visaoId, modulo, { formula: { conta, expressao } }),
+    dre: {
+      salvarLinha: (visaoId, linha) => api.salvarLinhaDre(visaoId, linha),
+      excluirLinha: (visaoId, linhaId) => api.excluirLinhaDre(visaoId, linhaId),
+      reordenar: (visaoId, ordem) => api.reordenarLinhasDre(visaoId, ordem),
+    },
   },
 
   grupos: () => api.grupos(),
