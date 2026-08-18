@@ -1683,27 +1683,6 @@ td.sem-contas {
   min-width: 240px;
 }
 
-/* Larguras fixas pro `<colgroup>` — sem elas `table-layout: fixed` divide o
-   espaço igual entre colunas, e os offsets `left` das células sticky do
-   Total (calculados em TelaDre.jsx a partir destes mesmos números) deixam de
-   bater com a posição real. */
-.tabela-dre--leitura {
-  table-layout: fixed;
-  width: auto;
-}
-
-.tabela-dre__col-descricao {
-  width: 240px;
-}
-
-.tabela-dre__col-moeda {
-  width: 150px;
-}
-
-.tabela-dre__col-pct {
-  width: 90px;
-}
-
 /* Mês a mês some pra direita rápido — a Descrição some junto, e a linha vira
    ilegível sem saber de qual conta é o número. Sticky à esquerda resolve;
    precisa de fundo opaco senão o texto de trás transparece ao rolar. */
@@ -1723,6 +1702,57 @@ td.sem-contas {
   background: var(--surface-accent);
 }
 
+/* Drill-down: linha "módulo" com mais de uma conta escolhida pode expandir.
+   Seta aponta pra direita fechada, gira pra baixo aberta — mesma convenção
+   de qualquer árvore recolhível. */
+.linha-dre__titulo {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.linha-dre__expandir {
+  flex: 0 0 auto;
+  width: 20px;
+  height: 20px;
+  color: var(--muted);
+}
+
+.linha-dre__expandir svg {
+  transition: transform 0.14s ease;
+}
+
+.linha-dre__expandir.is-aberto svg {
+  transform: rotate(90deg);
+}
+
+/* Uma conta do drill-down: recuada, mais discreta que a linha-pai — é
+   detalhe de apoio, não outra linha do demonstrativo. */
+.tabela-dre .linha-dre--detalhe th {
+  padding-left: 34px;
+  color: var(--text-soft);
+  font-size: 12.5px;
+  font-weight: 500;
+}
+
+.tabela-dre .linha-dre--detalhe td {
+  color: var(--text-soft);
+}
+
+.tabela-dre .linha-dre--detalhe code {
+  margin-right: 4px;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.linha-dre__sinal {
+  display: inline-block;
+  width: 14px;
+  color: var(--muted);
+  font-weight: 700;
+  text-align: center;
+}
+
 /* Cabeçalho de dois níveis: mês/Total agrupando as 4 colunas, célula única
    embaixo dizendo qual é qual — mesmo padrão do Scoreplan. */
 .tabela-dre thead th[scope="colgroup"] {
@@ -1730,21 +1760,10 @@ td.sem-contas {
   border-left: 1px solid var(--border);
 }
 
-/* O bloco Total (4 colunas: Planejado/% AV/Realizado/% AV) fica fixo junto
-   com a Descrição ao rolar pelos meses — senão comparar um mês contra o
-   Total exige voltar pro início da tabela toda vez. `left` de cada célula
-   vem de `OFFSETS_TOTAL` em TelaDre.jsx, alinhado com as larguras acima. */
-.tabela-dre__fixo {
-  z-index: 1;
+/* Total é a única coluna que não muda com o filtro De/Até — um leve
+   destaque no cabeçalho ajuda o olho a achá-la entre os blocos de mês. */
+.tabela-dre th.tabela-dre__total {
   background: var(--surface-soft);
-}
-
-.tabela-dre thead .tabela-dre__fixo {
-  z-index: 3;
-}
-
-.tabela-dre .linha-dre--destaque .tabela-dre__fixo {
-  background: var(--surface-accent);
 }
 
 /* O subtotal fecha um bloco: a linha acima dele é a última parcela, e a régua

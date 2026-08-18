@@ -1,4 +1,4 @@
-import { Fragment, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 
 import Cabecalho from "../componentes/Cabecalho.jsx";
 import Icone from "../componentes/Icone.jsx";
@@ -10,36 +10,30 @@ import { formatarMoeda, formatarPercentual } from "../lib/formato.js";
 
 const NOMES_MES = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"];
 
-// As quatro colunas do Total ficam fixas ao rolar pelos meses — senão
-// comparar qualquer mês contra o Total exige voltar pro início toda vez. Os
-// offsets (`left`) casam com a largura fixa das colunas no `<colgroup>` da
-// tabela: Descrição 240px, Planejado/Realizado 150px, % AV 90px.
-const OFFSETS_TOTAL = ["240px", "390px", "480px", "630px"];
-
 // Uma célula-bloco (Total, ou um mês): Planejado | A.V. Plan | Realizado |
 // A.V. Real — quatro colunas que se repetem pra cada coluna de período, do
 // jeito que o Scoreplan mostra (Total primeiro, depois mês a mês). Serve
 // tanto pro cabeçalho (`cabecalho`, rótulos fixos) quanto pro corpo (valores
-// da linha) — mesma estrutura de 4 células, mesmo deslocamento sticky.
-function CelulasDoPeriodo({ dado, percentual, fixo, cabecalho }) {
+// da linha) — mesma estrutura de 4 células.
+//
+// A coluna Total NÃO fica fixa (sticky) — foi tentado, mas sticky em célula
+// de tabela com `table-layout: fixed` quebra o alinhamento das colunas em
+// vários navegadores (colunas ficam com largura errada, "vazando"). Só a
+// Descrição fica fixa (`.tabela-dre__descricao`, CSS puro, sem essa
+// combinação problemática).
+function CelulasDoPeriodo({ dado, percentual, cabecalho }) {
   const formatarValor = percentual ? formatarPercentual : formatarMoeda;
   const Celula = cabecalho ? "th" : "td";
-  const estilo = (indice) => (fixo ? { position: "sticky", left: OFFSETS_TOTAL[indice] } : undefined);
-  const classe = (extra) => [fixo ? "tabela-dre__fixo" : "", extra].filter(Boolean).join(" ") || undefined;
 
   if (cabecalho) {
     return (
       <>
-        <Celula scope="col" className={classe()} style={estilo(0)}>
-          Planejado
-        </Celula>
-        <Celula scope="col" className={classe()} style={estilo(1)} title="Participação na linha-base do planejado">
+        <Celula scope="col">Planejado</Celula>
+        <Celula scope="col" title="Participação na linha-base do planejado">
           % AV
         </Celula>
-        <Celula scope="col" className={classe()} style={estilo(2)}>
-          Realizado
-        </Celula>
-        <Celula scope="col" className={classe()} style={estilo(3)} title="Participação na linha-base do realizado">
+        <Celula scope="col">Realizado</Celula>
+        <Celula scope="col" title="Participação na linha-base do realizado">
           % AV
         </Celula>
       </>
@@ -48,111 +42,129 @@ function CelulasDoPeriodo({ dado, percentual, fixo, cabecalho }) {
 
   return (
     <>
-      <Celula className={classe()} style={estilo(0)}>
-        {formatarValor(dado.planejado)}
-      </Celula>
-      <Celula className={classe("celula-derivada")} style={estilo(1)}>
+      <Celula>{formatarValor(dado.planejado)}</Celula>
+      <Celula className="celula-derivada">
         {percentual ? "—" : formatarPercentual(dado.analiseVerticalPlanejado)}
       </Celula>
-      <Celula className={classe()} style={estilo(2)}>
-        {formatarValor(dado.realizado)}
-      </Celula>
-      <Celula className={classe("celula-derivada")} style={estilo(3)}>
+      <Celula>{formatarValor(dado.realizado)}</Celula>
+      <Celula className="celula-derivada">
         {percentual ? "—" : formatarPercentual(dado.analiseVerticalRealizado)}
       </Celula>
     </>
   );
 }
 
-// Uma linha do demonstrativo, mês a mês — módulo abre a tela do módulo (mesmo
-// comportamento de antes), fórmula é só leitura.
-function LinhaDre({ linha, colunas, onAbrirModulo }) {
-  const classe = ["linha-dre", linha.destaca ? "linha-dre--destaque" : ""].filter(Boolean).join(" ");
-  // Linha "%": o próprio valor já é um percentual (ex.: dedução / receita
-  // líquida), então a análise vertical (% sobre a base) não faz sentido aqui
-  // — % de %. `CelulasDoPeriodo` já mostra "—" nessas colunas.
-  const percentual = linha.unidade === "percentual";
-
+// Uma conta do drill-down — mesma estrutura de células da linha-pai, só que
+// não abre módulo (clicar na linha-pai já leva lá) e o texto vem indentado,
+// com o sinal escolhido ao configurar visível na frente do nome.
+function LinhaDetalhe({ item, colunas, percentual }) {
   return (
-    <tr className={classe}>
+    <tr className="linha-dre linha-dre--detalhe">
       <th scope="row" className="tabela-dre__descricao">
-        {linha.origem === "modulo" ? (
-          <button type="button" className="link-modulo" onClick={() => onAbrirModulo(linha.moduloId)}>
-            {linha.titulo}
-          </button>
-        ) : (
-          linha.titulo
-        )}
+        <span className="linha-dre__sinal">{item.sinal === -1 ? "−" : "+"}</span>
+        <code>{item.codigo}</code> {item.descricao}
       </th>
-
       {colunas.map((coluna) => (
         <CelulasDoPeriodo
           key={coluna.id}
-          dado={coluna.id === "total" ? linha.total : linha.meses.find((mes) => mes.id === coluna.mes)}
+          dado={coluna.id === "total" ? item.total : item.porMes.find((mes) => mes.id === coluna.mes)}
           percentual={percentual}
-          fixo={coluna.id === "total"}
         />
       ))}
     </tr>
   );
 }
 
-function BlocoDre({ titulo, linhas, colunas, onAbrirModulo }) {
+// Uma linha do demonstrativo, mês a mês — módulo abre a tela do módulo (mesmo
+// comportamento de antes), fórmula é só leitura. Linha "módulo" com mais de
+// uma conta escolhida pode expandir e mostrar o valor de cada uma
+// (`linha.detalhe`, calculado em dados/dre.js só quando há o que abrir).
+function LinhaDre({ linha, colunas, expandida, onExpandir, onAbrirModulo }) {
+  const classe = ["linha-dre", linha.destaca ? "linha-dre--destaque" : ""].filter(Boolean).join(" ");
+  // Linha "%": o próprio valor já é um percentual (ex.: dedução / receita
+  // líquida), então a análise vertical (% sobre a base) não faz sentido aqui
+  // — % de %. `CelulasDoPeriodo` já mostra "—" nessas colunas.
+  const percentual = linha.unidade === "percentual";
+  const podeExpandir = !!linha.detalhe;
+
+  return (
+    <>
+      <tr className={classe}>
+        <th scope="row" className="tabela-dre__descricao">
+          <span className="linha-dre__titulo">
+            {podeExpandir ? (
+              <button
+                type="button"
+                className={`botao-icone linha-dre__expandir ${expandida ? "is-aberto" : ""}`}
+                onClick={() => onExpandir(linha.id)}
+                aria-expanded={expandida}
+                aria-label={expandida ? "Recolher contas" : "Expandir contas"}
+                title={expandida ? "Recolher contas" : `Mostrar as ${linha.detalhe.length} contas desta linha`}
+              >
+                <Icone nome="chevron" tamanho={13} />
+              </button>
+            ) : null}
+            {linha.origem === "modulo" ? (
+              <button type="button" className="link-modulo" onClick={() => onAbrirModulo(linha.moduloId)}>
+                {linha.titulo}
+              </button>
+            ) : (
+              linha.titulo
+            )}
+          </span>
+        </th>
+
+        {colunas.map((coluna) => (
+          <CelulasDoPeriodo
+            key={coluna.id}
+            dado={coluna.id === "total" ? linha.total : linha.meses.find((mes) => mes.id === coluna.mes)}
+            percentual={percentual}
+          />
+        ))}
+      </tr>
+
+      {expandida && podeExpandir
+        ? linha.detalhe.map((item) => (
+            <LinhaDetalhe key={item.codigo} item={item} colunas={colunas} percentual={percentual} />
+          ))
+        : null}
+    </>
+  );
+}
+
+function BlocoDre({ titulo, linhas, colunas, expandidas, onExpandir, onAbrirModulo }) {
   return (
     <div className="bloco-dre">
       {titulo ? <h3 className="bloco-dre__titulo">{titulo}</h3> : null}
       <div className="tabela-wrap">
-        <table className="tabela-orcamento tabela-dre tabela-dre--leitura">
-          {/* Larguras fixas — é o que torna `left` previsível pras células
-              sticky do Total logo abaixo, e o que faz `table-layout: fixed`
-              não espremer as colunas pra caber no container. */}
-          <colgroup>
-            <col className="tabela-dre__col-descricao" />
-            {colunas.map((coluna) => (
-              <Fragment key={coluna.id}>
-                <col className="tabela-dre__col-moeda" />
-                <col className="tabela-dre__col-pct" />
-                <col className="tabela-dre__col-moeda" />
-                <col className="tabela-dre__col-pct" />
-              </Fragment>
-            ))}
-          </colgroup>
+        <table className="tabela-orcamento tabela-dre">
           <thead>
             <tr>
               <th scope="col" rowSpan={2} className="tabela-dre__descricao">
                 Resultado do exercício
               </th>
-              {colunas.map((coluna) =>
-                coluna.id === "total" ? (
-                  <th
-                    scope="colgroup"
-                    colSpan={4}
-                    key={coluna.id}
-                    className="tabela-dre__fixo"
-                    style={{ position: "sticky", left: OFFSETS_TOTAL[0] }}
-                  >
-                    {coluna.label}
-                  </th>
-                ) : (
-                  <th scope="colgroup" colSpan={4} key={coluna.id}>
-                    {coluna.label}
-                  </th>
-                )
-              )}
+              {colunas.map((coluna) => (
+                <th scope="colgroup" colSpan={4} key={coluna.id} className={coluna.id === "total" ? "tabela-dre__total" : ""}>
+                  {coluna.label}
+                </th>
+              ))}
             </tr>
             <tr>
               {colunas.map((coluna) => (
-                <CelulasDoPeriodo
-                  key={coluna.id}
-                  cabecalho
-                  fixo={coluna.id === "total"}
-                />
+                <CelulasDoPeriodo key={coluna.id} cabecalho />
               ))}
             </tr>
           </thead>
           <tbody>
             {linhas.map((linha) => (
-              <LinhaDre key={linha.id} linha={linha} colunas={colunas} onAbrirModulo={onAbrirModulo} />
+              <LinhaDre
+                key={linha.id}
+                linha={linha}
+                colunas={colunas}
+                expandida={expandidas.has(linha.id)}
+                onExpandir={onExpandir}
+                onAbrirModulo={onAbrirModulo}
+              />
             ))}
           </tbody>
         </table>
@@ -176,6 +188,16 @@ export default function TelaDre({
   const [grupoId, setGrupoId] = useState("");
   const [mesInicio, setMesInicio] = useState(1);
   const [mesFim, setMesFim] = useState(12);
+  const [expandidas, setExpandidas] = useState(() => new Set());
+
+  function alternarExpandida(linhaId) {
+    setExpandidas((atuais) => {
+      const proximo = new Set(atuais);
+      if (proximo.has(linhaId)) proximo.delete(linhaId);
+      else proximo.add(linhaId);
+      return proximo;
+    });
+  }
 
   const meses = useMemo(() => mesesDoPeriodo(mesInicio, mesFim), [mesInicio, mesFim]);
 
@@ -312,6 +334,8 @@ export default function TelaDre({
               titulo={bloco.titulo}
               linhas={bloco.linhas}
               colunas={colunas}
+              expandidas={expandidas}
+              onExpandir={alternarExpandida}
               onAbrirModulo={onAbrirModulo}
             />
           ))}
@@ -321,8 +345,9 @@ export default function TelaDre({
       <p className="dica-edicao">
         <Icone nome="info" tamanho={16} />
         <span>
-          Clique numa linha de módulo para abrir o orçamento dela. <strong>% AV</strong> é a
-          participação na linha marcada como base de análise vertical.
+          Clique numa linha de módulo para abrir o orçamento dela. Linha com a seta ▸ mostra o
+          valor de cada conta escolhida ao expandir. <strong>% AV</strong> é a participação na
+          linha marcada como base de análise vertical.
         </span>
       </p>
     </main>

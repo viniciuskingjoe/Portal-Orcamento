@@ -96,6 +96,45 @@ function realizadoDaLinhaModulo({
   return total;
 }
 
+// Mesmo cálculo de `planejadoDaLinhaModulo`/`realizadoDaLinhaModulo`, mas pra
+// UMA conta só — é o que alimenta o drill-down: expandir uma linha "módulo"
+// com mais de uma conta escolhida mostra o valor de cada uma, sem precisar
+// somar de novo (a soma continua vindo das funções acima, que já fazem o
+// mesmo percurso filial→centro→conta).
+function planejadoDoCodigo(moduloId, codigo, sinal, plano, visao, filiais, centrosPermitidos, mes) {
+  let total = 0;
+  filiais.forEach((filial) => {
+    centrosDaLeitura(visao, moduloId, filial.id, centrosPermitidos).forEach((centroId) => {
+      const valor = plano?.planejado?.[chavePlanejado(moduloId, filial.id, centroId, codigo, mes)] ?? 0;
+      total += (sinal ?? 1) * valor;
+    });
+  });
+  return total;
+}
+
+function realizadoDoCodigo({ moduloId, codigo, sinal, visao, filiais, centrosPermitidos, catalogo, sinais, visaoContabil, indice, mes }) {
+  const definicao = definicaoDoModulo(moduloId);
+  let total = 0;
+  filiais.forEach((filial) => {
+    centrosDaLeitura(visao, moduloId, filial.id, centrosPermitidos).forEach((centroId) => {
+      total +=
+        (sinal ?? 1) *
+        somarRealizado({
+          indice,
+          catalogo,
+          contas: [codigo],
+          filiais: [filial],
+          centroId,
+          mes,
+          tipoPadrao: definicao?.tipo,
+          sinais,
+          visaoContabil,
+        });
+    });
+  });
+  return total;
+}
+
 // Valor de UMA linha, UM mês, UMA métrica (planejado/realizado/anterior).
 // `emResolucao` trava referência circular entre linhas fórmula — guarda a
 // chave completa (linha+mês+métrica), porque a mesma linha em meses ou
@@ -150,6 +189,31 @@ function valorDaLinhaNoMes(linhaId, contexto, metrica, mes, emResolucao) {
 function valorSeguro(linhaId, contexto, metrica, mes) {
   try {
     return valorDaLinhaNoMes(linhaId, contexto, metrica, mes, new Set());
+  } catch {
+    return 0;
+  }
+}
+
+// Mesma proteção de `valorSeguro`, para o valor de UMA conta do drill-down.
+function valorDoCodigoSeguro(moduloId, codigo, sinal, contexto, metrica, mes) {
+  try {
+    if (metrica === "planejado") {
+      return planejadoDoCodigo(moduloId, codigo, sinal, contexto.plano, contexto.visao, contexto.filiais, contexto.centrosPermitidos, mes);
+    }
+    const indice = metrica === "realizado" ? contexto.realizado : contexto.realizadoAnterior;
+    return realizadoDoCodigo({
+      moduloId,
+      codigo,
+      sinal,
+      visao: contexto.visao,
+      filiais: contexto.filiais,
+      centrosPermitidos: contexto.centrosPermitidos,
+      catalogo: contexto.catalogo,
+      sinais: contexto.sinais,
+      visaoContabil: contexto.visaoContabil,
+      indice,
+      mes,
+    });
   } catch {
     return 0;
   }
@@ -215,53 +279,82 @@ export function calcularDre({
   const base = modelo.find((linha) => linha.baseAnaliseVertical) ?? null;
   const ano = plano.ano;
 
+  // Meses + Total de UMA série (a linha inteira, ou uma conta do drill-down)
+  // a partir de um provedor `valorBruto(metrica, mes)` — mesmo cálculo dos
+  // dois casos, só troca de onde o número bruto vem. A base da análise
+  // vertical é sempre a mesma linha marcada na visão, mesmo dentro do
+  // drill-down: a % de uma conta é sobre a receita líquida, não sobre a
+  // linha-pai.
+  function montarSerie(valorBruto) {
+    const porMes = meses.map((mes) => {
+      const planejado = valorBruto("planejado", mes);
+      const houveRealizado = mesTemRealizado(ano, mes);
+      const houveAnterior = mesTemRealizado(ano - 1, mes);
+      const realizadoDoMes = houveRealizado ? valorBruto("realizado", mes) : 0;
+      const anteriorDoMes = houveAnterior ? valorBruto("anterior", mes) : 0;
+
+      const basePlanejada = base ? valorSeguro(base.id, contexto, "planejado", mes) : 0;
+      const baseRealizada = base && houveRealizado ? valorSeguro(base.id, contexto, "realizado", mes) : 0;
+
+      return {
+        id: mes,
+        label: `${String(mes).padStart(2, "0")}/${ano}`,
+        planejado,
+        realizado: realizadoDoMes,
+        anterior: anteriorDoMes,
+        analiseVerticalPlanejado: participacao(planejado, basePlanejada),
+        analiseVerticalRealizado: participacao(realizadoDoMes, baseRealizada),
+        ...variacao(realizadoDoMes, anteriorDoMes),
+      };
+    });
+
+    const total = {
+      id: "total",
+      label: "Total",
+      planejado: porMes.reduce((soma, m) => soma + m.planejado, 0),
+      realizado: porMes.reduce((soma, m) => soma + m.realizado, 0),
+      anterior: porMes.reduce((soma, m) => soma + m.anterior, 0),
+    };
+    const totalBasePlanejada = base
+      ? meses.reduce((soma, mes) => soma + valorSeguro(base.id, contexto, "planejado", mes), 0)
+      : 0;
+    const totalBaseRealizada = base
+      ? meses.reduce(
+          (soma, mes) => soma + (mesTemRealizado(ano, mes) ? valorSeguro(base.id, contexto, "realizado", mes) : 0),
+          0
+        )
+      : 0;
+    total.analiseVerticalPlanejado = participacao(total.planejado, totalBasePlanejada);
+    total.analiseVerticalRealizado = participacao(total.realizado, totalBaseRealizada);
+    Object.assign(total, variacao(total.realizado, total.anterior));
+
+    return { porMes, total };
+  }
+
   return modelo
     .slice()
     .sort((a, b) => a.ordem - b.ordem)
     .map((linha) => {
-      const porMes = meses.map((mes) => {
-        const planejado = valorSeguro(linha.id, contexto, "planejado", mes);
-        const houveRealizado = mesTemRealizado(ano, mes);
-        const houveAnterior = mesTemRealizado(ano - 1, mes);
-        const realizadoDoMes = houveRealizado ? valorSeguro(linha.id, contexto, "realizado", mes) : 0;
-        const anteriorDoMes = houveAnterior ? valorSeguro(linha.id, contexto, "anterior", mes) : 0;
+      const { porMes, total } = montarSerie((metrica, mes) => valorSeguro(linha.id, contexto, metrica, mes));
 
-        const basePlanejada = base ? valorSeguro(base.id, contexto, "planejado", mes) : 0;
-        const baseRealizada =
-          base && houveRealizado ? valorSeguro(base.id, contexto, "realizado", mes) : 0;
-
-        return {
-          id: mes,
-          label: `${String(mes).padStart(2, "0")}/${ano}`,
-          planejado,
-          realizado: realizadoDoMes,
-          anterior: anteriorDoMes,
-          analiseVerticalPlanejado: participacao(planejado, basePlanejada),
-          analiseVerticalRealizado: participacao(realizadoDoMes, baseRealizada),
-          ...variacao(realizadoDoMes, anteriorDoMes),
-        };
-      });
-
-      const total = {
-        id: "total",
-        label: "Total",
-        planejado: porMes.reduce((soma, m) => soma + m.planejado, 0),
-        realizado: porMes.reduce((soma, m) => soma + m.realizado, 0),
-        anterior: porMes.reduce((soma, m) => soma + m.anterior, 0),
-      };
-      const totalBasePlanejada = base
-        ? meses.reduce((soma, mes) => soma + valorSeguro(base.id, contexto, "planejado", mes), 0)
-        : 0;
-      const totalBaseRealizada = base
-        ? meses.reduce(
-            (soma, mes) =>
-              soma + (mesTemRealizado(ano, mes) ? valorSeguro(base.id, contexto, "realizado", mes) : 0),
-            0
-          )
-        : 0;
-      total.analiseVerticalPlanejado = participacao(total.planejado, totalBasePlanejada);
-      total.analiseVerticalRealizado = participacao(total.realizado, totalBaseRealizada);
-      Object.assign(total, variacao(total.realizado, total.anterior));
+      // Drill-down: só faz sentido com mais de uma conta escolhida — uma
+      // linha com zero ou uma conta não tem o que abrir, o Total já É aquela
+      // conta. `contas: []` (soma o módulo inteiro) também não expande: sem
+      // recorte explícito não há uma lista curta pra mostrar.
+      const detalhe =
+        linha.origem === "modulo" && linha.valores?.length > 1
+          ? linha.valores.map((item) => {
+              const serie = montarSerie((metrica, mes) =>
+                valorDoCodigoSeguro(linha.moduloId, item.codigo, item.sinal, contexto, metrica, mes)
+              );
+              return {
+                codigo: item.codigo,
+                descricao: catalogo?.porCodigo?.get(item.codigo)?.descricao ?? item.codigo,
+                sinal: item.sinal ?? 1,
+                ...serie,
+              };
+            })
+          : null;
 
       return {
         id: linha.id,
@@ -275,6 +368,7 @@ export function calcularDre({
         unidade: linha.unidade === "percentual" ? "percentual" : "moeda",
         meses: porMes,
         total,
+        detalhe,
       };
     });
 }

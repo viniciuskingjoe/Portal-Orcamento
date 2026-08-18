@@ -105,6 +105,51 @@ test("sinal negativo subtrai, positivo soma", () => {
   assert.equal(linha(linhas, "deducao").total.planejado, -100);
 });
 
+test("linha com mais de uma conta ganha detalhe (drill-down), uma entrada por conta", () => {
+  const visao = comLinhas(visaoBase(), [
+    {
+      id: "receita-total",
+      ordem: 1,
+      titulo: "Receita",
+      origem: "modulo",
+      moduloId: "receita-vendas",
+      valores: [
+        { codigo: RECEITA, sinal: 1 },
+        { codigo: RECEITA2, sinal: -1 },
+      ],
+      mostra: true,
+    },
+  ]);
+  const linhas = calcularDre({ visao, plano: plano(), filiais: FILIAIS, meses: [1], catalogo, realizado });
+  const receita = linha(linhas, "receita-total");
+
+  assert.equal(receita.detalhe.length, 2);
+  const doRECEITA = receita.detalhe.find((item) => item.codigo === RECEITA);
+  const doRECEITA2 = receita.detalhe.find((item) => item.codigo === RECEITA2);
+  assert.equal(doRECEITA.descricao, "COLEÇÃO");
+  assert.equal(doRECEITA.sinal, 1);
+  assert.equal(doRECEITA.total.planejado, 1000);
+  assert.equal(doRECEITA2.sinal, -1);
+  assert.equal(doRECEITA2.total.planejado, -300);
+  // Soma do detalhe bate com o total da linha — mesmo cálculo, duas formas.
+  assert.equal(doRECEITA.total.planejado + doRECEITA2.total.planejado, receita.total.planejado);
+});
+
+test("linha com zero ou uma conta não ganha detalhe — não há o que expandir", () => {
+  const umaConta = comLinhas(visaoBase(), [
+    { id: "so-uma", ordem: 1, titulo: "Receita", origem: "modulo", moduloId: "receita-vendas", valores: [{ codigo: RECEITA, sinal: 1 }], mostra: true },
+  ]);
+  const semRecorte = comLinhas(visaoBase(), [
+    { id: "modulo-inteiro", ordem: 1, titulo: "Operacionais", origem: "modulo", moduloId: "despesas-operacionais", valores: [], sinal: -1, mostra: true },
+  ]);
+
+  const linhas1 = calcularDre({ visao: umaConta, plano: plano(), filiais: FILIAIS, meses: [1], catalogo, realizado });
+  const linhas2 = calcularDre({ visao: semRecorte, plano: plano(), filiais: FILIAIS, meses: [1], catalogo, realizado });
+
+  assert.equal(linha(linhas1, "so-uma").detalhe, null);
+  assert.equal(linha(linhas2, "modulo-inteiro").detalhe, null);
+});
+
 test("cada conta escolhida tem o próprio sinal, não um sinal só pra linha inteira", () => {
   const visao = comLinhas(visaoBase(), [
     {
