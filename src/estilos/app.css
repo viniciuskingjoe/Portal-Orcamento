@@ -1754,10 +1754,22 @@ td.sem-contas {
 }
 
 /* Cabeçalho de dois níveis: mês/Total agrupando as 4 colunas, célula única
-   embaixo dizendo qual é qual — mesmo padrão do Scoreplan. */
+   embaixo dizendo qual é qual — mesmo padrão do Scoreplan. Altura fixa (não
+   medida) na 1ª linha: é o que deixa a 2ª linha saber exatamente onde
+   grudar embaixo dela ao rolar (ver `.tabela-dre thead tr:last-child th`
+   logo abaixo) — sem isto as duas linhas tentam grudar no mesmo `top: 0`
+   e uma cobre a outra na rolagem vertical. */
 .tabela-dre thead th[scope="colgroup"] {
+  height: 35px;
   text-align: center;
   border-left: 1px solid var(--border);
+}
+
+/* A 2ª linha do cabeçalho gruda logo abaixo da 1ª, não em cima dela —
+   `top: 0` (herdado de `.tabela-orcamento thead th`) faria as duas
+   disputarem o mesmo lugar. */
+.tabela-dre thead tr:last-child th {
+  top: 35px;
 }
 
 /* Total é a única coluna que não muda com o filtro De/Até — um leve
