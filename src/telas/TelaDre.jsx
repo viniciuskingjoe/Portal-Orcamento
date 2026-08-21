@@ -21,8 +21,13 @@ const NOMES_MES = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set"
 // vários navegadores (colunas ficam com largura errada, "vazando"). Só a
 // Descrição fica fixa (`.tabela-dre__descricao`, CSS puro, sem essa
 // combinação problemática).
-function CelulasDoPeriodo({ dado, percentual, cabecalho }) {
+function CelulasDoPeriodo({ dado, percentual, absoluto, cabecalho }) {
   const formatarValor = percentual ? formatarPercentual : formatarMoeda;
+  // Linha "modulo" marcada "subtrai" (ver `mostrarAbsoluto`, dados/dre.js):
+  // "-" na frente é redundante, o título/seção já diz que é despesa. Só
+  // troca a EXIBIÇÃO — o número que alimenta fórmula em outra linha
+  // continua assinado de verdade, isto não muda o cálculo.
+  const semSinal = (valor) => (absoluto ? Math.abs(valor) : valor);
   const Celula = cabecalho ? "th" : "td";
 
   if (cabecalho) {
@@ -42,13 +47,13 @@ function CelulasDoPeriodo({ dado, percentual, cabecalho }) {
 
   return (
     <>
-      <Celula>{formatarValor(dado.planejado)}</Celula>
+      <Celula>{formatarValor(semSinal(dado.planejado))}</Celula>
       <Celula className="celula-derivada">
-        {percentual ? "—" : formatarPercentual(dado.analiseVerticalPlanejado)}
+        {percentual ? "—" : formatarPercentual(semSinal(dado.analiseVerticalPlanejado))}
       </Celula>
-      <Celula>{formatarValor(dado.realizado)}</Celula>
+      <Celula>{formatarValor(semSinal(dado.realizado))}</Celula>
       <Celula className="celula-derivada">
-        {percentual ? "—" : formatarPercentual(dado.analiseVerticalRealizado)}
+        {percentual ? "—" : formatarPercentual(semSinal(dado.analiseVerticalRealizado))}
       </Celula>
     </>
   );
@@ -58,7 +63,7 @@ function CelulasDoPeriodo({ dado, percentual, cabecalho }) {
 // não abre módulo (clicar na linha-pai já leva lá) e o texto vem indentado.
 // Sem sinal na frente do nome: a linha inteira já tem um sinal só (ver
 // TelaDreConfig.jsx), então marcar cada conta individualmente é redundante.
-function LinhaDetalhe({ item, colunas, percentual }) {
+function LinhaDetalhe({ item, colunas, percentual, absoluto }) {
   return (
     <tr className="linha-dre linha-dre--detalhe">
       <th scope="row" className="tabela-dre__descricao">
@@ -69,6 +74,7 @@ function LinhaDetalhe({ item, colunas, percentual }) {
           key={coluna.id}
           dado={coluna.id === "total" ? item.total : item.porMes.find((mes) => mes.id === coluna.mes)}
           percentual={percentual}
+          absoluto={absoluto}
         />
       ))}
     </tr>
@@ -119,13 +125,20 @@ function LinhaDre({ linha, colunas, expandida, onExpandir, onAbrirModulo }) {
             key={coluna.id}
             dado={coluna.id === "total" ? linha.total : linha.meses.find((mes) => mes.id === coluna.mes)}
             percentual={percentual}
+            absoluto={linha.mostrarAbsoluto}
           />
         ))}
       </tr>
 
       {expandida && podeExpandir
         ? linha.detalhe.map((item) => (
-            <LinhaDetalhe key={item.codigo} item={item} colunas={colunas} percentual={percentual} />
+            <LinhaDetalhe
+              key={item.codigo}
+              item={item}
+              colunas={colunas}
+              percentual={percentual}
+              absoluto={linha.mostrarAbsoluto}
+            />
           ))
         : null}
     </>

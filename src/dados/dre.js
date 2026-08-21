@@ -461,6 +461,13 @@ export function calcularDre({
         baseAnaliseVertical: linha.baseAnaliseVertical === true,
         linhaPrincipal: linha.linhaPrincipal === true,
         unidade: linha.unidade === "percentual" ? "percentual" : "moeda",
+        // Linha "modulo" marcada "subtrai" já é despesa por definição — o
+        // "-" na frente do número é redundante, não um alerta (isso é
+        // diferente de um valor que virou negativo por acidente, tipo uma
+        // receita com devolução maior que a venda, que continua mostrando
+        // o sinal). Os NÚMEROS aqui continuam com o sinal de verdade —
+        // isto é só um aviso pra tela formatar como valor absoluto.
+        mostrarAbsoluto: linha.origem === "modulo" && linha.sinal === -1,
         meses: porMes,
         total,
         detalhe,

@@ -110,6 +110,26 @@ test("sinal negativo subtrai, positivo soma", () => {
   assert.equal(linha(linhas, "deducao").total.planejado, -100);
 });
 
+test('linha "modulo" com sinal -1 avisa "mostrarAbsoluto" pra tela, mas o NÚMERO continua negativo', () => {
+  const visao = comLinhas(visaoBase(), [
+    { id: "receita", ordem: 1, titulo: "Receita", origem: "modulo", moduloId: "receita-vendas", valores: [{ codigo: RECEITA, sinal: 1 }], mostra: true },
+    { id: "deducao", ordem: 2, titulo: "Dedução", origem: "modulo", moduloId: "deducoes-vendas", sinal: -1, valores: [{ codigo: DEDUCAO, sinal: -1 }], mostra: true },
+    { id: "rol", ordem: 3, titulo: "ROL", origem: "formula", formula: "L[receita]+L[deducao]", mostra: true },
+  ]);
+  const linhas = calcularDre({ visao, plano: plano(), filiais: FILIAIS, meses: [1], catalogo, realizado });
+
+  assert.equal(linha(linhas, "receita").mostrarAbsoluto, false, "sinal +1 não é despesa, não esconde nada");
+  assert.equal(linha(linhas, "deducao").mostrarAbsoluto, true);
+  assert.equal(linha(linhas, "deducao").total.planejado, -100, "o número em si continua assinado");
+  // A linha fórmula não tem `sinal` (soma/subtrai vem da própria expressão)
+  // — nunca marca mostrarAbsoluto, mesmo se o resultado sair negativo
+  // (prejuízo tem que aparecer negativo, sempre).
+  assert.equal(linha(linhas, "rol").mostrarAbsoluto, false);
+  // E o cálculo que depende do sinal de verdade de "deducao" continua
+  // certo — não foi "corrigido" pra positivo por engano na fonte.
+  assert.equal(linha(linhas, "rol").total.planejado, 900); // 1000 + (-100)
+});
+
 test("linha modulo lê planejado de módulo PERCENTUAL certo (não só reais direto)", () => {
   // deducoes-vendas é percentual — dedicar um teste só pra isso, nomeado,
   // porque o bug real foi o DRE ler só chavePlanejado(...) sem o 6º
