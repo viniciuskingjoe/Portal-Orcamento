@@ -1789,14 +1789,6 @@ td.sem-contas {
   font-size: 11px;
 }
 
-.linha-dre__sinal {
-  display: inline-block;
-  width: 14px;
-  color: var(--muted);
-  font-weight: 700;
-  text-align: center;
-}
-
 /* Cabeçalho de dois níveis: mês/Total agrupando as 4 colunas, célula única
    embaixo dizendo qual é qual — mesmo padrão do Scoreplan. */
 .tabela-dre thead th[scope="colgroup"] {

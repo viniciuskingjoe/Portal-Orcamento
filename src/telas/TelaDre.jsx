@@ -55,13 +55,13 @@ function CelulasDoPeriodo({ dado, percentual, cabecalho }) {
 }
 
 // Uma conta do drill-down — mesma estrutura de células da linha-pai, só que
-// não abre módulo (clicar na linha-pai já leva lá) e o texto vem indentado,
-// com o sinal escolhido ao configurar visível na frente do nome.
+// não abre módulo (clicar na linha-pai já leva lá) e o texto vem indentado.
+// Sem sinal na frente do nome: a linha inteira já tem um sinal só (ver
+// TelaDreConfig.jsx), então marcar cada conta individualmente é redundante.
 function LinhaDetalhe({ item, colunas, percentual }) {
   return (
     <tr className="linha-dre linha-dre--detalhe">
       <th scope="row" className="tabela-dre__descricao">
-        <span className="linha-dre__sinal">{item.sinal === -1 ? "−" : "+"}</span>
         <code>{item.codigo}</code> {item.descricao}
       </th>
       {colunas.map((coluna) => (
