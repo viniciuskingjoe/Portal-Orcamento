@@ -92,10 +92,20 @@ function EditorLinhaDre({ linha, linhasExistentes, catalogo, visao, onSalvar, on
   const [titulo, setTitulo] = useState(linha?.titulo ?? "");
   const [origem, setOrigem] = useState(linha?.origem ?? "modulo");
   const [moduloId, setModuloId] = useState(linha?.moduloId ?? MODULOS[0]?.id ?? "");
-  const [sinal, setSinal] = useState(linha?.sinal ?? 1);
+  const [sinal, setSinalBruto] = useState(linha?.sinal ?? 1);
   const [valores, setValores] = useState(() => linha?.valores ?? []);
   const [contaParaAdicionar, setContaParaAdicionar] = useState("");
-  const [sinalParaAdicionar, setSinalParaAdicionar] = useState(1);
+
+  // Testado na tela: sinal por conta era complexidade sem uso — quase toda
+  // linha só soma tudo que escolhe, então o sinal virou UM só pra linha
+  // inteira (o toggle abaixo), com ou sem recorte. Trocar o sinal aqui
+  // também vira as contas já escolhidas: sem isso, uma conta marcada com
+  // + antes de trocar pra "subtrai" ficaria com o sinal antigo escondido —
+  // não tem mais onde ver ou corrigir individualmente.
+  function setSinal(novoSinal) {
+    setSinalBruto(novoSinal);
+    setValores((atuais) => atuais.map((item) => ({ ...item, sinal: novoSinal })));
+  }
   const [formula, setFormula] = useState(linha?.formula ?? "");
   const [unidade, setUnidade] = useState(linha?.unidade ?? "moeda");
   const [mostra, setMostra] = useState(linha?.mostra !== false);
@@ -138,33 +148,26 @@ function EditorLinhaDre({ linha, linhasExistentes, catalogo, visao, onSalvar, on
   // DRE não recorta por hierarquia, recorta a lista final que vai somar (ou
   // subtrair) no resultado. Só as analíticas: sintética não recebe
   // lançamento, então também não tem o que somar. As já escolhidas somem do
-  // seletor — pra trocar o sinal de uma, usa o +/− dela na lista abaixo, não
-  // escolhe de novo.
+  // seletor — escolher de novo não faz nada, então nem aparece.
   const escolhidas = new Set(valores.map((item) => item.codigo));
   const opcoesConta = useMemo(() => {
     const contas = catalogoDoModulo.lista
       .filter((item) => item.sintetica === false && !escolhidas.has(item.codigo))
       .map((item) => ({ valor: item.codigo, rotulo: item.descricao, detalhe: item.codigo }));
-    // "Total" vai primeiro na lista — soma todas as contas do módulo,
-    // combinável com contas específicas (ex.: Total + uma conta específica
-    // em sinal contrário = "tudo, menos essa").
+    // "Total" vai primeiro na lista — atalho pra escolher todas as contas
+    // do módulo de uma vez, sem marcar uma por uma.
     if (escolhidas.has(TOTAL_MODULO_TOKEN)) return contas;
     return [{ valor: TOTAL_MODULO_TOKEN, rotulo: "Total — todas as contas do módulo" }, ...contas];
   }, [catalogoDoModulo, valores]); // eslint-disable-line react-hooks/exhaustive-deps
 
   function adicionarValor() {
     if (!contaParaAdicionar) return;
-    setValores((atuais) => [...atuais, { codigo: contaParaAdicionar, sinal: sinalParaAdicionar }]);
+    setValores((atuais) => [...atuais, { codigo: contaParaAdicionar, sinal }]);
     setContaParaAdicionar("");
-    setSinalParaAdicionar(1);
   }
 
   function removerValor(codigo) {
     setValores((atuais) => atuais.filter((item) => item.codigo !== codigo));
-  }
-
-  function definirSinalDoValor(codigo, novoSinal) {
-    setValores((atuais) => atuais.map((item) => (item.codigo === codigo ? { ...item, sinal: novoSinal } : item)));
   }
 
   const referenciasDisponiveis = linhasExistentes.filter((item) => item.id !== linha?.id);
@@ -240,8 +243,8 @@ function EditorLinhaDre({ linha, linhasExistentes, catalogo, visao, onSalvar, on
                 />
               </label>
               <label className="campo">
-                <span title="Vale só quando nenhuma conta é escolhida abaixo">Sinal (módulo inteiro)</span>
-                <div className="abas" role="group" aria-label="Sinal da linha, sem conta escolhida">
+                <span>Sinal</span>
+                <div className="abas" role="group" aria-label="Sinal da linha">
                   <button type="button" className={sinal === 1 ? "is-active" : ""} onClick={() => setSinal(1)}>
                     + soma
                   </button>
@@ -256,8 +259,8 @@ function EditorLinhaDre({ linha, linhasExistentes, catalogo, visao, onSalvar, on
               {codigosDoModulo.length
                 ? `Contas que ${moduloEscolhido?.titulo} já usa nesta visão`
                 : `${moduloEscolhido?.titulo} ainda não tem conta configurada nesta visão — mostrando o grupo contábil inteiro`}{" "}
-              — escolhe uma conta por vez, cada uma com o próprio sinal. Sem nenhuma escolhida, a
-              linha soma o módulo inteiro (sinal ao lado do Módulo).
+              — escolhe as contas desta linha, ou deixa vazio pra somar o módulo inteiro. O sinal
+              acima vale pra linha toda.
             </p>
 
             <div className="contas-seletor">
@@ -283,22 +286,6 @@ function EditorLinhaDre({ linha, linhasExistentes, catalogo, visao, onSalvar, on
                   placeholder="Escolher conta…"
                   buscaVazia="Nenhuma conta com esse nome."
                 />
-                <div className="abas" role="group" aria-label="Sinal da conta escolhida">
-                  <button
-                    type="button"
-                    className={sinalParaAdicionar === 1 ? "is-active" : ""}
-                    onClick={() => setSinalParaAdicionar(1)}
-                  >
-                    + soma
-                  </button>
-                  <button
-                    type="button"
-                    className={sinalParaAdicionar === -1 ? "is-active" : ""}
-                    onClick={() => setSinalParaAdicionar(-1)}
-                  >
-                    − subtrai
-                  </button>
-                </div>
                 <Botao onClick={adicionarValor} disabled={!contaParaAdicionar}>
                   <Icone nome="plus" tamanho={15} />
                   Adicionar
@@ -318,22 +305,6 @@ function EditorLinhaDre({ linha, linhasExistentes, catalogo, visao, onSalvar, on
                         </>
                       )}
                     </span>
-                    <div className="abas" role="group" aria-label={`Sinal de ${item.codigo}`}>
-                      <button
-                        type="button"
-                        className={item.sinal === 1 ? "is-active" : ""}
-                        onClick={() => definirSinalDoValor(item.codigo, 1)}
-                      >
-                        +
-                      </button>
-                      <button
-                        type="button"
-                        className={item.sinal === -1 ? "is-active" : ""}
-                        onClick={() => definirSinalDoValor(item.codigo, -1)}
-                      >
-                        −
-                      </button>
-                    </div>
                     <button
                       type="button"
                       className="botao-icone botao-icone--perigo"
