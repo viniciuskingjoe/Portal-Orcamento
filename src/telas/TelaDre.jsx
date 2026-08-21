@@ -263,61 +263,62 @@ export default function TelaDre({
   const semLinhas = !(visao?.dreLinhas?.length > 0);
 
   return (
-    <main className="conteudo">
+    <main className="conteudo conteudo--dre">
       <Cabecalho
         titulo="DRE"
         subtitulo={`${plano.nome} · ${plano.ano}${visao ? ` · visão ${visao.nome}` : ""}`}
         onVoltar={onVoltar}
+        acao={
+          <div className="filtros-orcamento filtros-dre">
+            <label>
+              <span>Filial</span>
+              <Seletor
+                multiplo
+                rotuloTodos="Total — todas as filiais"
+                valor={filiaisEscolhidas}
+                opcoes={filiais.map((filial) => ({ valor: filial.id, rotulo: filial.nome }))}
+                aoEscolher={setFiliaisEscolhidas}
+                buscaVazia="Nenhuma filial com esse nome."
+              />
+            </label>
+
+            <label>
+              <span>Grupo de centro de custo</span>
+              <Seletor
+                valor={grupoId}
+                opcoes={[
+                  { valor: "", rotulo: "Todos os centros" },
+                  ...grupos.map((item) => ({ valor: item.id, rotulo: item.nome })),
+                ]}
+                aoEscolher={setGrupoId}
+                buscaVazia="Nenhum grupo com esse nome."
+              />
+            </label>
+
+            <label className="filtro-periodo">
+              <span>De</span>
+              <select value={mesInicio} onChange={(evento) => setMesInicio(Number(evento.target.value))}>
+                {NOMES_MES.map((nome, indice) => (
+                  <option key={nome} value={indice + 1}>
+                    {nome}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <label className="filtro-periodo">
+              <span>Até</span>
+              <select value={mesFim} onChange={(evento) => setMesFim(Number(evento.target.value))}>
+                {NOMES_MES.map((nome, indice) => (
+                  <option key={nome} value={indice + 1}>
+                    {nome}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
+        }
       />
-
-      <div className="filtros-orcamento">
-        <label>
-          <span>Filial</span>
-          <Seletor
-            multiplo
-            rotuloTodos="Total — todas as filiais"
-            valor={filiaisEscolhidas}
-            opcoes={filiais.map((filial) => ({ valor: filial.id, rotulo: filial.nome }))}
-            aoEscolher={setFiliaisEscolhidas}
-            buscaVazia="Nenhuma filial com esse nome."
-          />
-        </label>
-
-        <label>
-          <span>Grupo de centro de custo</span>
-          <Seletor
-            valor={grupoId}
-            opcoes={[
-              { valor: "", rotulo: "Todos os centros" },
-              ...grupos.map((item) => ({ valor: item.id, rotulo: item.nome })),
-            ]}
-            aoEscolher={setGrupoId}
-            buscaVazia="Nenhum grupo com esse nome."
-          />
-        </label>
-
-        <label className="filtro-periodo">
-          <span>De</span>
-          <select value={mesInicio} onChange={(evento) => setMesInicio(Number(evento.target.value))}>
-            {NOMES_MES.map((nome, indice) => (
-              <option key={nome} value={indice + 1}>
-                {nome}
-              </option>
-            ))}
-          </select>
-        </label>
-
-        <label className="filtro-periodo">
-          <span>Até</span>
-          <select value={mesFim} onChange={(evento) => setMesFim(Number(evento.target.value))}>
-            {NOMES_MES.map((nome, indice) => (
-              <option key={nome} value={indice + 1}>
-                {nome}
-              </option>
-            ))}
-          </select>
-        </label>
-      </div>
 
       {realizado.carregando || carregandoContas ? <Carregando texto="Carregando realizado do ERP…" /> : null}
 

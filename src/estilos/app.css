@@ -339,6 +339,7 @@ button {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
+  flex-wrap: wrap;
   gap: 24px;
   margin-bottom: 30px;
 }
@@ -1183,6 +1184,38 @@ td.sem-contas {
   width: min(1520px, calc(100% - 48px));
 }
 
+/* DRE ganha o máximo de largura possível — a tabela cresce em meses, não em
+   texto, então a folga que outras telas guardam pra legibilidade aqui só
+   sobra vazia dos dois lados. */
+.conteudo--dre {
+  width: calc(100% - 32px);
+  max-width: 2200px;
+}
+
+/* Filtros do DRE saem do bloco próprio (abaixo do título) e entram ao lado
+   dele, no cabeçalho — ganha a altura de uma linha inteira pra tabela.
+   Versão compacta de `.filtros-orcamento`: campos mais estreitos, sem a
+   margem inferior que fazia sentido como bloco separado. */
+.filtros-dre {
+  margin-bottom: 0;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.filtros-dre label {
+  min-width: 150px;
+}
+
+.filtros-dre label.filtro-periodo {
+  min-width: 0;
+}
+
+.filtros-dre .seletor__campo,
+.filtros-dre select {
+  min-height: 36px;
+  font-size: 12.5px;
+}
+
 .filtros-orcamento {
   display: flex;
   flex-wrap: wrap;
@@ -1254,7 +1287,9 @@ td.sem-contas {
    barra fica sempre à vista, e o cabeçalho (já sticky) continua fixo ao
    rolar as linhas verticalmente dentro da caixa. */
 .bloco-dre .tabela-wrap {
-  max-height: calc(100vh - 320px);
+  /* Filtros saíram pro cabeçalho (não são mais uma linha própria abaixo do
+     título) — sobra de altura vai pra tabela. */
+  max-height: calc(100vh - 230px);
   overflow-y: auto;
 }
 
