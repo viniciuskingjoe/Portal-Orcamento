@@ -1358,14 +1358,12 @@ function PlanejamentoOrcamentario({ sessao, onSair }) {
             ? undefined
             : filiaisDoErpVisiveis.length + centrosDoErpVisiveis.length
         }
-        planoAtivo={planoAtivo}
         sessao={sessao}
         onSair={onSair}
         tela={tela}
         onNavegar={navegar}
         tema={tema}
         onAlternarTema={() => setTema((atual) => (atual === "dark" ? "light" : "dark"))}
-        podeVerDre={podeVerDre}
       />
 
       <div className="area-conteudo">
