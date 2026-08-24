@@ -1321,6 +1321,20 @@ td.sem-contas {
   border-color: var(--accent);
 }
 
+/* Conta (e receita, em módulo percentual) só aparecem destacadas dentro do
+   painel lateral — que pode ter dúzias de itens. Esta linha fica sempre
+   visível, sem depender de rolar a lista pra achar qual está marcada. */
+.orcamento-contexto {
+  margin: 0 0 14px;
+  color: var(--muted);
+  font-size: 12.5px;
+}
+
+.orcamento-contexto strong {
+  color: var(--text);
+  font-weight: 700;
+}
+
 /* A coluna da esquerda cresce com o número de dimensões do módulo: conta,
    conta + receita, conta + centro, ou as três. A largura vem do próprio layout
    para a tabela nunca ficar espremida além do necessário. */

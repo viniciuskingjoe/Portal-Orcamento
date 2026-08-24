@@ -257,6 +257,19 @@ export default function TelaOrcamento({
       ? "Enter edita a célula · Ctrl+D repete o mês de cima · Ctrl+Enter repete até dezembro"
       : null);
 
+  // Filial e centro já aparecem nos próprios seletores do topo (mostram o
+  // valor escolhido). Conta e receita só existem destacadas dentro do painel
+  // lateral — que pode ter dúzias de itens e sair de vista rolando a tabela.
+  // Esta linha é a única coisa na tela que sempre diz as duas de uma vez.
+  const contaAtiva =
+    filtros.conta === TODAS_AS_CONTAS
+      ? "Total do módulo"
+      : (buscarConta(catalogo, filtros.conta)?.descricao ?? filtros.conta);
+  const receitaAtiva =
+    percentual && filtros.receita !== TODAS_AS_CONTAS
+      ? (buscarConta(catalogo, filtros.receita)?.descricao ?? filtros.receita)
+      : null;
+
   // As dimensões que compõem a célula, na ordem em que se escolhe: sobre o quê
   // (receita) e o quê (conta do módulo). Filial e centro ficam nos seletores do
   // topo — são o recorte, não o conteúdo.
@@ -432,6 +445,15 @@ export default function TelaOrcamento({
           </span>
         </p>
       ) : null}
+
+      <p className="orcamento-contexto">
+        Lançando: <strong>{contaAtiva}</strong>
+        {receitaAtiva ? (
+          <>
+            {" "}sobre <strong>{receitaAtiva}</strong>
+          </>
+        ) : null}
+      </p>
 
       <div className="orcamento-layout" data-paineis={paineis.length}>
         {/* Painéis lado a lado, como no Scoreplan: as dimensões que compõem a
