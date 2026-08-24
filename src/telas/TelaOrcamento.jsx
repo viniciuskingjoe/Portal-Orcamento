@@ -136,6 +136,27 @@ export default function TelaOrcamento({
   // sem trocar o que está em tela.
   const [editandoFormulaDe, setEditandoFormulaDe] = useState(null);
   const [funcEmEdicao, setFuncEmEdicao] = useState(false);
+  // Atalhos de teclado (Enter/Ctrl+D/Ctrl+Enter) nunca apareciam na tela —
+  // só em comentário de código — então quem digitava dúzias de células nunca
+  // descobria. A dica usa a faixa que já existe para `motivo` (mesmo espaço,
+  // já reservado) e some para sempre depois de vista uma vez: repetir a cada
+  // tela vira ruído pra quem já sabe.
+  const [atalhosVistos, setAtalhosVistos] = useState(() => {
+    try {
+      return localStorage.getItem("orcamento-atalhos-vistos") === "1";
+    } catch {
+      return false;
+    }
+  });
+
+  function dispensarAtalhos() {
+    setAtalhosVistos(true);
+    try {
+      localStorage.setItem("orcamento-atalhos-vistos", "1");
+    } catch {
+      /* modo privativo: só não persiste entre sessões */
+    }
+  }
 
   useEffect(() => {
     onEdicaoAuxiliarMudou?.(editandoFormulaDe != null || funcEmEdicao);
@@ -224,10 +245,17 @@ export default function TelaOrcamento({
               ? "Escolha uma conta na lista à esquerda para lançar o planejado."
               : percentual && filtros.receita === TODAS_AS_CONTAS
                 ? "Escolha também a receita sobre a qual o percentual incide."
-                // Pronto para lançar não precisa de aviso: a faixa só existe
-                // para dizer o que FALTA. Explicar o teclado a cada tela era
-                // ocupar espaço fixo com algo que se aprende na primeira vez.
                 : null;
+
+  // Pronto pra lançar e ninguém nunca disse que dá pra digitar sem tirar a
+  // mão do teclado: os atalhos só existiam em comentário de código. Some pra
+  // sempre depois de dispensado (`atalhosVistos`) — quem já sabe não precisa
+  // ver de novo em toda troca de conta/centro.
+  const dica =
+    motivo ??
+    (podeEditar && !atalhosVistos
+      ? "Enter edita a célula · Ctrl+D repete o mês de cima · Ctrl+Enter repete até dezembro"
+      : null);
 
   // As dimensões que compõem a célula, na ordem em que se escolhe: sobre o quê
   // (receita) e o quê (conta do módulo). Filial e centro ficam nos seletores do
@@ -352,7 +380,7 @@ export default function TelaOrcamento({
         ) : null}
 
         {/* A dica fecha a linha dos filtros: é sobre o que falta escolher neles. */}
-        <DicaEdicao>{motivo}</DicaEdicao>
+        <DicaEdicao onFechar={!motivo && dica ? dispensarAtalhos : undefined}>{dica}</DicaEdicao>
 
         {/* Digitar já grava no portal — este botão é outra coisa: manda o
             planejado para o orçamento do Linx, de onde o Power BI lê. Daí o
