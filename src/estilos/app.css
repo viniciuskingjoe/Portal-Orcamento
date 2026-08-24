@@ -424,7 +424,7 @@ button {
 }
 
 .botao--perigo {
-  background: var(--danger);
+  background: var(--danger-contraste);
   color: var(--on-dark);
 }
 
@@ -1549,7 +1549,7 @@ td.sem-contas {
 }
 
 .abas button.is-active {
-  background: var(--accent);
+  background: var(--accent-contraste);
   color: #fff;
 }
 
@@ -2871,7 +2871,7 @@ dialog::backdrop {
   min-width: 20px;
   padding: 1px 6px;
   border-radius: 999px;
-  background: var(--accent);
+  background: var(--accent-contraste);
   color: #fff;
   font-size: 10.5px;
   font-weight: 700;
@@ -3980,14 +3980,14 @@ dialog::backdrop {
 }
 
 .matriz-estado.is-ativo {
-  background: var(--accent);
+  background: var(--accent-contraste);
   color: #fff;
 }
 
 /* Edita é o estado que dá poder: cor própria para não se confundir com "vê"
    numa conferência rápida. */
 .matriz-linha--edita .matriz-estado.is-ativo {
-  background: var(--success);
+  background: var(--success-contraste);
 }
 
 .matriz-linha--nada .matriz-estado.is-ativo {

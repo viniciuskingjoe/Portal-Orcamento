@@ -14,20 +14,36 @@
   --surface-accent: #e8f0fc;
   --text: #17231f;
   --text-soft: #405048;
-  --text-faint: #7b8982;
-  --muted: #68766f;
+  /* --text-faint e --muted eram 3.66:1 e 4.50:1 sobre --surface-soft — abaixo
+     ou rente do mínimo AA de 4.5:1 pra texto pequeno, e são os tokens mais
+     repetidos do sistema (cabeçalho de tabela, rótulo de campo, metadado).
+     Escurecidos até passar com folga (achado do critique do Impeccable, P2). */
+  --text-faint: #66746d;
+  --muted: #5a6862;
   --border: #d7e2de;
   --border-strong: #bdccc6;
   --primary: #10201b;
   --primary-hover: #000000;
   --accent: #3f8ae0;
   --accent-soft: #e6effc;
+  /* Só para texto branco/claro sentado DIRETO sobre --accent (ex.: aba
+     ativa) — --accent puro dá 3.55:1 no claro, abaixo do mínimo de 4.5:1.
+     --accent continua sendo o token certo pra borda/ícone/link, onde o
+     contraste é contra o fundo neutro, não contra si mesmo. */
+  --accent-contraste: #2569b4;
   --warning: #b66a17;
   --warning-soft: #fff2dc;
   --danger: #b94a4a;
   --danger-soft: #fde9e9;
+  /* --danger/--success já servem de fundo sólido com --on-dark em cima
+     (botão perigo, estado "edita" da matriz de permissão) e passam no
+     claro — o contraste-safe é igual ao próprio token aqui, existe só pra o
+     tema escuro ter onde divergir sem os dois papéis (texto vs. fundo)
+     brigarem pelo mesmo valor. */
+  --danger-contraste: #b94a4a;
   --success: #227c5b;
   --success-soft: #e5f5ed;
+  --success-contraste: #227c5b;
   --info: #416b9b;
   --info-soft: #eaf1fa;
   --disabled-bg: #c9d3cf;
@@ -72,16 +88,29 @@
   --muted: #93a3ae;
   --border: #2c3841;
   --border-strong: #3d4c58;
-  --primary: #3f8ae0;
-  --primary-hover: #5b9de8;
+  /* Era #3f8ae0/#5b9de8: #fff em cima dava 3.55:1 no repouso e 2.83:1 no
+     hover, os dois abaixo do mínimo AA de 4.5:1 — pior que o próprio caso
+     que motivou o achado do critique (P2). Hover escurece (não clareia,
+     diferente do valor antigo) pra continuar passando — mesma convenção que
+     o tema claro já usa (--primary-hover lá também é mais escuro). */
+  --primary: #4570a4;
+  --primary-hover: #35577f;
   --accent: #6aa8f2;
   --accent-soft: #1e2f45;
+  /* Ver comentário do claro — --accent (#6aa8f2) dava só 2.47:1 com texto
+     branco em cima. */
+  --accent-contraste: #4570a4;
   --warning: #e0a25a;
   --warning-soft: #3a2c17;
   --danger: #e08585;
   --danger-soft: #3d2020;
+  /* --danger/--success no escuro são clareados pra servir de TEXTO sobre
+     fundo escuro (par com -soft) — como fundo sólido com #fff em cima
+     (botão perigo, matriz de permissão), davam 2.67:1/2.38:1. */
+  --danger-contraste: #a13f3f;
   --success: #5fb98f;
   --success-soft: #173024;
+  --success-contraste: #1c6e4f;
   --info: #7aa8dd;
   --info-soft: #1b2836;
   --disabled-bg: #2c3841;

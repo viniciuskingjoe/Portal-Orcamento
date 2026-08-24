@@ -1,0 +1,180 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-08-24T00:00:00.000Z",
+  "title": "Design System: Portal Orçamento",
+  "extensions": {
+    "colorMeta": {
+      "deep-ledger-black": {
+        "role": "primary",
+        "displayName": "Deep Ledger Black",
+        "canonical": "#0b0f0e",
+        "tonalRamp": ["#0b0f0e", "#141c1a", "#1e2926", "#253330", "#33443f", "#46584f", "#a3b3ac", "#e4ece8"]
+      },
+      "primary-action": {
+        "role": "primary",
+        "displayName": "Primary Action",
+        "canonical": "#10201b",
+        "tonalRamp": ["#0a1512", "#10201b", "#1a2f27", "#253f34", "#335042", "#4a6a58", "#8fa89a", "#dbe6de"]
+      },
+      "precision-blue": {
+        "role": "accent",
+        "displayName": "Precision Blue",
+        "canonical": "#3f8ae0",
+        "tonalRamp": ["#0a2748", "#123c6b", "#1a5590", "#1f63a8", "#2f78c4", "#3f8ae0", "#96c3f0", "#e6effc"]
+      },
+      "accent-contraste": {
+        "role": "accent",
+        "displayName": "Accent Contraste",
+        "canonical": "#2569b4",
+        "tonalRamp": ["#0a2748", "#123c6b", "#1a5590", "#2569b4", "#3f8ae0", "#6aa8f2", "#96c3f0", "#e6effc"]
+      },
+      "canvas-bg": {
+        "role": "neutral",
+        "displayName": "Canvas / Surface family",
+        "canonical": "#eef3f1",
+        "tonalRamp": ["#17231f", "#405048", "#68766f", "#7b8982", "#bdccc6", "#d7e2de", "#eef3f1", "#ffffff"]
+      },
+      "success": {
+        "role": "semantic",
+        "displayName": "Receita / Sucesso",
+        "canonical": "#227c5b",
+        "tonalRamp": ["#0e3527", "#164e3a", "#1c644a", "#227c5b", "#3a9c78", "#6dbb9e", "#a9d9c4", "#e5f5ed"]
+      },
+      "danger": {
+        "role": "semantic",
+        "displayName": "Despesa / Perigo",
+        "canonical": "#b94a4a",
+        "tonalRamp": ["#4a1414", "#6e1e1e", "#912828", "#b94a4a", "#cc6f6f", "#dd9494", "#eec0c0", "#fde9e9"]
+      },
+      "warning": {
+        "role": "semantic",
+        "displayName": "Aviso",
+        "canonical": "#b66a17",
+        "tonalRamp": ["#4a2a08", "#6e3f0c", "#915410", "#b66a17", "#d1893f", "#e0a866", "#f0cd9e", "#fff2dc"]
+      },
+      "info": {
+        "role": "semantic",
+        "displayName": "Informativo",
+        "canonical": "#416b9b",
+        "tonalRamp": ["#182838", "#233c54", "#2f5070", "#416b9b", "#6488b0", "#8ba7c6", "#b8cbdd", "#eaf1fa"]
+      }
+    },
+    "typographyMeta": {
+      "headline": { "displayName": "Headline", "purpose": "Título de página (h1 de cabecalho-pagina). Único texto com clamp()." },
+      "title": { "displayName": "Title", "purpose": "Título de seção, nome de card, cabeçalho de modal." },
+      "body": { "displayName": "Body", "purpose": "Texto corrido e conteúdo de célula (13px em tabela)." },
+      "label": { "displayName": "Label", "purpose": "Rótulo de campo, cabeçalho de tabela, chip — a voz de estrutura do sistema." },
+      "mono": { "displayName": "Mono", "purpose": "Código de conta ERP, expressão de fórmula." }
+    },
+    "shadows": [
+      { "name": "shadow-sm", "value": "0 1px 2px rgba(20,45,37,.05)", "purpose": "Elevação mínima — card de módulo." },
+      { "name": "shadow-panel", "value": "0 12px 28px rgba(16,43,35,.07), 0 1px 2px rgba(16,43,35,.05)", "purpose": "Peso padrão de superfície de conteúdo — card, lista, wrapper de tabela." },
+      { "name": "shadow-md", "value": "0 18px 42px rgba(22,57,47,.13)", "purpose": "Modal — a única superfície que cobre a página inteira." }
+    ],
+    "motion": [
+      { "name": "ease-componente", "value": "0.18s ease", "purpose": "Transição padrão de botão, card, nav-item." },
+      { "name": "ease-celula", "value": "0.14s ease", "purpose": "Transição de célula editável e alça de preenchimento — precisa ser mais rápida por ser feedback direto de interação." },
+      { "name": "ease-entrada", "value": "0.28s ease", "purpose": "Animação de entrada do conteúdo da página (fade + translateY(7px))." }
+    ],
+    "breakpoints": [
+      { "name": "painel-lateral", "value": "1180px" },
+      { "name": "sidebar-colapsa", "value": "900px" }
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "Ação de maior peso da tela — salvar, confirmar, criar.",
+      "html": "<button class=\"ds-btn-primary\">Salvar</button>",
+      "css": ".ds-btn-primary { min-height: 40px; padding: 0 17px; border: 1px solid transparent; border-radius: var(--radius-md); display: inline-flex; align-items: center; justify-content: center; gap: 8px; font-size: 13px; font-weight: 650; cursor: pointer; transition: 0.18s ease; background: var(--primary); color: var(--on-dark); } .ds-btn-primary:hover { background: var(--primary-hover); transform: translateY(-1px); } .ds-btn-primary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; } .ds-btn-primary:disabled { background: var(--disabled-bg); color: var(--disabled-fg); cursor: not-allowed; transform: none; }"
+    },
+    {
+      "name": "Secondary Button",
+      "kind": "button",
+      "refersTo": "button-secondary",
+      "description": "Ação alternativa — cancelar, voltar, fechar.",
+      "html": "<button class=\"ds-btn-secondary\">Cancelar</button>",
+      "css": ".ds-btn-secondary { min-height: 40px; padding: 0 17px; border: 1px solid var(--border-strong); border-radius: var(--radius-md); display: inline-flex; align-items: center; justify-content: center; gap: 8px; font-size: 13px; font-weight: 650; cursor: pointer; transition: 0.18s ease; background: transparent; color: var(--text); } .ds-btn-secondary:hover { background: var(--surface-hover); } .ds-btn-secondary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }"
+    },
+    {
+      "name": "Danger Button",
+      "kind": "button",
+      "refersTo": "button-danger",
+      "description": "Ação destrutiva — remover, apagar. Hover só clareia, não eleva.",
+      "html": "<button class=\"ds-btn-danger\">Remover</button>",
+      "css": ".ds-btn-danger { min-height: 40px; padding: 0 17px; border: 1px solid transparent; border-radius: var(--radius-md); display: inline-flex; align-items: center; justify-content: center; gap: 8px; font-size: 13px; font-weight: 650; cursor: pointer; transition: 0.18s ease; background: var(--danger); color: var(--on-dark); } .ds-btn-danger:hover { filter: brightness(1.08); } .ds-btn-danger:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }"
+    },
+    {
+      "name": "Chip Receita",
+      "kind": "chip",
+      "refersTo": "chip-receita",
+      "description": "Marca linha/módulo de receita. Par cor/fundo semântico, nunca decorativo.",
+      "html": "<span class=\"ds-chip ds-chip--receita\">Receita</span>",
+      "css": ".ds-chip { padding: 4px 11px; border-radius: 999px; font-size: 11.5px; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; } .ds-chip--receita { background: var(--success-soft); color: var(--success); }"
+    },
+    {
+      "name": "Chip Despesa",
+      "kind": "chip",
+      "refersTo": "chip-despesa",
+      "description": "Marca linha/módulo de despesa.",
+      "html": "<span class=\"ds-chip ds-chip--despesa\">Despesa</span>",
+      "css": ".ds-chip { padding: 4px 11px; border-radius: 999px; font-size: 11.5px; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; } .ds-chip--despesa { background: var(--danger-soft); color: var(--danger); }"
+    },
+    {
+      "name": "Nav Item (Sidebar)",
+      "kind": "nav",
+      "refersTo": "nav-item",
+      "description": "Item de navegação da sidebar. Estado ativo usa só cor + barra lateral de 3px, nunca troca de ícone/peso.",
+      "html": "<button class=\"ds-nav-item is-active\"><span>Planos Orçamentários</span></button>",
+      "css": ".ds-nav-item { display: flex; align-items: center; gap: 11px; width: 100%; padding: 11px 12px; border: 0; border-radius: 8px; background: transparent; color: var(--sidebar-text); font-size: 15px; font-weight: 700; text-align: left; cursor: pointer; transition: background 0.18s ease, color 0.18s ease; } .ds-nav-item:hover { background: var(--sidebar-hover); color: var(--on-dark); } .ds-nav-item.is-active { background: var(--sidebar-active); color: var(--on-dark); box-shadow: inset 3px 0 0 var(--sidebar-accent); }"
+    },
+    {
+      "name": "Card (Plano)",
+      "kind": "card",
+      "refersTo": "card-surface",
+      "description": "Container de conteúdo padrão — card de plano orçamentário, sobe 2px e borda vira accent no hover.",
+      "html": "<div class=\"ds-card\"><strong>Orçamento 2026</strong><small>Filial 000001 · 12 módulos</small></div>",
+      "css": ".ds-card { position: relative; border: 1px solid var(--border); border-radius: var(--radius-lg); background: var(--surface); box-shadow: var(--shadow-panel); padding: 18px 16px; transition: 0.18s ease; display: flex; flex-direction: column; gap: 3px; } .ds-card:hover { border-color: var(--accent); transform: translateY(-2px); } .ds-card strong { font-size: 15px; } .ds-card small { color: var(--muted); font-size: 12px; }"
+    },
+    {
+      "name": "Editable Table Cell",
+      "kind": "custom",
+      "refersTo": "input-field",
+      "description": "Componente assinatura: célula de tabela editável com alça de preenchimento estilo Excel — arrasta pra preencher células vizinhas.",
+      "html": "<div class=\"ds-celula\" tabindex=\"0\">1.250,00<span class=\"ds-alca\"></span></div>",
+      "css": ".ds-celula { position: relative; padding: 10px 14px; text-align: right; font-variant-numeric: tabular-nums; font-size: 13px; cursor: pointer; box-shadow: inset 0 0 0 1px transparent; transition: 0.14s ease; } .ds-celula:hover, .ds-celula:focus-visible { outline: none; background: var(--accent-soft); box-shadow: inset 0 0 0 1px var(--accent); } .ds-alca { position: absolute; right: -4px; bottom: -4px; width: 9px; height: 9px; border: 1px solid var(--surface); border-radius: 2px; background: var(--accent); opacity: 0; cursor: crosshair; transition: opacity 0.14s ease; } .ds-celula:hover .ds-alca, .ds-celula:focus-visible .ds-alca { opacity: 1; }"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Spreadsheet Native",
+    "overview": "Portal Orçamento se comporta como uma planilha que ganhou estrutura, RBAC e integração com ERP — não como um dashboard que aprendeu a mostrar números. Números tabulares alinhados à direita, células editáveis com alça de preenchimento estilo Excel, e uma hierarquia inteira construída em rótulos maiúsculos pequenos fazem o dado — não o cromo ao redor dele — ser o que o olho encontra primeiro. A sidebar preta fixa de 256px é a única superfície permanentemente escura do sistema, nos dois temas — ela é 'sala de comando', enquanto o conteúdo à direita é a 'mesa de trabalho' que muda de tema com o usuário. Um único azul (Precision Blue) carrega sozinho toda a cor interativa do sistema.",
+    "keyCharacteristics": [
+      "Densidade de planilha: tabelas com padding 10px 14px, texto de corpo em 13px, cabeçalho pegajoso.",
+      "Uma cor de ação (Precision Blue) para tudo que é interativo; cor semântica só onde o dado exige.",
+      "Flat em repouso — sombra aparece só quando algo flutua sobre o fundo, nunca como decoração de base.",
+      "Transições curtas e utilitárias (0.14s–0.18s ease), nunca ornamentais."
+    ],
+    "rules": [
+      { "name": "The One Signal Rule", "body": "Precision Blue é a única cor não-semântica do sistema. Nenhum outro elemento decorativo recebe cor própria.", "section": "colors" },
+      { "name": "The Primary Flip Rule", "body": "O botão primário muda de família de cor entre temas (quase-preto → azul); a identidade fixa (Deep Ledger Black) mora só na sidebar.", "section": "colors" },
+      { "name": "The Contrast-Safe Text Rule", "body": "Texto branco/claro nunca senta direto sobre --accent puro — usa --accent-contraste (mesma família, mais escura). --accent é pra ser fundo contra um elemento neutro (borda, ícone, link), não pra carregar texto em cima dele.", "section": "colors" },
+      { "name": "The Label-Is-Structure Rule", "body": "Rótulo uppercase pequeno com letter-spacing largo é o único recurso do sistema pra dizer 'isto é metadado, não conteúdo'.", "section": "typography" },
+      { "name": "The Floating-Only Shadow Rule", "body": "Se um elemento está no fluxo normal da página, ele não tem sombra. Sombra existe só para sinalizar que algo está por cima de outra coisa.", "section": "elevation" }
+    ],
+    "dos": [
+      "Do usar Precision Blue só em elementos interativos ou em foco.",
+      "Do manter rótulos de estrutura em uppercase 11.5–12px bold com letter-spacing largo.",
+      "Do reservar sombra pra superfícies que flutuam sobre a página.",
+      "Do manter os três raios ligados à escala de superfície: 6px controle pequeno, 8px botão/input, 12px contêiner de conteúdo."
+    ],
+    "donts": [
+      "Don't introduzir uma segunda cor de destaque.",
+      "Don't aplicar sombra em elementos de fluxo normal (linha de tabela, input, chip).",
+      "Don't usar borda tracejada fora do estado vazio.",
+      "Don't desabilitar um botão só com opacidade — precisa do par disabled-bg/disabled-fg + cursor not-allowed.",
+      "Don't cravar hex direto num componente novo — criar um token em tokens.css quando faltar um caso."
+    ]
+  }
+}
