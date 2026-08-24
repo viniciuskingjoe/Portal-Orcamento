@@ -51,6 +51,23 @@ export default function TelaListaErp({
   const marcadas = ativas ? new Set(ativas) : null;
   const estaAtiva = (id) => !marcadas || marcadas.has(id);
   const quantasAtivas = marcadas ? lista.filter((i) => marcadas.has(i.id)).length : lista.length;
+  const emFiltro = busca.trim().length > 0;
+
+  // "Marcar todas"/"Limpar" agiam sobre `lista` inteira mesmo filtrado — com
+  // uma filial buscada, marcar todas ativava as 37 da empresa toda, não só
+  // a que estava na tela. Agora operam só sobre `visiveis`: união pra marcar
+  // (preserva o que já estava ativo fora do filtro), subtração pra limpar.
+  function marcarVisiveis() {
+    const base = new Set(ativas ?? lista.map((item) => item.id));
+    visiveis.forEach((item) => base.add(item.id));
+    onDefinirAtivas(Array.from(base));
+  }
+
+  function limparVisiveis() {
+    const base = new Set(ativas ?? lista.map((item) => item.id));
+    visiveis.forEach((item) => base.delete(item.id));
+    onDefinirAtivas(Array.from(base));
+  }
 
   return (
     <main className="conteudo">
@@ -77,16 +94,16 @@ export default function TelaListaErp({
             <button
               type="button"
               className="botao botao--secundario botao--compacto"
-              onClick={() => onDefinirAtivas(lista.map((item) => item.id))}
+              onClick={marcarVisiveis}
             >
-              Marcar todas
+              {emFiltro ? `Marcar as ${visiveis.length} visíveis` : "Marcar todas"}
             </button>
             <button
               type="button"
               className="botao botao--secundario botao--compacto"
-              onClick={() => onDefinirAtivas([])}
+              onClick={limparVisiveis}
             >
-              Limpar
+              {emFiltro ? `Limpar as ${visiveis.length} visíveis` : "Limpar"}
             </button>
           </>
         ) : (

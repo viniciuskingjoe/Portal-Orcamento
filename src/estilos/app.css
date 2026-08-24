@@ -3428,9 +3428,17 @@ dialog::backdrop {
 /* Fundo ambiente, atrás do cartão — puramente decorativo, nunca intercepta
    clique/toque nem entra na ordem de foco. Fica em `position: fixed` de
    propósito: não precisa que `.tela-login` vire contexto de posicionamento,
-   e cobre a viewport mesmo se o conteúdo crescer além dela. */
+   e cobre a viewport mesmo se o conteúdo crescer além dela.
+
+   `z-index: 0` é obrigatório aqui, não decoração: elemento posicionado (que
+   `fixed` sempre é) pinta ACIMA de irmão em fluxo normal mesmo vindo antes
+   no DOM — sem isto os mostradores desenhavam por cima do cartão de login
+   (achado do critique do Impeccable, P1). Os três filhos em fluxo normal
+   (`.login-marca`, `.cartao-login`, `.login-rodape`) ganham `z-index: 1`
+   pra sempre vencer, com ou sem essa regra. */
 .painel-instrumentos {
   position: fixed;
+  z-index: 0;
   inset: 0;
   width: 100%;
   height: 100%;
@@ -3439,6 +3447,8 @@ dialog::backdrop {
 
 /* Marca acima do cartão, como nos outros portais AKR. */
 .login-marca {
+  position: relative;
+  z-index: 1;
   display: flex;
   align-items: center;
   gap: 14px;
@@ -3461,6 +3471,8 @@ dialog::backdrop {
 }
 
 .login-rodape {
+  position: relative;
+  z-index: 1;
   margin: 0;
   color: var(--text-faint, var(--muted));
   font-size: 11.5px;
@@ -3468,6 +3480,8 @@ dialog::backdrop {
 }
 
 .cartao-login {
+  position: relative;
+  z-index: 1;
   display: flex;
   flex-direction: column;
   gap: 16px;

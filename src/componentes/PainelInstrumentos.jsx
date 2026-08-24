@@ -10,6 +10,12 @@ import { useEffect, useRef } from "react";
 // com o cartão de login, que é o foco real da tela.
 const DURACAO_MS = 1200;
 
+// Abaixo disso o cartão de login ocupa quase a largura toda (ele já é
+// min(400px, 100%)) — não sobra "canto" nenhum pro mostrador ser ambiente
+// em vez de amontoado. Mesma linha que o resto do sistema usa pra "estreito
+// de verdade" (ver breakpoints em app.css).
+const LARGURA_MINIMA = 700;
+
 // Aproxima cubic-bezier(0.16, 1, 0.3, 1) — a mesma curva de chegada do resto
 // do sistema (--ease-standard), só que resolvida em JS porque Canvas não lê
 // CSS easing.
@@ -17,9 +23,11 @@ function chegadaConfiante(t) {
   return t >= 1 ? 1 : 1 - Math.pow(2, -10 * t);
 }
 
-// Três bancos de instrumento, ancorados nos cantos onde o cartão de login
-// não chega — em telas estreitas as posições fora da viewport simplesmente
-// não desenham (raio checa os limites), não precisa de outro layout.
+// Três bancos de instrumento, ancorados nos cantos. `posicaoAncora` sempre
+// prende o centro dentro da viewport (por isso não existe guarda de "centro
+// fora da tela" — nunca aconteceria, testar isso seria código morto). Quem
+// resolve tela estreita é `LARGURA_MINIMA`: abaixo dela o canvas não desenha
+// nada, então nunca chega a amontoar mostrador em cima do cartão.
 const MOSTRADORES = [
   { ancora: "inferior-esquerda", raio: 190, anguloRepouso: -35, anguloMax: 95, atraso: 0 },
   { ancora: "superior-direita", raio: 150, anguloRepouso: 20, anguloMax: 110, atraso: 90 },
@@ -117,10 +125,13 @@ export default function PainelInstrumentos() {
 
     function desenharFrame(progresso) {
       ctx.clearRect(0, 0, largura, altura);
+      // Redimensionou pra abaixo da linha de "estreito" no meio do
+      // self-test — fica só limpo, sem tentar encaixar mostrador onde não
+      // cabe ambiente nenhum.
+      if (largura < LARGURA_MINIMA) return;
+
       for (const mostrador of MOSTRADORES) {
         const [cx, cy] = posicaoAncora(mostrador.ancora, largura, altura, mostrador.raio);
-        // Fora da viewport (tela estreita) — não desenha, sem custo.
-        if (cx < -mostrador.raio || cx > largura + mostrador.raio) continue;
 
         const local = Math.min(
           1,
@@ -140,23 +151,19 @@ export default function PainelInstrumentos() {
       }
     }
 
+    function desenharRepouso() {
+      desenharFrame(1);
+    }
+
     ajustarTamanho();
 
     if (reduzMovimento) {
       // Sem varredura: desenha direto no repouso, sem loop de animação.
-      for (const mostrador of MOSTRADORES) {
-        const [cx, cy] = posicaoAncora(mostrador.ancora, largura, altura, mostrador.raio);
-        if (cx < -mostrador.raio || cx > largura + mostrador.raio) continue;
-        desenharMostrador(ctx, cx, cy, mostrador.raio, mostrador.anguloRepouso, cores);
-      }
+      desenharRepouso();
 
       const aoRedimensionar = () => {
         ajustarTamanho();
-        for (const mostrador of MOSTRADORES) {
-          const [cx, cy] = posicaoAncora(mostrador.ancora, largura, altura, mostrador.raio);
-          if (cx < -mostrador.raio || cx > largura + mostrador.raio) continue;
-          desenharMostrador(ctx, cx, cy, mostrador.raio, mostrador.anguloRepouso, cores);
-        }
+        desenharRepouso();
       };
       window.addEventListener("resize", aoRedimensionar);
       return () => window.removeEventListener("resize", aoRedimensionar);
@@ -182,7 +189,7 @@ export default function PainelInstrumentos() {
       // Só redesenha se o self-test já tiver acabado (durante ele, o
       // próprio loop já redesenha a cada frame).
       if (inicio !== null && performance.now() - inicio >= DURACAO_MS) {
-        desenharFrame(1);
+        desenharRepouso();
       }
     }
 
@@ -190,9 +197,19 @@ export default function PainelInstrumentos() {
       if (document.hidden) {
         ativo = false;
         if (quadro) cancelAnimationFrame(quadro);
-      } else if (inicio !== null && performance.now() - inicio < DURACAO_MS) {
+        return;
+      }
+      if (inicio === null) return;
+      const decorrido = performance.now() - inicio;
+      if (decorrido < DURACAO_MS) {
+        // Escondeu e voltou ainda dentro do self-test — retoma a varredura.
         ativo = true;
         quadro = requestAnimationFrame(passo);
+      } else {
+        // Escondeu e voltou depois do self-test já ter acabado — sem isto o
+        // canvas ficava congelado na última pose parcial desenhada antes de
+        // esconder, pra sempre (achado do critique do Impeccable).
+        desenharRepouso();
       }
     }
 
