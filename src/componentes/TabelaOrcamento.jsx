@@ -24,6 +24,10 @@ export default function TabelaOrcamento({
   percentual = false,
   podeEditar,
   editingCell,
+  // Ids (formato de `idDaCelula`) cuja última gravação falhou — fica marcada
+  // até a pessoa editar de novo, pra escrita otimista não deixar um número
+  // errado na tela sem aviso nenhum.
+  celulasFalhas,
   onIniciarEdicao,
   onAlterarEdicao,
   onConfirmarEdicao,
@@ -259,6 +263,7 @@ export default function TabelaOrcamento({
     const celulaId = idDaCelula(linha, campo);
     const emEdicao = editingCell?.id === celulaId;
     const editavel = podeEditar && indice >= 0;
+    const falhou = celulasFalhas?.has(celulaId);
     const formatarValor = campo === "reais" ? formatarMoeda : formatarPercentual;
 
     return (
@@ -273,10 +278,12 @@ export default function TabelaOrcamento({
         className={[
           editavel ? "celula-editavel" : "",
           noArrasto(indice) ? "is-preenchendo" : "",
+          falhou && !emEdicao ? "celula-editavel--falhou" : "",
         ]
           .filter(Boolean)
           .join(" ")}
         tabIndex={editavel && !emEdicao ? 0 : undefined}
+        aria-invalid={falhou && !emEdicao ? true : undefined}
         onClick={editavel && !emEdicao ? () => irPara(indice, campo) : undefined}
         onKeyDown={
           editavel && !emEdicao
@@ -284,11 +291,13 @@ export default function TabelaOrcamento({
             : undefined
         }
         title={
-          editavel
-            ? campo === "reais" && percentual
-              ? "Digite o valor: o percentual é calculado sobre a receita do mês"
-              : "Clique ou tecle Enter para editar"
-            : undefined
+          falhou && !emEdicao
+            ? "Não foi salvo — clique ou tecle Enter para editar e tentar de novo"
+            : editavel
+              ? campo === "reais" && percentual
+                ? "Digite o valor: o percentual é calculado sobre a receita do mês"
+                : "Clique ou tecle Enter para editar"
+              : undefined
         }
       >
         {/* A alça só existe fora da edição: durante a digitação o canto da

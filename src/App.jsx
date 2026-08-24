@@ -174,6 +174,11 @@ function PlanejamentoOrcamentario({ sessao, onSair }) {
   const [filtros, setFiltros] = useState(FILTROS_PADRAO);
   const [editingCell, setEditingCell] = useState(null);
   const [avisoPersistencia, setAvisoPersistencia] = useState("");
+  // Células do orçamento cuja última gravação falhou — ficam marcadas na
+  // tabela até a pessoa editar de novo, porque escrita otimista sem isso
+  // deixa um número errado na tela sem ninguém saber que ele não existe no
+  // banco (achado do critique do Impeccable, P0).
+  const [celulasFalhas, setCelulasFalhas] = useState(() => new Set());
   const [avisoPublicacao, setAvisoPublicacao] = useState("");
   const [publicando, setPublicando] = useState(null);
   const [mostrarInativos, setMostrarInativos] = useState(false);
@@ -362,17 +367,20 @@ function PlanejamentoOrcamentario({ sessao, onSair }) {
   // A tela é otimista: aplica a mudança e grava em seguida. Quem digita doze
   // meses seguidos não pode esperar ida e volta a cada tecla — mas se a gravação
   // falhar, o aviso precisa aparecer, porque o que está na tela deixou de valer.
-  function gravar(promessa) {
+  // `opts.aoFalhar`/`opts.mensagemDeErro` são só para quem precisa reagir à
+  // falha além do aviso genérico (hoje, só o planejado — ver `gravarPlanejado`).
+  function gravar(promessa, opts = {}) {
     // Conta as gravações em voo para a atualização de fundo não ler o banco no
     // meio de uma e trazer o valor antigo de volta.
     gravacoesEmVoo.current += 1;
     Promise.resolve(promessa)
       .then(() => setAvisoPersistencia(""))
-      .catch((erro) =>
+      .catch((erro) => {
         setAvisoPersistencia(
-          `Não foi possível salvar: ${erro.message} Recarregue a página para ver o que está gravado.`
-        )
-      )
+          opts.mensagemDeErro?.(erro) ?? `Não foi possível salvar: ${erro.message}`
+        );
+        opts.aoFalhar?.(erro);
+      })
       .finally(() => {
         gravacoesEmVoo.current -= 1;
       });
@@ -896,6 +904,16 @@ function PlanejamentoOrcamentario({ sessao, onSair }) {
     );
   }
 
+  // Mesmo prefixo que TelaOrcamento.jsx monta para `prefixoCelula` — precisa
+  // bater exatamente com o id que TabelaOrcamento gera em `idDaCelula`, senão
+  // a marca de falha nunca encontra a célula na tela. Os dois campos (reais e
+  // percentual) marcam juntos: num módulo percentual são as duas faces do
+  // mesmo lançamento do mês.
+  function celulasDoMes(mes) {
+    const prefixo = `${moduloDaTela.id}|${filtros.filial}|${filtros.centro}|${filtros.conta}|${filtros.receita}`;
+    return [`${prefixo}|${mes}|reais`, `${prefixo}|${mes}|percentual`];
+  }
+
   function podeGravar() {
     return (
       planoAtivo &&
@@ -906,7 +924,12 @@ function PlanejamentoOrcamentario({ sessao, onSair }) {
     );
   }
 
-  function gravarPlanejado(alteracoes) {
+  // `celulasAfetadas` são os ids no formato do TabelaOrcamento
+  // (`prefixoCelula|mes|campo`, ver `idDaCelula` em TabelaOrcamento.jsx e o
+  // `prefixoCelula` montado em TelaOrcamento.jsx) — servem só para marcar/
+  // desmarcar a célula errada na tela se ESTA gravação falhar; o dado em si
+  // já usa a chave de `chaveDoFiltro`, que é outra.
+  function gravarPlanejado(alteracoes, celulasAfetadas = []) {
     setPlanos((atuais) =>
       atuais.map((plano) =>
         plano.id === planoAtivoId
@@ -914,13 +937,32 @@ function PlanejamentoOrcamentario({ sessao, onSair }) {
           : plano
       )
     );
+    // Editar de novo já é a tentativa de novo: limpa a marca de falha antes
+    // de saber o resultado desta gravação, e só marca de volta se ela também
+    // falhar — assim a célula não fica presa em vermelho depois de corrigida.
+    if (celulasAfetadas.length) {
+      setCelulasFalhas((atuais) => {
+        if (!atuais.size) return atuais;
+        const proximo = new Set(atuais);
+        celulasAfetadas.forEach((id) => proximo.delete(id));
+        return proximo;
+      });
+    }
     // Um lote só: a alça e o Ctrl+Enter mexem em até doze meses de uma vez, e
     // doze requisições dariam doze chances de gravar metade.
     gravar(
       repo.plano.planejado(
         planoAtivoId,
         Object.entries(alteracoes).map(([chave, valor]) => celulaDaChave(chave, valor))
-      )
+      ),
+      celulasAfetadas.length
+        ? {
+            aoFalhar: () =>
+              setCelulasFalhas((atuais) => new Set([...atuais, ...celulasAfetadas])),
+            mensagemDeErro: (erro) =>
+              `Não foi possível salvar: ${erro.message} A célula fica marcada em vermelho na tabela — edite ela de novo para tentar salvar.`,
+          }
+        : undefined
     );
   }
 
@@ -959,6 +1001,7 @@ function PlanejamentoOrcamentario({ sessao, onSair }) {
 
   const edicao = {
     editingCell,
+    celulasFalhas,
     // `valor` em texto entra cru: é o dígito que abriu a edição, e formatá-lo
     // como número o transformaria em outra coisa.
     onIniciarEdicao: (id, valor, mes, emReais = false) =>
@@ -994,7 +1037,7 @@ function PlanejamentoOrcamentario({ sessao, onSair }) {
           base: basePorMes.get(mes),
         });
       });
-      gravarPlanejado(alteracoes);
+      gravarPlanejado(alteracoes, meses.flatMap(celulasDoMes));
       setEditingCell(null);
     },
 
@@ -1002,7 +1045,7 @@ function PlanejamentoOrcamentario({ sessao, onSair }) {
     onCopiarDeCima: (mes) => {
       if (!podeGravar() || mes <= 1) return;
       const acima = planoAtivo.planejado[chaveDoFiltro(mes - 1)] ?? 0;
-      gravarPlanejado({ [chaveDoFiltro(mes)]: acima });
+      gravarPlanejado({ [chaveDoFiltro(mes)]: acima }, celulasDoMes(mes));
     },
 
     // Alça de preenchimento: repete o valor do mês de origem em toda a faixa
@@ -1014,11 +1057,12 @@ function PlanejamentoOrcamentario({ sessao, onSair }) {
       const inicio = Math.min(mesOrigem, mesFinal);
       const fim = Math.max(mesOrigem, mesFinal);
 
+      const mesesAfetados = MESES.filter((mes) => mes >= inicio && mes <= fim);
       const alteracoes = {};
-      MESES.filter((mes) => mes >= inicio && mes <= fim).forEach((mes) => {
+      mesesAfetados.forEach((mes) => {
         alteracoes[chaveDoFiltro(mes)] = valor;
       });
-      gravarPlanejado(alteracoes);
+      gravarPlanejado(alteracoes, mesesAfetados.flatMap(celulasDoMes));
     },
   };
 
@@ -1367,8 +1411,11 @@ function PlanejamentoOrcamentario({ sessao, onSair }) {
       />
 
       <div className="area-conteudo">
+        {/* Falha de gravação é diferente de aviso informativo — precisa
+            interromper leitor de tela (alert, não status) e parecer erro de
+            verdade, não um lembrete qualquer. */}
         {avisoPersistencia ? (
-          <p className="aviso-fixo" role="status">
+          <p className="aviso-fixo aviso-fixo--erro" role="alert">
             {avisoPersistencia}
           </p>
         ) : null}
