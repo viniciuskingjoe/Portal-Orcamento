@@ -309,10 +309,30 @@ Flat-by-default. Tabela, input, chip e nav-item não têm sombra nenhuma — a
   o único elemento que se sobrepõe à página inteira (`<dialog>` +
   `::backdrop`), precisa da sombra mais forte do sistema.
 
+### Motion
+
+Uma curva só para chegada: `--ease-standard`
+(`cubic-bezier(0.16, 1, 0.3, 1)`), aplicada onde algo entra ou aparece —
+conteúdo de página, hover de card/botão, abertura de modal/drawer. Micro-
+transição de feedback imediato (checkbox, chip, seta de disclosure) continua
+em `ease` simples — desaceleração autoral é pra chegada, não pra resposta
+instantânea. `<dialog>` (modal e drawer) e o backdrop abrem com
+`@starting-style`/`allow-discrete`, sem JavaScript; card de grade
+(`.grid-planos`, `.grid-modulos`) chega escalonado, tampado no 6º item pra
+não atrasar quem tem grade grande. Todo botão tem `:active` (`scale(0.98)`,
+`0.92` em ícone) — antes desta passada não existia nenhum estado de toque
+real no sistema.
+
 ### Named Rules
 **The Floating-Only Shadow Rule.** Se um elemento está no fluxo normal da
 página (tabela, input, badge), ele não tem sombra. Sombra existe só para
 sinalizar "isto está por cima de outra coisa".
+
+**The Arrival-Only Curve Rule.** `--ease-standard` é reservado pra
+transições de chegada (entrada, hover, abertura) — feedback instantâneo
+(clique, marcação de checkbox) usa `ease` simples de propósito, porque
+desaceleração autoral em uma resposta que precisa ser imediata lê como
+atraso, não como polish.
 
 ## Shapes
 

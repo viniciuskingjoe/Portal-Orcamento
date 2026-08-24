@@ -301,7 +301,7 @@ button {
   width: min(1420px, calc(100% - 64px));
   margin: 0 auto;
   padding: 40px 0 56px;
-  animation: entrada 0.28s ease both;
+  animation: entrada 0.28s var(--ease-standard) both;
 }
 
 .conteudo--planos {
@@ -319,6 +319,19 @@ button {
   }
 }
 
+/* Versão menor da mesma chegada, pra item de grade (card) — deslocamento
+   discreto pra não competir com o fade da página em volta dele. */
+@keyframes entrada-item {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
 .aviso-fixo {
   margin: 0;
   padding: 11px 32px;
@@ -327,6 +340,7 @@ button {
   border-bottom: 1px solid var(--border);
   font-size: 13px;
   font-weight: 600;
+  animation: entrada-item 0.22s var(--ease-standard) both;
 }
 
 /* Falha de gravação não é aviso — é erro de verdade (a tela ficou com um
@@ -377,13 +391,17 @@ button {
   background: var(--surface);
   color: var(--text-soft);
   cursor: pointer;
-  transition: 0.18s ease;
+  transition: 0.18s var(--ease-standard);
 }
 
 .botao-voltar:hover {
   border-color: var(--accent);
   color: var(--accent);
   transform: translateX(-2px);
+}
+
+.botao-voltar:active {
+  transform: translateX(-2px) scale(0.94);
 }
 
 /* ==========================================================================
@@ -402,7 +420,7 @@ button {
   font-size: 13px;
   font-weight: 650;
   cursor: pointer;
-  transition: 0.18s ease;
+  transition: 0.18s var(--ease-standard);
 }
 
 .botao--primario {
@@ -432,6 +450,13 @@ button {
 
 .botao--perigo:hover:not(:disabled) {
   filter: brightness(1.08);
+}
+
+/* Feedback de toque real: o botão responde ao clique em si, não só ao
+   soltar. Depois de todos os `:hover` na cascata pra vencer empate de
+   especificidade quando hover e active coincidem (o caso normal de clicar). */
+.botao:active:not(:disabled) {
+  transform: translateY(0) scale(0.98);
 }
 
 /* Botão desabilitado tem que PARECER desabilitado (PADRAO §4). */
@@ -466,6 +491,10 @@ button {
   background: var(--danger-soft);
   border-color: var(--danger);
   color: var(--danger);
+}
+
+.botao-icone:active:not(:disabled) {
+  transform: scale(0.92);
 }
 
 .botao-icone:disabled {
@@ -540,13 +569,29 @@ button {
   gap: 16px;
 }
 
+/* Entrada escalonada — é uma lista de planos aparecendo como lista, não
+   decoração de scroll. Delay tampado no 6º card pra não fazer quem tem
+   uma grade grande esperar a fileira de baixo aparecer. */
+.grid-planos .card-plano {
+  animation: entrada-item 0.32s var(--ease-standard) both;
+}
+.grid-planos .card-plano:nth-child(2) { animation-delay: 0.03s; }
+.grid-planos .card-plano:nth-child(3) { animation-delay: 0.06s; }
+.grid-planos .card-plano:nth-child(4) { animation-delay: 0.09s; }
+.grid-planos .card-plano:nth-child(5) { animation-delay: 0.12s; }
+.grid-planos .card-plano:nth-child(n + 6) { animation-delay: 0.15s; }
+
 .card-plano {
   position: relative;
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
   background: var(--surface);
   box-shadow: var(--shadow-panel);
-  transition: 0.18s ease;
+  transition: 0.18s var(--ease-standard);
+}
+
+.card-plano:active {
+  transform: translateY(0) scale(0.99);
 }
 
 .card-plano:hover {
@@ -648,6 +693,17 @@ button {
   gap: 14px;
 }
 
+/* Mesmo raciocínio de .grid-planos: módulos da Home/Configurações chegam
+   como lista, escalonado e tampado no 6º item. */
+.grid-modulos .card-modulo {
+  animation: entrada-item 0.32s var(--ease-standard) both;
+}
+.grid-modulos .card-modulo:nth-child(2) { animation-delay: 0.03s; }
+.grid-modulos .card-modulo:nth-child(3) { animation-delay: 0.06s; }
+.grid-modulos .card-modulo:nth-child(4) { animation-delay: 0.09s; }
+.grid-modulos .card-modulo:nth-child(5) { animation-delay: 0.12s; }
+.grid-modulos .card-modulo:nth-child(n + 6) { animation-delay: 0.15s; }
+
 .grid-modulos--config {
   grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
 }
@@ -669,13 +725,17 @@ button {
   box-shadow: var(--shadow-sm);
   text-align: left;
   cursor: pointer;
-  transition: 0.18s ease;
+  transition: 0.18s var(--ease-standard);
 }
 
 .card-modulo:hover:not(:disabled) {
   border-color: var(--accent);
   background: var(--surface-tint);
   transform: translateY(-2px);
+}
+
+.card-modulo:active:not(:disabled) {
+  transform: translateY(0) scale(0.99);
 }
 
 /* Módulo sem contas na visão não é clicável — e tem que parecer. */
@@ -1961,12 +2021,24 @@ dialog {
   border: 0;
   padding: 0;
   color: var(--text);
+  /* `display`/`overlay` não são animáveis por padrão — allow-discrete deixa
+     o navegador manter o modal no top layer durante a transição de saída
+     em vez de sumir no frame seguinte ao fechar. Sem JS, só CSS moderno. */
+  transition: display var(--duration-base) allow-discrete, overlay var(--duration-base) allow-discrete;
 }
 
 /* ::backdrop nem sempre herda as variáveis do elemento de origem — o fallback
    garante o scrim em navegadores onde var(--overlay) não resolve ali. */
 dialog::backdrop {
   background: var(--overlay, rgba(12, 27, 22, 0.5));
+  opacity: 1;
+  transition: opacity var(--duration-base) var(--ease-standard), display var(--duration-base) allow-discrete, overlay var(--duration-base) allow-discrete;
+}
+
+@starting-style {
+  dialog[open]::backdrop {
+    opacity: 0;
+  }
 }
 
 /* A largura vem do componente via --modal-largura; fixar 620px aqui anulava a
@@ -1980,6 +2052,20 @@ dialog::backdrop {
   border-radius: var(--radius-lg);
   background: var(--surface);
   box-shadow: var(--shadow-md);
+  opacity: 1;
+  transform: scale(1) translateY(0);
+  transition: opacity var(--duration-base) var(--ease-standard),
+    transform var(--duration-base) var(--ease-standard);
+}
+
+/* Navegador sem suporte a @starting-style simplesmente ignora o bloco: o
+   modal só perde a chegada, continua abrindo normalmente (progressive
+   enhancement, sem dependência de JS). */
+@starting-style {
+  .modal[open] {
+    opacity: 0;
+    transform: scale(0.96) translateY(8px);
+  }
 }
 
 /* Formulário dentro do <dialog>: precisa esticar para o rodapé ficar no fim. */
@@ -2976,6 +3062,16 @@ dialog::backdrop {
   background: var(--surface);
   border-left: 1px solid var(--border);
   box-shadow: var(--shadow-md);
+  /* Desliza da borda por onde ele já mora (direita) — não é o mesmo gesto
+     de escala/fade do .modal central, é entrada de painel lateral. */
+  transform: translateX(0);
+  transition: transform var(--duration-base) var(--ease-standard);
+}
+
+@starting-style {
+  .drawer[open] {
+    transform: translateX(100%);
+  }
 }
 
 .drawer__form {

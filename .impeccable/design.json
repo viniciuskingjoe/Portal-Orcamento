@@ -73,9 +73,14 @@
       { "name": "shadow-md", "value": "0 18px 42px rgba(22,57,47,.13)", "purpose": "Modal — a única superfície que cobre a página inteira." }
     ],
     "motion": [
-      { "name": "ease-componente", "value": "0.18s ease", "purpose": "Transição padrão de botão, card, nav-item." },
-      { "name": "ease-celula", "value": "0.14s ease", "purpose": "Transição de célula editável e alça de preenchimento — precisa ser mais rápida por ser feedback direto de interação." },
-      { "name": "ease-entrada", "value": "0.28s ease", "purpose": "Animação de entrada do conteúdo da página (fade + translateY(7px))." }
+      { "name": "--ease-standard", "value": "cubic-bezier(0.16, 1, 0.3, 1)", "purpose": "Token real (tokens.css) — chegada confiante para entrada de conteúdo, hover de card/botão, abertura de modal/drawer. Não muda por tema." },
+      { "name": "--duration-base", "value": "0.22s", "purpose": "Token real (tokens.css) — duração padrão de modal, drawer, item de stagger." },
+      { "name": "ease-componente", "value": "0.18s var(--ease-standard)", "purpose": "Transição padrão de botão, card, nav-item." },
+      { "name": "ease-celula", "value": "0.14s ease", "purpose": "Transição de célula editável e alça de preenchimento — continua em ease simples: feedback imediato, não chegada autoral." },
+      { "name": "ease-entrada", "value": "0.28s var(--ease-standard)", "purpose": "Animação de entrada do conteúdo da página (fade + translateY(7px))." },
+      { "name": "entrada-item-stagger", "value": "0.32s var(--ease-standard), delay escalonado 0-0.15s tampado no 6º item", "purpose": "Cards de .grid-planos/.grid-modulos chegam como lista, um após o outro, não todos de uma vez." },
+      { "name": "modal-starting-style", "value": "@starting-style + allow-discrete, sem JS", "purpose": "Modal (escala+fade), drawer (desliza da direita) e backdrop (fade) abrem com chegada — antes disso apareciam instantâneos." },
+      { "name": "botao-active", "value": "scale(0.98) / scale(0.92) em ícone", "purpose": "Feedback de toque real — sistema não tinha nenhum estado :active antes desta passada." }
     ],
     "breakpoints": [
       { "name": "painel-lateral", "value": "1180px" },

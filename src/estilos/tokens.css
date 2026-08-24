@@ -59,6 +59,14 @@
   --radius-lg: 12px;
   --sidebar-width: 256px;
 
+  /* Curva de chegada confiante — pra entrada de conteúdo, hover de card e
+     abertura de modal. As micro-transições rápidas (checkbox, chip, seta de
+     disclosure) continuam em `ease` simples: feedback imediato não precisa
+     de desaceleração autoral, só as chegadas precisam. Mesma curva nos dois
+     temas — não é cor, não muda com o tema. */
+  --ease-standard: cubic-bezier(0.16, 1, 0.3, 1);
+  --duration-base: 0.22s;
+
   /* A sidebar é preta nos dois temas, então seus tons não pertencem ao par
      claro/escuro — ficam fora do bloco [data-theme]. */
   --sidebar-accent: #6aa8f2;
