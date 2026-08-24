@@ -179,6 +179,13 @@ function PlanejamentoOrcamentario({ sessao, onSair }) {
   // deixa um número errado na tela sem ninguém saber que ele não existe no
   // banco (achado do critique do Impeccable, P0).
   const [celulasFalhas, setCelulasFalhas] = useState(() => new Set());
+  // Rede de segurança só pra gravação em LOTE (alça de preenchimento,
+  // Ctrl+Enter) — é o único gesto do sistema que sobrescreve várias células
+  // de uma tecla/arrasto só, sem confirmação. Edição rotineira de uma
+  // célula não oferece desfazer: já é certa por natureza, oferecer isso
+  // toda hora viraria ruído (achado do critique do Impeccable, P1).
+  const [loteParaDesfazer, setLoteParaDesfazer] = useState(null);
+  const cronometroDesfazerRef = useRef(null);
   const [avisoPublicacao, setAvisoPublicacao] = useState("");
   const [publicando, setPublicando] = useState(null);
   const [mostrarInativos, setMostrarInativos] = useState(false);
@@ -966,6 +973,45 @@ function PlanejamentoOrcamentario({ sessao, onSair }) {
     );
   }
 
+  // Guarda o valor de ANTES de uma gravação em lote, pra oferecer desfazer.
+  // Precisa ser chamado antes de `gravarPlanejado` aplicar o otimista —
+  // depois disso `planoAtivo.planejado` já é o valor novo.
+  function ofertarDesfazer(alteracoes, celulasAfetadas) {
+    const chaves = Object.keys(alteracoes);
+    if (chaves.length < 2) return; // uma célula só é edição de rotina, não lote
+
+    const anteriores = {};
+    chaves.forEach((chave) => {
+      anteriores[chave] = planoAtivo.planejado[chave] ?? null;
+    });
+
+    if (cronometroDesfazerRef.current) clearTimeout(cronometroDesfazerRef.current);
+    setLoteParaDesfazer({ anteriores, celulasAfetadas, quantidade: chaves.length });
+    cronometroDesfazerRef.current = setTimeout(() => setLoteParaDesfazer(null), 10000);
+  }
+
+  function desfazerLote() {
+    if (!loteParaDesfazer) return;
+    if (cronometroDesfazerRef.current) clearTimeout(cronometroDesfazerRef.current);
+    gravarPlanejado(loteParaDesfazer.anteriores, loteParaDesfazer.celulasAfetadas);
+    setLoteParaDesfazer(null);
+  }
+
+  // Ctrl+Z só faz algo enquanto há lote pra desfazer — fora disso é uma
+  // tecla que o navegador já trata (desfazer de campo de texto nativo).
+  useEffect(() => {
+    if (!loteParaDesfazer) return undefined;
+    function aoTeclar(evento) {
+      if ((evento.ctrlKey || evento.metaKey) && evento.key.toLowerCase() === "z") {
+        evento.preventDefault();
+        desfazerLote();
+      }
+    }
+    window.addEventListener("keydown", aoTeclar);
+    return () => window.removeEventListener("keydown", aoTeclar);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loteParaDesfazer]);
+
   // Quantidade de funcionários. Mapa à parte do planejado: gente e reais não
   // podem cair na mesma soma por descuido.
   //
@@ -1037,6 +1083,7 @@ function PlanejamentoOrcamentario({ sessao, onSair }) {
           base: basePorMes.get(mes),
         });
       });
+      if (replicar) ofertarDesfazer(alteracoes, meses.flatMap(celulasDoMes));
       gravarPlanejado(alteracoes, meses.flatMap(celulasDoMes));
       setEditingCell(null);
     },
@@ -1062,6 +1109,7 @@ function PlanejamentoOrcamentario({ sessao, onSair }) {
       mesesAfetados.forEach((mes) => {
         alteracoes[chaveDoFiltro(mes)] = valor;
       });
+      ofertarDesfazer(alteracoes, mesesAfetados.flatMap(celulasDoMes));
       gravarPlanejado(alteracoes, mesesAfetados.flatMap(celulasDoMes));
     },
   };
@@ -1417,6 +1465,20 @@ function PlanejamentoOrcamentario({ sessao, onSair }) {
         {avisoPersistencia ? (
           <p className="aviso-fixo aviso-fixo--erro" role="alert">
             {avisoPersistencia}
+            <button type="button" className="botao-texto" onClick={() => setAvisoPersistencia("")}>
+              Fechar
+            </button>
+          </p>
+        ) : null}
+        {/* Só pra gravação em lote (alça/Ctrl+Enter) — edição de uma célula
+            não oferece desfazer, ver comentário de ofertarDesfazer. Canto,
+            some sozinho — padrão de toast do PADRAO-PROJETOS-AKR.md §4. */}
+        {loteParaDesfazer ? (
+          <p className="toast-desfazer" role="status">
+            {loteParaDesfazer.quantidade} meses preenchidos.
+            <button type="button" className="botao-texto" onClick={desfazerLote}>
+              Desfazer
+            </button>
           </p>
         ) : null}
         {/* Some ao fechar: publicar é ação pontual, e um aviso de sucesso que

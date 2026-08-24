@@ -349,7 +349,14 @@ button {
   }
 }
 
+/* Sticky: o antigo ficava no fluxo normal e sumia da tela rolando uma
+   tabela de 12+ linhas — uma causa permanente (ERP fora do ar, sem
+   permissão) deixava a barra de erro presa fora de vista pra sempre
+   (achado do critique do Impeccable, P1). */
 .aviso-fixo {
+  position: sticky;
+  top: 0;
+  z-index: 5;
   margin: 0;
   padding: 11px 32px;
   background: var(--warning-soft);
@@ -358,6 +365,46 @@ button {
   font-size: 13px;
   font-weight: 600;
   animation: entrada-item 0.22s var(--ease-standard) both;
+}
+
+.aviso-fixo .botao-texto {
+  margin-left: 12px;
+}
+
+/* Toast de desfazer — canto, some sozinho (padrão PADRAO-PROJETOS-AKR.md
+   §4: "canto, empilháveis, auto-somem. Bom para confirmação"). Só existe
+   pra gravação em lote (ver ofertarDesfazer em App.jsx); por isso fundo
+   forte — é a única superfície do sistema que precisa competir com uma
+   tabela cheia de números pra ser vista antes dos 10s acabarem. */
+.toast-desfazer {
+  position: fixed;
+  right: 24px;
+  bottom: 24px;
+  z-index: 40;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin: 0;
+  padding: 12px 16px;
+  border-radius: var(--radius-md);
+  background: var(--primary);
+  color: var(--on-dark);
+  font-size: 13px;
+  font-weight: 600;
+  box-shadow: var(--shadow-md);
+  animation: entrada-item 0.22s var(--ease-standard) both;
+}
+
+.toast-desfazer .botao-texto {
+  margin-left: 8px;
+  color: var(--on-dark);
+  font-weight: 700;
+  text-decoration: underline;
+}
+
+.toast-desfazer .botao-texto:hover:not(:disabled) {
+  color: var(--on-dark);
+  opacity: 0.85;
 }
 
 /* Falha de gravação não é aviso — é erro de verdade (a tela ficou com um
