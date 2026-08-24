@@ -240,8 +240,13 @@ export default function TelaDre({
     [meses, plano.ano]
   );
 
-  const grupo = grupos.find((item) => item.id === grupoId) ?? null;
-  const centrosPermitidos = grupo ? new Set(grupo.centros) : null;
+  const grupo = useMemo(() => grupos.find((item) => item.id === grupoId) ?? null, [grupos, grupoId]);
+  // `new Set(...)` sem memo criava uma referência nova a cada render, então
+  // o useMemo de `blocos` (que depende de centrosPermitidos) nunca batia o
+  // cache com um grupo ativo — calcularDre rodava de novo pra cada filial ×
+  // 12 meses até em cliques sem relação nenhuma, como expandir uma linha
+  // (achado do critique do Impeccable, P2).
+  const centrosPermitidos = useMemo(() => (grupo ? new Set(grupo.centros) : null), [grupo]);
 
   // Fórmula entre linhas referencia sinal por módulo (a mesma conta não muda
   // de módulo entre linhas), então o sinal de todos os módulos usados pode
