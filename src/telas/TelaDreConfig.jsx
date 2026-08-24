@@ -554,8 +554,16 @@ export default function TelaDreConfig({
                       definicaoDoModulo(linha.moduloId)?.titulo ?? linha.moduloId
                     )}
                   </td>
-                  <td>{linha.mostra ? <Icone nome="check" tamanho={15} /> : null}</td>
-                  <td>{linha.destaca ? <Icone nome="check" tamanho={15} /> : null}</td>
+                  {/* Icone.jsx é sempre aria-hidden — sem o texto oculto, "sim"
+                      e "não" viram a mesma célula vazia pra leitor de tela. */}
+                  <td>
+                    <span className="sr-only">{linha.mostra ? "Sim" : "Não"}</span>
+                    {linha.mostra ? <Icone nome="check" tamanho={15} /> : null}
+                  </td>
+                  <td>
+                    <span className="sr-only">{linha.destaca ? "Sim" : "Não"}</span>
+                    {linha.destaca ? <Icone nome="check" tamanho={15} /> : null}
+                  </td>
                   <td>
                     <BotoesMover
                       podeSubir={indice > 0}
