@@ -1755,7 +1755,7 @@ td.sem-contas {
   background: var(--surface-soft);
 }
 
-.tabela-dre .linha-dre--destaque .tabela-dre__descricao {
+.tabela-dre .linha-dre--resultado .tabela-dre__descricao {
   background: var(--surface-accent);
 }
 
@@ -1842,12 +1842,34 @@ td.sem-contas {
   border-top: 1px solid var(--border-strong);
 }
 
+/* O resultado do demonstrativo — a linha que a DRE existe para responder.
+   --accent fica reservado para o que é de fato clicável (`.link-modulo`);
+   uma linha de resultado quase nunca é clicável, então pintá-la de azul
+   sugeria falsamente que era link. */
+.tabela-dre .linha-dre--resultado th,
+.tabela-dre .linha-dre--resultado td {
+  background: var(--surface-accent);
+  color: var(--text);
+  border-top: 2px solid var(--border-strong);
+  font-weight: 700;
+  font-size: 13.5px;
+}
+
+/* Subtotal fecha um bloco antes do resultado (ex.: Receita líquida = Receita
+   − Deduções) — mesma régua do resultado, mas sem o fundo/peso extra: marca
+   "aqui a conta virou soma", sem competir com a linha final. */
+.tabela-dre .linha-dre--subtotal th,
+.tabela-dre .linha-dre--subtotal td {
+  background: var(--surface-soft);
+  font-weight: 700;
+  border-top: 1px solid var(--border-strong);
+}
+
+/* "Destaca" é só o pedido de quem configura a linha para chamar mais
+   atenção — não implica que virou resultado nem subtotal, só negrito. */
 .tabela-dre .linha-dre--destaque th,
 .tabela-dre .linha-dre--destaque td {
-  background: var(--surface-accent);
-  color: var(--accent);
-  border-top: 2px solid var(--accent);
-  font-size: 13.5px;
+  font-weight: 700;
 }
 
 /* Módulo sem contas na visão: aparece na estrutura, mas não convida ao clique. */
@@ -1860,7 +1882,11 @@ td.sem-contas {
   padding: 0;
   border: 0;
   background: none;
-  color: inherit;
+  /* Cor própria, não `inherit`: uma linha de resultado/subtotal pode em
+     teoria ser "origem: módulo" também, e o link continua sendo a única
+     coisa clicável ali — precisa parecer clicável mesmo dentro de uma linha
+     que mudou de cor por outro motivo. */
+  color: var(--accent);
   font: inherit;
   text-align: left;
   cursor: pointer;

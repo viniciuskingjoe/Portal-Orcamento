@@ -86,7 +86,18 @@ function LinhaDetalhe({ item, colunas, percentual, absoluto }) {
 // uma conta escolhida pode expandir e mostrar o valor de cada uma
 // (`linha.detalhe`, calculado em dados/dre.js só quando há o que abrir).
 function LinhaDre({ linha, colunas, expandida, onExpandir, onAbrirModulo }) {
-  const classe = ["linha-dre", linha.destaca ? "linha-dre--destaque" : ""].filter(Boolean).join(" ");
+  // Resultado (a linha marcada como "principal" na configuração) e subtotal
+  // (qualquer fórmula que não seja o resultado, ex.: Receita líquida) tinham
+  // o CSS pronto e nunca eram aplicados — toda linha do demonstrativo saía
+  // com o mesmo peso visual, e só "destaca" pintava de azul, inclusive o
+  // resultado, sugerindo (errado) que ele era clicável.
+  const classe = [
+    "linha-dre",
+    linha.linhaPrincipal ? "linha-dre--resultado" : linha.origem === "formula" ? "linha-dre--subtotal" : "",
+    linha.destaca ? "linha-dre--destaque" : "",
+  ]
+    .filter(Boolean)
+    .join(" ");
   // Linha "%": o próprio valor já é um percentual (ex.: dedução / receita
   // líquida), então a análise vertical (% sobre a base) não faz sentido aqui
   // — % de %. `CelulasDoPeriodo` já mostra "—" nessas colunas.
