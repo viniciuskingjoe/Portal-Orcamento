@@ -531,16 +531,28 @@ export default function TelaDreConfig({
               {linhas.map((linha, indice) => (
                 <tr key={linha.id} className={linha.destaca ? "linha-dre--destaque" : ""}>
                   <th scope="row">
+                    {/* Sinal é a decisão de maior consequência da linha (quem
+                        vira dedução do resultado) — só marca o "−" (o caso
+                        que precisa de atenção); "+" é o padrão silencioso,
+                        mesmo espírito de mostrarAbsoluto em dados/dre.js. */}
+                    {linha.origem === "modulo" && linha.sinal === -1 ? (
+                      <span className="dre-linha__sinal-lista" title="Entra como dedução no resultado">
+                        −
+                      </span>
+                    ) : null}
                     {linha.titulo}
                     {linha.baseAnaliseVertical ? <span className="chip chip--edicao">Base % vertical</span> : null}
                     {linha.linhaPrincipal ? <span className="chip chip--edicao">Linha principal</span> : null}
                   </th>
                   <td>
-                    {linha.origem === "formula"
-                      ? linha.unidade === "percentual"
-                        ? "Fórmula (%)"
-                        : "Fórmula"
-                      : (definicaoDoModulo(linha.moduloId)?.titulo ?? linha.moduloId)}
+                    {linha.origem === "formula" ? (
+                      <>
+                        {linha.unidade === "percentual" ? "Fórmula (%)" : "Fórmula"}
+                        <code className="dre-linha__formula-lista">{linha.formula}</code>
+                      </>
+                    ) : (
+                      definicaoDoModulo(linha.moduloId)?.titulo ?? linha.moduloId
+                    )}
                   </td>
                   <td>{linha.mostra ? <Icone nome="check" tamanho={15} /> : null}</td>
                   <td>{linha.destaca ? <Icone nome="check" tamanho={15} /> : null}</td>

@@ -542,6 +542,27 @@ button {
   height: 30px;
 }
 
+/* Sinal na lista de configuração do DRE — só o "−" aparece (ver comentário
+   no JSX), então não precisa de par de cores; um traço de destaque já
+   avisa "isto é dedução" sem competir com o título ao lado. */
+.dre-linha__sinal-lista {
+  margin-right: 5px;
+  color: var(--danger);
+  font-weight: 700;
+}
+
+/* Expressão da fórmula, mono e discreta, abaixo do rótulo "Fórmula" — pra
+   revisar o demonstrativo sem abrir modal linha por linha. */
+.dre-linha__formula-lista {
+  display: block;
+  margin-top: 2px;
+  color: var(--muted);
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace;
+  font-size: 11px;
+  white-space: normal;
+  word-break: break-word;
+}
+
 /* ==========================================================================
    Planos
    ========================================================================== */
