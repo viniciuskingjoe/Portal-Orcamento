@@ -97,6 +97,7 @@ export default function TelaGrupos({
         </div>
       ) : (
         <EstadoVazio
+          icone="layers"
           texto={
             podeEditar
               ? "Nenhum grupo ainda. Crie um para ler o DRE por conjunto de centros."

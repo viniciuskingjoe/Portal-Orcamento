@@ -409,6 +409,10 @@ dupla, tracejada (exceto o estado vazio, ver Components) ou com gradiente.
   tracejada do sistema, reservada exclusivamente pra "não há nada aqui
   ainda". Ícone circular 48px em `--surface-accent`/`--accent`, texto curto
   centralizado.
+- Ícone é contextual, não fixo: cada tela passa o mesmo ícone que já usa
+  em outro lugar pra aquele conceito (`folder` de Planos, `eye` de Visões,
+  `layers` de Grupos, `info` pra "o ERP não respondeu"). Achado do critique
+  original — carteira genérica pra tudo não orientava nada.
 
 ## Do's and Don'ts
 

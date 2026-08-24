@@ -3605,6 +3605,21 @@ dialog::backdrop {
   border: 1px solid var(--accent);
   border-radius: var(--radius-md);
   background: var(--accent-soft);
+  animation: entrada-item 0.28s var(--ease-standard) both;
+}
+
+/* O valor exato chega um instante depois do bloco — a caixa se assenta,
+   e só então a senha em si resolve em foco. Duas etapas pra um valor que
+   só existe uma vez, não decoração: o resto do sistema não faz isso. */
+@keyframes valor-materializa {
+  from {
+    opacity: 0;
+    transform: scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
 }
 
 .senha-gerada__texto {
@@ -3636,6 +3651,7 @@ dialog::backdrop {
   font-size: 17px;
   letter-spacing: 0.08em;
   user-select: all;
+  animation: valor-materializa 0.22s var(--ease-standard) 0.1s both;
 }
 
 .senha-gerada__acoes {

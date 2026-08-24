@@ -81,7 +81,7 @@ export default function TelaVisoes({ visoes, planos, nomeContabil, onAbrir, onNo
           })}
         </div>
       ) : (
-        <EstadoVazio texto="Crie uma visão para poder criar planos orçamentários." />
+        <EstadoVazio texto="Crie uma visão para poder criar planos orçamentários." icone="eye" />
       )}
     </main>
   );

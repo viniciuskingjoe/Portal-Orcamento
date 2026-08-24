@@ -129,6 +129,7 @@ export default function TelaListaErp({
 
         {!visiveis.length ? (
           <EstadoVazio
+            icone={lista.length ? "close" : "info"}
             texto={lista.length ? "Nenhum item corresponde ao filtro." : "O ERP não devolveu registros."}
           />
         ) : null}

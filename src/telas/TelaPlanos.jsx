@@ -146,7 +146,7 @@ export default function TelaPlanos({
           })}
         </div>
       ) : (
-        <EstadoVazio texto="Adicione um plano para começar seu planejamento." />
+        <EstadoVazio texto="Adicione um plano para começar seu planejamento." icone="folder" />
       )}
     </main>
   );
