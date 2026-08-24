@@ -3425,6 +3425,18 @@ dialog::backdrop {
   background: var(--bg);
 }
 
+/* Fundo ambiente, atrás do cartão — puramente decorativo, nunca intercepta
+   clique/toque nem entra na ordem de foco. Fica em `position: fixed` de
+   propósito: não precisa que `.tela-login` vire contexto de posicionamento,
+   e cobre a viewport mesmo se o conteúdo crescer além dela. */
+.painel-instrumentos {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+
 /* Marca acima do cartão, como nos outros portais AKR. */
 .login-marca {
   display: flex;
