@@ -79,7 +79,9 @@ button {
   gap: 10px;
   padding: 8px 8px 18px;
   color: var(--on-dark);
-  font-size: 23px;
+  /* Mesmo tamanho de .login-marca — é a mesma marca "AKR | BRANDS" em duas
+     telas, e tamanho diferente pra grafia igual quebra reconhecimento. */
+  font-size: 22px;
   font-weight: 800;
   letter-spacing: 0.18em;
   white-space: nowrap;
@@ -361,7 +363,7 @@ button {
 .cabecalho-pagina p {
   margin: 8px 0 0;
   color: var(--muted);
-  font-size: 13.5px;
+  font-size: 13px;
 }
 
 .botao-voltar {
@@ -521,7 +523,7 @@ button {
   gap: 14px;
   margin-bottom: 16px;
   color: var(--muted);
-  font-size: 12.5px;
+  font-size: 12px;
 }
 
 .planos-meta span:first-child {
@@ -586,7 +588,7 @@ button {
 }
 
 .card-plano__texto strong {
-  font-size: 15px;
+  font-size: 14.5px;
 }
 
 .card-plano__texto small {
@@ -631,7 +633,7 @@ button {
 .secao-modulos__cabecalho p {
   margin: 0;
   color: var(--muted);
-  font-size: 12.5px;
+  font-size: 12px;
 }
 
 .numero-secao {
@@ -787,7 +789,7 @@ button {
 }
 
 .linha-crud__nome strong {
-  font-size: 14px;
+  font-size: 14.5px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -817,7 +819,7 @@ button {
 
 .linha-crud--filiais strong,
 .linha-crud--centros strong {
-  font-size: 13.5px;
+  font-size: 13px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -879,7 +881,7 @@ button {
 
 .aviso-erro strong {
   display: block;
-  font-size: 14px;
+  font-size: 14.5px;
 }
 
 .aviso-erro p {
@@ -982,7 +984,7 @@ button {
 }
 
 .card-visao__texto strong {
-  font-size: 13.5px;
+  font-size: 13px;
 }
 
 .card-visao__texto small {
@@ -1072,7 +1074,7 @@ button {
   border-radius: var(--radius-md);
   background: var(--surface);
   color: var(--text);
-  font-size: 13.5px;
+  font-size: 13px;
 }
 
 .botao--compacto {
@@ -1091,7 +1093,7 @@ button {
   border-radius: var(--radius-md);
   background: var(--info-soft);
   color: var(--info);
-  font-size: 12.5px;
+  font-size: 12px;
 }
 
 .modulo-aviso svg {
@@ -1103,7 +1105,7 @@ button {
   margin: 0;
   padding: 16px 18px;
   color: var(--muted);
-  font-size: 12.5px;
+  font-size: 12px;
 }
 
 /* Linha vazia de uma tabela (colSpan inteiro) centra — é um aviso sozinho na
@@ -1127,7 +1129,7 @@ td.sem-contas {
   gap: 8px;
   padding: 11px 14px;
   color: var(--text-soft);
-  font-size: 12.5px;
+  font-size: 12px;
   font-weight: 600;
   cursor: pointer;
   list-style: none;
@@ -1213,7 +1215,7 @@ td.sem-contas {
 .filtros-dre .seletor__campo,
 .filtros-dre select {
   min-height: 36px;
-  font-size: 12.5px;
+  font-size: 12px;
 }
 
 .filtros-orcamento {
@@ -1235,7 +1237,7 @@ td.sem-contas {
 .filtros-orcamento .seletor__campo {
   min-height: 40px;
   border-radius: var(--radius-md);
-  font-size: 13.5px;
+  font-size: 13px;
 }
 
 /* O ano não é editável e cabe em quatro dígitos. Reservar a largura de um select
@@ -1295,7 +1297,7 @@ td.sem-contas {
 
 .bloco-dre__titulo {
   margin: 0 0 10px;
-  font-size: 14px;
+  font-size: 14.5px;
 }
 
 .filtros-orcamento span {
@@ -1314,7 +1316,7 @@ td.sem-contas {
   border-radius: var(--radius-md);
   background: var(--surface);
   color: var(--text);
-  font-size: 13.5px;
+  font-size: 13px;
 }
 
 .filtros-orcamento select:hover {
@@ -1327,7 +1329,7 @@ td.sem-contas {
 .orcamento-contexto {
   margin: 0 0 14px;
   color: var(--muted);
-  font-size: 12.5px;
+  font-size: 12px;
 }
 
 .orcamento-contexto strong {
@@ -1466,7 +1468,7 @@ td.sem-contas {
   border-radius: var(--radius-md);
   background: var(--surface);
   color: var(--text-soft);
-  font-size: 12.5px;
+  font-size: 12px;
   cursor: pointer;
 }
 
@@ -1562,7 +1564,7 @@ td.sem-contas {
   border-radius: var(--radius-md);
   background: var(--surface-soft);
   color: var(--muted);
-  font-size: 12.5px;
+  font-size: 12px;
 }
 
 /* Só a dica de atalho é dispensável (motivo de bloqueio não tem "×") — fica
@@ -1650,11 +1652,12 @@ td.sem-contas {
   border-top: 2px solid var(--border-strong);
 }
 
+/* Sem itálico: quebrava o alinhamento de tabular-nums. Fundo + cor mais
+   fraca já diferenciam a linha de média das demais. */
 .tabela-orcamento .linha-media th,
 .tabela-orcamento .linha-media td {
   background: var(--surface-tint);
   color: var(--text-soft);
-  font-style: italic;
 }
 
 .tabela-orcamento tr:last-child th,
@@ -1812,7 +1815,7 @@ td.sem-contas {
 .tabela-dre .linha-dre--detalhe th {
   padding-left: 34px;
   color: var(--text-soft);
-  font-size: 12.5px;
+  font-size: 12px;
   font-weight: 500;
 }
 
@@ -1876,7 +1879,7 @@ td.sem-contas {
   color: var(--text);
   border-top: 2px solid var(--border-strong);
   font-weight: 700;
-  font-size: 13.5px;
+  font-size: 13px;
 }
 
 /* Subtotal fecha um bloco antes do resultado (ex.: Receita líquida = Receita
@@ -1997,7 +2000,7 @@ dialog::backdrop {
 
 .modal__topo h2 {
   margin: 0;
-  font-size: 16px;
+  font-size: 17px;
 }
 
 /* Corpo rolando no meio — sem max-height mágico (PADRAO §8). */
@@ -2045,7 +2048,7 @@ dialog::backdrop {
   border-radius: var(--radius-md);
   background: var(--surface);
   color: var(--text);
-  font-size: 13.5px;
+  font-size: 13px;
 }
 
 .campo > textarea {
@@ -2055,7 +2058,7 @@ dialog::backdrop {
   background: var(--surface);
   color: var(--text);
   font: inherit;
-  font-size: 13.5px;
+  font-size: 13px;
   resize: vertical;
 }
 
@@ -2071,7 +2074,7 @@ dialog::backdrop {
   align-items: baseline;
   gap: 8px;
   margin: 0;
-  font-size: 13.5px;
+  font-size: 13px;
 }
 
 .editor-formula__conta code {
@@ -2152,7 +2155,7 @@ dialog::backdrop {
   border-radius: var(--radius-sm);
   background: var(--danger-soft);
   color: var(--danger);
-  font-size: 12.5px;
+  font-size: 12px;
   font-weight: 600;
 }
 
@@ -2441,7 +2444,7 @@ dialog::backdrop {
 }
 
 .arvore-conta__rotulo > span:last-child {
-  font-size: 12.5px;
+  font-size: 12px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -2534,7 +2537,7 @@ dialog::backdrop {
   border-radius: var(--radius-md);
   background: var(--surface);
   color: var(--text-soft);
-  font-size: 12.5px;
+  font-size: 12px;
   white-space: nowrap;
   cursor: pointer;
 }
@@ -2562,7 +2565,7 @@ dialog::backdrop {
   border: 1px dashed var(--border-strong);
   border-radius: var(--radius-md);
   color: var(--text-soft);
-  font-size: 13.5px;
+  font-size: 13px;
 }
 
 /* --- conta na lateral do orçamento -------------------------------------- */
@@ -2873,7 +2876,7 @@ dialog::backdrop {
   border-radius: 999px;
   background: var(--accent-contraste);
   color: #fff;
-  font-size: 10.5px;
+  font-size: 10px;
   font-weight: 700;
   text-align: center;
 }
@@ -2920,7 +2923,7 @@ dialog::backdrop {
 .modal__nota {
   margin: 0;
   color: var(--muted);
-  font-size: 12.5px;
+  font-size: 12px;
 }
 
 .modal__aviso {
@@ -2929,7 +2932,7 @@ dialog::backdrop {
   border-radius: var(--radius-sm);
   background: var(--warning-soft);
   color: var(--warning);
-  font-size: 12.5px;
+  font-size: 12px;
 }
 
 .conta-checkbox > span:last-child {
@@ -2958,7 +2961,7 @@ dialog::backdrop {
 .confirmacao p {
   margin: 3px 0 0;
   color: var(--text-soft);
-  font-size: 13.5px;
+  font-size: 13px;
 }
 
 /* --- drawer ------------------------------------------------------------- */
@@ -3026,7 +3029,7 @@ dialog::backdrop {
 
 .drawer__nota p {
   margin: 0;
-  font-size: 12.5px;
+  font-size: 12px;
 }
 
 .drawer__rodape {
@@ -3390,7 +3393,7 @@ dialog::backdrop {
 
 .cartao-login__portal strong {
   display: block;
-  font-size: 15.5px;
+  font-size: 15px;
   font-weight: 700;
 }
 
@@ -3398,12 +3401,12 @@ dialog::backdrop {
   display: block;
   margin-top: 2px;
   color: var(--muted);
-  font-size: 12.5px;
+  font-size: 12px;
 }
 
 .cartao-login__titulo h1 {
   margin: 0 0 5px;
-  font-size: 21px;
+  font-size: 24px;
   font-weight: 700;
   letter-spacing: -0.01em;
 }
@@ -3581,7 +3584,7 @@ dialog::backdrop {
   border-radius: var(--radius-md);
   background: var(--danger-soft);
   color: var(--danger);
-  font-size: 12.5px;
+  font-size: 12px;
 }
 
 /* Sair fica no card de usuário, discreto: é ação rara e destrutiva de contexto,
@@ -3708,7 +3711,7 @@ dialog::backdrop {
   min-width: 0;
   max-width: 52ch;
   color: var(--text-soft);
-  font-size: 12.5px;
+  font-size: 12px;
   line-height: 1.35;
 }
 
@@ -3818,7 +3821,7 @@ dialog::backdrop {
   border: 1px solid var(--border);
   border-radius: 999px;
   background: var(--surface);
-  font-size: 12.5px;
+  font-size: 12px;
 }
 
 .concessao__texto {
@@ -4204,7 +4207,7 @@ dialog::backdrop {
   border-radius: var(--radius-sm);
   background: none;
   color: var(--text-soft);
-  font-size: 12.5px;
+  font-size: 12px;
   text-align: left;
   cursor: pointer;
 }
@@ -4240,7 +4243,7 @@ dialog::backdrop {
 .seletor__vazio-lista {
   padding: 10px;
   color: var(--muted);
-  font-size: 12.5px;
+  font-size: 12px;
   text-align: center;
 }
 
@@ -4362,7 +4365,7 @@ dialog::backdrop {
   gap: 10px;
   padding: 10px 16px;
   border-top: 1px solid var(--border);
-  font-size: 12.5px;
+  font-size: 12px;
 }
 
 .card-plano__publicado {
@@ -4480,7 +4483,7 @@ dialog::backdrop {
   border-radius: var(--radius-md);
   background: var(--surface-soft);
   color: var(--text);
-  font-size: 13.5px;
+  font-size: 13px;
 }
 
 .campo-fixo--editavel:focus-visible {
@@ -4507,7 +4510,7 @@ dialog::backdrop {
   border-radius: 10px;
   background: var(--surface-soft);
   color: var(--muted);
-  font-size: 12.5px;
+  font-size: 12px;
 }
 
 .aviso-modulo svg {
@@ -4580,7 +4583,7 @@ dialog::backdrop {
 }
 
 .tabela-qtde td {
-  font-size: 13.5px;
+  font-size: 13px;
   color: var(--text);
 }
 
@@ -4678,7 +4681,7 @@ dialog::backdrop {
   background: var(--surface-hover);
   color: var(--text);
   font: inherit;
-  font-size: 13.5px;
+  font-size: 13px;
   font-variant-numeric: tabular-nums;
   text-align: right;
 }

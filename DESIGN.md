@@ -42,9 +42,14 @@ typography:
     letterSpacing: "-0.025em"
   title:
     fontFamily: "Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
-    fontSize: "15px-17px"
+    fontSize: "17px"
     fontWeight: 700
     lineHeight: 1.2
+  emphasis:
+    fontFamily: "Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+    fontSize: "14.5px"
+    fontWeight: 600
+    lineHeight: 1.3
   body:
     fontFamily: "Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
     fontSize: "16px"
@@ -227,19 +232,42 @@ tamanho e letter-spacing, não de troca de fonte. É deliberadamente
 - **Headline** (700, `clamp(24px, 2.4vw, 29px)`, 1.15, -0.025em): título de
   página (`.cabecalho-pagina h1`). O único texto que usa `clamp()` — cresce
   com a viewport em vez de pular por breakpoint.
-- **Title** (700, 15–17px, 1.2): título de seção (`h2` de módulo/DRE), nome
-  de card (`.card-plano__texto strong`), cabeçalho de modal.
-- **Body** (400, 16px base / 13px em tabela, 1.45): texto corrido e conteúdo
-  de célula. A tabela reduz pra 13px porque densidade vence lá.
+- **Hero** (700, 24px): título de boas-vindas do login
+  (`.cartao-login__titulo h1`) — o primeiro texto que qualquer pessoa vê,
+  agora do mesmo peso que um Headline de página em vez de menor que ela.
+- **Title** (700, 17px, 1.2): `h2` de seção/módulo/DRE, cabeçalho de modal.
+  Todo `h2` do sistema usa este único valor — não existe mais um segundo
+  tamanho de `h2` (era 16px em modal, 17px no resto).
+- **Emphasis** (600–700, 14.5px): nome de card (`.card-plano__texto strong`),
+  linha de lista (`.linha-crud__nome strong`), subtítulo de bloco do DRE.
+  Um degrau abaixo de Title — destaca dentro de um item, não anuncia uma
+  seção nova.
+- **Body** (400, 16px base / 13px em tabela ou controle denso, 1.45): texto
+  corrido e conteúdo de célula. A tabela reduz pra 13px porque densidade
+  vence lá.
 - **Label** (700, 11.5–12px, 0.06em–0.09em, uppercase): rótulo de campo,
   cabeçalho de tabela, chip, badge de seção numerada. É o elemento tipográfico
   mais repetido do sistema — a "voz de estrutura".
+- **Micro** (700, 10–11px): código de conta inline (`<code>`, 11px) e badge
+  circular pequeno (contagem, sinal — 10px). Menor que Label porque não é
+  metadado de estrutura, é anotação pontual dentro de uma linha.
 - **Mono** (400, 13px): código de conta ERP, expressão de fórmula.
+- **Wordmark** (800, 22px, 0.18em): "AKR | BRANDS" — mesmo valor na sidebar
+  (`.marca`) e no login (`.login-marca`); é a mesma marca em duas telas, não
+  pode ter dois tamanhos.
 
 ### Named Rules
 **The Label-Is-Structure Rule.** Rótulo uppercase pequeno (11.5px,
 letter-spacing largo) é o único recurso do sistema pra dizer "isto é
 metadado, não conteúdo" — não existe uma segunda convenção pra isso.
+
+**The One Value Per Job Rule.** A escala tinha oito valores entre 10px e
+13.5px fazendo o mesmo trabalho sem distinção real (12 vs 12.5, 13 vs 13.5,
+10 vs 10.5) e seis valores entre 14px e 17px fazendo o trabalho de "título
+de card" vs "título de seção" sem separação clara. Cada papel tipográfico
+tem exatamente um valor agora — uma exceção documentada (`.campo-login
+input`/botão, 14px) porque é controle de formulário do login, não título,
+e coincidir com Emphasis seria acidental, não intencional.
 
 ## Layout
 

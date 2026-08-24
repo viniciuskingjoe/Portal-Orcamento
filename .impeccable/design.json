@@ -61,7 +61,8 @@
     },
     "typographyMeta": {
       "headline": { "displayName": "Headline", "purpose": "Título de página (h1 de cabecalho-pagina). Único texto com clamp()." },
-      "title": { "displayName": "Title", "purpose": "Título de seção, nome de card, cabeçalho de modal." },
+      "title": { "displayName": "Title", "purpose": "h2 de seção/módulo/DRE, cabeçalho de modal — valor único (17px), não mais dois." },
+      "emphasis": { "displayName": "Emphasis", "purpose": "Nome de card, linha de lista — um degrau abaixo de Title, destaca dentro de um item." },
       "body": { "displayName": "Body", "purpose": "Texto corrido e conteúdo de célula (13px em tabela)." },
       "label": { "displayName": "Label", "purpose": "Rótulo de campo, cabeçalho de tabela, chip — a voz de estrutura do sistema." },
       "mono": { "displayName": "Mono", "purpose": "Código de conta ERP, expressão de fórmula." }
@@ -161,6 +162,7 @@
       { "name": "The Primary Flip Rule", "body": "O botão primário muda de família de cor entre temas (quase-preto → azul); a identidade fixa (Deep Ledger Black) mora só na sidebar.", "section": "colors" },
       { "name": "The Contrast-Safe Text Rule", "body": "Texto branco/claro nunca senta direto sobre --accent puro — usa --accent-contraste (mesma família, mais escura). --accent é pra ser fundo contra um elemento neutro (borda, ícone, link), não pra carregar texto em cima dele.", "section": "colors" },
       { "name": "The Label-Is-Structure Rule", "body": "Rótulo uppercase pequeno com letter-spacing largo é o único recurso do sistema pra dizer 'isto é metadado, não conteúdo'.", "section": "typography" },
+      { "name": "The One Value Per Job Rule", "body": "Cada papel tipográfico tem exatamente um valor de font-size. Oito valores entre 10px e 13.5px faziam o mesmo trabalho sem distinção real e foram consolidados; a única exceção documentada é o input/botão do login (14px), que é controle de formulário, não título.", "section": "typography" },
       { "name": "The Floating-Only Shadow Rule", "body": "Se um elemento está no fluxo normal da página, ele não tem sombra. Sombra existe só para sinalizar que algo está por cima de outra coisa.", "section": "elevation" }
     ],
     "dos": [
