@@ -6,8 +6,17 @@
   box-sizing: border-box;
 }
 
+html,
 body {
   margin: 0;
+  /* Rede de segurança: nenhum bloco deveria forçar rolagem horizontal da
+     página — quem precisa rolar de lado (tabela larga) já rola dentro do
+     próprio wrapper (`.tabela-wrap`). Se algo escapar disso, esconde em vez
+     de abrir barra de rolagem na página inteira. */
+  overflow-x: hidden;
+}
+
+body {
   background: var(--bg);
   color: var(--text);
   font-family: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
@@ -3144,8 +3153,39 @@ dialog::backdrop {
     flex-basis: 100%;
   }
 
+  /* Mesmo tratamento de .filtros-orcamento label acima — filtros-dre nasceu
+     depois, num bloco compacto que nunca ganhou a mesma regra. */
+  .filtros-dre label {
+    min-width: 0;
+    width: 100%;
+  }
+
+  /* O painel do seletor pode nascer mais estreito que 240px quando o gatilho
+     mora num filtro raso (ver .filtros-dre acima) — sem isso ele fica preso
+     no mínimo antigo e passa da borda do campo. */
+  .seletor__painel {
+    min-width: 0;
+  }
+
   .drawer[open] {
     width: 100%;
+  }
+
+  /* Lista de filiais/centros do ERP (TelaListaErp): colunas fixas
+     (checkbox + código + nome + tipo) somam mais que a largura de qualquer
+     celular — a coluna "Tipo" é metadado secundário (mesmo padrão já usado
+     em .planos-meta), então some aqui e sobra espaço pro nome, que é o dado
+     que importa pra reconhecer a linha. */
+  .lista-crud__topo--filiais,
+  .linha-crud--filiais {
+    grid-template-columns: 22px 64px 1fr;
+    gap: 8px;
+    padding: 0 12px;
+  }
+
+  .lista-crud__topo--filiais > span:last-child,
+  .linha-crud--filiais > .linha-crud__meta {
+    display: none;
   }
 }
 
@@ -3155,6 +3195,38 @@ dialog::backdrop {
   *::after {
     animation-duration: 0.01ms !important;
     transition-duration: 0.01ms !important;
+  }
+}
+
+/* Toque real (dedo), não largura de tela — um notebook com tela touch
+   continua com o mouse como alvo principal, e um tablet grande em paisagem
+   passa de 1100px sem deixar de ser tocado com o dedo. Só aumenta a área de
+   toque dos ícones densos; o resto do sistema (densidade, fonte, cor)
+   continua igual, porque o mouse não perde precisão em telas largas. */
+@media (pointer: coarse) {
+  .botao-icone {
+    width: 40px;
+    height: 40px;
+  }
+
+  /* As duas setas de reordenar linha do DRE eram 26px com 2px de vão — par
+     mais fácil de acertar errado do sistema inteiro debaixo do dedo. */
+  .dre-linha__mover {
+    gap: 6px;
+  }
+
+  .dre-linha__mover .botao-icone {
+    width: 34px;
+    height: 34px;
+  }
+
+  .dre-linha__acoes {
+    gap: 8px;
+  }
+
+  .dre-linha__acoes .botao-icone {
+    width: 38px;
+    height: 38px;
   }
 }
 
@@ -3370,7 +3442,11 @@ dialog::backdrop {
   display: flex;
   flex-direction: column;
   gap: 6px;
-  min-width: 240px;
+  /* Sem largura mínima fixa: em modal estreito (celular) esse bloco precisa
+     poder encolher e quebrar linha — 240px fixos estouravam o conteúdo do
+     modal em telas de ~320-375px. */
+  flex: 1 1 200px;
+  min-width: 0;
 }
 
 .senha-gerada__texto small {
@@ -4011,6 +4087,10 @@ dialog::backdrop {
   left: 0;
   right: 0;
   min-width: 240px;
+  /* min-width pode passar da largura do gatilho quando ele mora num filtro
+     estreito (ex.: `.filtros-dre label`) — sem este teto o painel escapa da
+     tela em telas pequenas em vez de só ficar mais largo que o campo. */
+  max-width: calc(100vw - 24px);
   padding: 6px;
   border: 1px solid var(--border-strong);
   border-radius: var(--radius-md);
