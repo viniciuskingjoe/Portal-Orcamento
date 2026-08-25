@@ -142,7 +142,7 @@ button {
   height: 32px;
   display: grid;
   place-items: center;
-  border-radius: 11px;
+  border-radius: var(--radius-lg);
   background: rgba(255, 255, 255, 0.12);
   color: var(--on-dark);
 }
@@ -315,14 +315,10 @@ button {
    ========================================================================== */
 
 .conteudo {
-  width: min(1420px, calc(100% - 64px));
+  width: min(1600px, calc(100% - 64px));
   margin: 0 auto;
   padding: 40px 0 56px;
   animation: entrada 0.28s var(--ease-standard) both;
-}
-
-.conteudo--planos {
-  max-width: 1180px;
 }
 
 @keyframes entrada {
@@ -816,7 +812,17 @@ button {
 .card-modulo:hover:not(:disabled) {
   border-color: var(--accent);
   background: var(--surface-tint);
+  box-shadow: var(--shadow-panel);
   transform: translateY(-2px);
+}
+
+.card-modulo:hover:not(:disabled) .card-modulo__icone {
+  transform: scale(1.05);
+}
+
+.card-modulo:hover:not(:disabled) > svg:last-child {
+  color: var(--accent);
+  transform: translateX(3px);
 }
 
 .card-modulo:active:not(:disabled) {
@@ -843,6 +849,7 @@ button {
   border-radius: var(--radius-md);
   background: var(--surface-accent);
   color: var(--accent);
+  transition: 0.18s var(--ease-standard);
 }
 
 .card-modulo--receita .card-modulo__icone {
@@ -853,6 +860,15 @@ button {
 .card-modulo--despesa .card-modulo__icone {
   background: var(--danger-soft);
   color: var(--danger);
+}
+
+/* DRE não é receita nem despesa — é a leitura consolidada onde os outros
+   módulos fecham. Ganha a cor de destaque do sistema (Precision Blue) em vez
+   do verde emprestado de receita, coerente com "03 Resultado" ser o fim do
+   fluxo, não mais um módulo pra orçar. */
+.card-modulo--resultado .card-modulo__icone {
+  background: var(--accent-soft);
+  color: var(--accent);
 }
 
 .card-modulo__texto {
@@ -873,6 +889,7 @@ button {
 
 .card-modulo > svg:last-child {
   color: var(--text-faint);
+  transition: 0.18s var(--ease-standard);
 }
 
 /* ==========================================================================
@@ -1070,37 +1087,23 @@ button {
   min-height: 68px;
   padding: 12px 14px;
   border: 1px solid var(--border);
-  border-left: 3px solid var(--border-strong);
   border-radius: var(--radius-md);
   background: var(--surface);
   box-shadow: var(--shadow-sm);
   text-align: left;
   cursor: pointer;
-  transition: 0.18s ease;
+  transition: 0.18s var(--ease-standard);
 }
 
 .card-visao:hover {
   border-color: var(--accent);
   background: var(--surface-tint);
+  box-shadow: var(--shadow-panel);
   transform: translateY(-1px);
 }
 
-/* Verde para receita, vermelho para despesa — igual à grade de referência. */
-.card-visao--receita {
-  border-left-color: var(--success);
-}
-
-.card-visao--despesa {
-  border-left-color: var(--danger);
-}
-
-/* Módulo já configurado ganha o fundo do seu tipo; sem contas fica neutro. */
-.card-visao--receita.is-configurado {
-  background: var(--success-soft);
-}
-
-.card-visao--despesa.is-configurado {
-  background: var(--danger-soft);
+.card-visao:hover .card-visao__icone {
+  transform: scale(1.05);
 }
 
 .card-visao__icone {
@@ -1109,16 +1112,35 @@ button {
   display: grid;
   place-items: center;
   border-radius: var(--radius-sm);
-  background: var(--surface);
+  background: var(--surface-accent);
   border: 1px solid var(--border);
+  color: var(--muted);
+  transition: 0.18s var(--ease-standard);
 }
 
-.card-visao--receita .card-visao__icone {
+/* O ícone só acende a cor do tipo quando o módulo já tem conta escolhida —
+   neutro sinaliza "ainda não configurei nada aqui" sem precisar de um selo
+   à parte. Mesma lógica do card-modulo da Home; fundo do card em si fica
+   sempre neutro, a cor mora só no ícone. */
+.card-visao--receita.is-configurado .card-visao__icone {
+  background: var(--success-soft);
   color: var(--success);
+  border-color: transparent;
 }
 
-.card-visao--despesa .card-visao__icone {
+.card-visao--despesa.is-configurado .card-visao__icone {
+  background: var(--danger-soft);
   color: var(--danger);
+  border-color: transparent;
+}
+
+/* DRE não é receita nem despesa — é a leitura consolidada. Ganha a cor de
+   destaque do sistema em vez do verde emprestado de receita (mesma correção
+   do card-modulo da Home). */
+.card-visao--resultado .card-visao__icone {
+  background: var(--accent-soft);
+  color: var(--accent);
+  border-color: transparent;
 }
 
 .card-visao__texto {
@@ -1139,6 +1161,12 @@ button {
 
 .card-visao > svg:last-child {
   color: var(--text-faint);
+  transition: 0.18s var(--ease-standard);
+}
+
+.card-visao:hover > svg:last-child {
+  color: var(--accent);
+  transform: translateX(3px);
 }
 
 .card-plano__visao {
@@ -1326,10 +1354,6 @@ td.sem-contas {
 /* ==========================================================================
    Orçamento
    ========================================================================== */
-
-.conteudo--orcamento {
-  width: min(1520px, calc(100% - 48px));
-}
 
 /* DRE ganha o máximo de largura possível — a tabela cresce em meses, não em
    texto, então a folga que outras telas guardam pra legibilidade aqui só
@@ -1585,7 +1609,7 @@ td.sem-contas {
    centros viram uma rolagem longa onde não se enxerga o que já foi marcado. */
 .grade-centros {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
   gap: 2px 10px;
   padding: 6px;
 }
@@ -1632,7 +1656,7 @@ td.sem-contas {
   display: grid;
   place-items: center;
   border: 1px solid var(--border-strong);
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   background: var(--surface);
   color: transparent;
   transition: 0.14s ease;
@@ -2003,15 +2027,6 @@ td.sem-contas {
    destaque no cabeçalho ajuda o olho a achá-la entre os blocos de mês. */
 .tabela-dre th.tabela-dre__total {
   background: var(--surface-soft);
-}
-
-/* O subtotal fecha um bloco: a linha acima dele é a última parcela, e a régua
-   marca onde a conta virou resultado. */
-.tabela-dre .linha-dre--subtotal th,
-.tabela-dre .linha-dre--subtotal td {
-  background: var(--surface-soft);
-  font-weight: 700;
-  border-top: 1px solid var(--border-strong);
 }
 
 /* O resultado do demonstrativo — a linha que a DRE existe para responder.
@@ -2726,14 +2741,18 @@ dialog::backdrop {
   color: #fff;
 }
 
-/* Período do plano: valor fixo, não campo editável. */
+/* Período do plano: valor fixo, não campo editável. Borda sólida, não
+   tracejada — tracejado é reservado pro estado vazio (achado do critique do
+   Impeccable, P2); aqui o fundo já diferencia de um campo editável de
+   verdade. */
 .campo-fixo {
   display: flex;
   align-items: center;
   gap: 10px;
   min-height: 40px;
   padding: 0 12px;
-  border: 1px dashed var(--border-strong);
+  border: 1px solid var(--border);
+  background: var(--surface-soft);
   border-radius: var(--radius-md);
   color: var(--text-soft);
   font-size: 13px;
@@ -3029,9 +3048,10 @@ dialog::backdrop {
   color: var(--danger);
 }
 
-/* Invertido à mão: a borda tracejada avisa que não é o que o ERP diz. */
+/* Invertido à mão: a borda sólida avisa que não é o que o ERP diz (era
+   tracejada — tracejado é reservado pro estado vazio, achado do critique do
+   Impeccable, P2). */
 .arvore-conta__sinal.is-invertido {
-  border-style: dashed;
   border-color: currentColor;
 }
 
@@ -3313,8 +3333,7 @@ dialog::backdrop {
     border-top: 0;
   }
 
-  .conteudo,
-  .conteudo--orcamento {
+  .conteudo {
     width: calc(100% - 32px);
     padding-top: 28px;
   }
@@ -3517,11 +3536,11 @@ dialog::backdrop {
 
    `z-index: 0` é obrigatório aqui, não decoração: elemento posicionado (que
    `fixed` sempre é) pinta ACIMA de irmão em fluxo normal mesmo vindo antes
-   no DOM — sem isto os mostradores desenhavam por cima do cartão de login
+   no DOM — sem isto a rede de pontos desenhava por cima do cartão de login
    (achado do critique do Impeccable, P1). Os três filhos em fluxo normal
    (`.login-marca`, `.cartao-login`, `.login-rodape`) ganham `z-index: 1`
    pra sempre vencer, com ou sem essa regra. */
-.painel-instrumentos {
+.fundo-constelacao {
   position: fixed;
   z-index: 0;
   inset: 0;
@@ -4251,7 +4270,7 @@ dialog::backdrop {
   flex-direction: column;
   gap: 10px;
   padding: 12px;
-  border: 1px dashed var(--border-strong);
+  border: 1px solid var(--border-strong);
   border-radius: var(--radius-md);
 }
 
@@ -4529,7 +4548,6 @@ dialog::backdrop {
    mas apagada: continua sendo real e removível, só não tem efeito. */
 .concessao.is-redundante {
   opacity: 0.55;
-  border-style: dashed;
 }
 
 .nova-concessao__botoes {
@@ -4730,7 +4748,7 @@ dialog::backdrop {
   margin: 0 0 14px;
   padding: 10px 14px;
   border: 1px solid var(--border);
-  border-radius: 10px;
+  border-radius: var(--radius-lg);
   background: var(--surface-soft);
   color: var(--muted);
   font-size: 12px;
@@ -4746,7 +4764,7 @@ dialog::backdrop {
      nunca rolar de lado. */
   overflow-x: auto;
   border: 1px solid var(--border);
-  border-radius: 12px;
+  border-radius: var(--radius-lg);
   background: var(--surface);
 }
 

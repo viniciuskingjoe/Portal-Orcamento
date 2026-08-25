@@ -322,7 +322,7 @@ export default function TelaOrcamento({
   });
 
   return (
-    <main className="conteudo conteudo--orcamento">
+    <main className="conteudo">
       <Cabecalho
         titulo={modulo.titulo}
         subtitulo={`${plano.nome} · ${plano.ano} · visão ${visao.nome}`}

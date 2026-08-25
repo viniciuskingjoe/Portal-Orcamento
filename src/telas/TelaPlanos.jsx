@@ -42,7 +42,7 @@ export default function TelaPlanos({
     : planos.filter((plano) => plano.situacao !== "inativo");
 
   return (
-    <main className="conteudo conteudo--planos">
+    <main className="conteudo">
       <Cabecalho
         titulo="Planos Orçamentários"
         subtitulo="Crie versões independentes e acompanhe diferentes cenários do orçamento."

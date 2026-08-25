@@ -101,7 +101,7 @@ export default function TelaVisao({
         <section className="secao-visao">
           <h2>Demonstrativo</h2>
           <div className="grid-visao">
-            <button type="button" className="card-visao card-visao--receita is-configurado" onClick={onAbrirDre}>
+            <button type="button" className="card-visao card-visao--resultado" onClick={onAbrirDre}>
               <span className="card-visao__icone">
                 <Icone nome="chart" tamanho={19} />
               </span>

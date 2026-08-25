@@ -1,8 +1,8 @@
 import { useState } from "react";
 
 import CampoSenha from "../componentes/CampoSenha.jsx";
+import FundoConstelacao from "../componentes/FundoConstelacao.jsx";
 import Icone from "../componentes/Icone.jsx";
-import PainelInstrumentos from "../componentes/PainelInstrumentos.jsx";
 import { EMPRESA } from "../dados/seeds.js";
 
 // ============================================================================
@@ -51,7 +51,7 @@ export default function TelaLogin({ onEntrar, carregando, erro }) {
 
   return (
     <main className="tela-login">
-      <PainelInstrumentos />
+      <FundoConstelacao />
 
       {/* A marca fica ACIMA do cartão, como nos outros portais AKR: identifica a
           casa antes de o cartão identificar qual portal é. */}

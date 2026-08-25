@@ -175,6 +175,10 @@ export default function Seletor({
         disabled={desabilitado}
         aria-haspopup="listbox"
         aria-expanded={aberto}
+        aria-controls={aberto ? `${idBase}-lista` : undefined}
+        aria-activedescendant={
+          aberto && filtradas.length ? `${idBase}-${destacado}` : undefined
+        }
         onClick={() => (aberto ? setAberto(false) : abrir())}
         onKeyDown={teclado}
       >
@@ -213,6 +217,10 @@ export default function Seletor({
                   onKeyDown={teclado}
                   placeholder="Filtrar…"
                   aria-label="Filtrar opções"
+                  role="combobox"
+                  aria-expanded={aberto}
+                  aria-controls={`${idBase}-lista`}
+                  aria-activedescendant={filtradas.length ? `${idBase}-${destacado}` : undefined}
                 />
               ) : null}
 
@@ -222,7 +230,13 @@ export default function Seletor({
                 </button>
               ) : null}
 
-              <ul className="seletor__lista" role="listbox" aria-multiselectable={multiplo} ref={lista}>
+              <ul
+                className="seletor__lista"
+                role="listbox"
+                id={`${idBase}-lista`}
+                aria-multiselectable={multiplo}
+                ref={lista}
+              >
                 {filtradas.map((opcao, indice) => (
                   <li key={opcao.valor}>
                     <button

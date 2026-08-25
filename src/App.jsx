@@ -170,6 +170,7 @@ function PlanejamentoOrcamentario({ sessao, onSair }) {
 
   const [modalVisao, setModalVisao] = useState(null);
   const [confirmacao, setConfirmacao] = useState(null);
+  const [confirmarMapeamentoPadrao, setConfirmarMapeamentoPadrao] = useState(false);
 
   const [filtros, setFiltros] = useState(FILTROS_PADRAO);
   const [editingCell, setEditingCell] = useState(null);
@@ -186,6 +187,8 @@ function PlanejamentoOrcamentario({ sessao, onSair }) {
   // toda hora viraria ruído (achado do critique do Impeccable, P1).
   const [loteParaDesfazer, setLoteParaDesfazer] = useState(null);
   const cronometroDesfazerRef = useRef(null);
+  const [mapeamentoAplicado, setMapeamentoAplicado] = useState(null);
+  const cronometroMapeamentoRef = useRef(null);
   const [avisoPublicacao, setAvisoPublicacao] = useState("");
   const [publicando, setPublicando] = useState(null);
   const [mostrarInativos, setMostrarInativos] = useState(false);
@@ -712,6 +715,7 @@ function PlanejamentoOrcamentario({ sessao, onSair }) {
   function aplicarMapeamentoPadrao() {
     if (!visaoAberta || !temMapeamentoPadrao(visaoAberta.visaoContabil)) return;
     const antes = visaoAberta;
+    let centrosAtualizados = 0;
 
     atualizarVisaoAberta((visao) => {
       let proxima = visao;
@@ -733,7 +737,10 @@ function PlanejamentoOrcamentario({ sessao, onSair }) {
         });
 
         // Um lote por módulo: centro a centro seriam centenas de requisições.
-        if (lote.length) gravar(repo.visao.contasEmLote(visaoAberta.id, modulo.id, lote));
+        if (lote.length) {
+          gravar(repo.visao.contasEmLote(visaoAberta.id, modulo.id, lote));
+          centrosAtualizados += lote.length;
+        }
       });
 
       // O mapeamento padrão não tem entrada para Despesas com pessoal (não
@@ -753,6 +760,50 @@ function PlanejamentoOrcamentario({ sessao, onSair }) {
 
       return proxima;
     });
+
+    // Achado do critique do Impeccable, P1: a ação mais arriscada da tela
+    // (sobrescreve contas escolhidas manualmente) era a única sem nenhum
+    // retorno depois de aplicada. Confirma quantidade e oferece desfazer,
+    // igual ao preenchimento em lote da tabela — mesmo padrão de toast.
+    if (cronometroMapeamentoRef.current) clearTimeout(cronometroMapeamentoRef.current);
+    setMapeamentoAplicado({ quantidade: centrosAtualizados, antes });
+    cronometroMapeamentoRef.current = setTimeout(() => setMapeamentoAplicado(null), 10000);
+  }
+
+  // Restaura a configuração de contas de cada módulo/filial/centro para como
+  // estava antes de aplicarMapeamentoPadrao — reaproveita as mesmas funções
+  // de escrita, só que com a lista de contas de antes em vez do padrão.
+  function desfazerMapeamentoPadrao() {
+    if (!mapeamentoAplicado || !visaoAberta) return;
+    if (cronometroMapeamentoRef.current) clearTimeout(cronometroMapeamentoRef.current);
+    const antes = mapeamentoAplicado.antes;
+
+    atualizarVisaoAberta((visao) => {
+      let proxima = visao;
+
+      MODULOS.forEach((modulo) => {
+        const lote = [];
+        filiaisAtivas.forEach((filial) => {
+          centrosDaFilial(antes, modulo.id, filial.id).forEach((centro) => {
+            const contasAntes = contasDoCentro(antes, modulo.id, filial.id, centro);
+            proxima = definirContasDoCentroExclusivo(proxima, modulo.id, filial.id, centro, contasAntes);
+            lote.push({ filial: filial.id, centro, contas: contasAntes });
+          });
+        });
+        if (lote.length) gravar(repo.visao.contasEmLote(visaoAberta.id, modulo.id, lote));
+      });
+
+      filiaisAtivas.forEach((filial) => {
+        centrosDaFilial(antes, MODULO_PESSOAL, filial.id).forEach((centro) => {
+          const contasAntes = contasDoCentro(antes, MODULO_PESSOAL, filial.id, centro);
+          gravar(repo.visao.contas(visaoAberta.id, MODULO_PESSOAL, filial.id, centro, contasAntes));
+        });
+      });
+
+      return proxima;
+    });
+
+    setMapeamentoAplicado(null);
   }
 
   // Quantos centros o padrão alcançaria — é o que a tela precisa dizer antes de
@@ -1188,7 +1239,7 @@ function PlanejamentoOrcamentario({ sessao, onSair }) {
           onRenomear={() => abrirModalVisao(visaoAberta)}
           onAplicarMapeamento={
             temMapeamentoPadrao(visaoAberta.visaoContabil) && !contas.carregando
-              ? aplicarMapeamentoPadrao
+              ? () => setConfirmarMapeamentoPadrao(true)
               : null
           }
           onVoltar={voltar}
@@ -1481,6 +1532,14 @@ function PlanejamentoOrcamentario({ sessao, onSair }) {
             </button>
           </p>
         ) : null}
+        {mapeamentoAplicado ? (
+          <p className="toast-desfazer" role="status">
+            {mapeamentoAplicado.quantidade} centros atualizados com o mapeamento padrão.
+            <button type="button" className="botao-texto" onClick={desfazerMapeamentoPadrao}>
+              Desfazer
+            </button>
+          </p>
+        ) : null}
         {/* Some ao fechar: publicar é ação pontual, e um aviso de sucesso que
             fica na tela vira ruído na próxima vez que alguém abrir os planos. */}
         {avisoPublicacao ? (
@@ -1571,6 +1630,33 @@ function PlanejamentoOrcamentario({ sessao, onSair }) {
           perigo={confirmacao.tipo !== "desativar"}
           onConfirmar={confirmarExclusao}
           onFechar={() => setConfirmacao(null)}
+        />
+      ) : null}
+
+      {confirmarMapeamentoPadrao ? (
+        <ModalConfirmacao
+          titulo="Preencher com o padrão"
+          icone="layers"
+          perigo
+          rotuloConfirmar="Aplicar"
+          mensagem={
+            <>
+              Preenche cada módulo com as contas que o Scoreplan já usava (por
+              exemplo, Custos variáveis recebe tudo que começa com{" "}
+              <code>4.1.1.</code>, <code>4.1.2.</code> etc.) — serve de ponto
+              de partida pra montar a visão sem classificar conta por conta.
+              <br />
+              <br />
+              Se algum módulo já tiver contas escolhidas manualmente num
+              centro, elas serão <strong>substituídas</strong>. Depois de
+              aplicar dá pra ajustar módulo a módulo normalmente.
+            </>
+          }
+          onConfirmar={() => {
+            aplicarMapeamentoPadrao();
+            setConfirmarMapeamentoPadrao(false);
+          }}
+          onFechar={() => setConfirmarMapeamentoPadrao(false)}
         />
       ) : null}
     </div>

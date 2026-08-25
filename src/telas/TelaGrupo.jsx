@@ -68,7 +68,7 @@ export default function TelaGrupo({
   }
 
   return (
-    <main className="conteudo conteudo--orcamento">
+    <main className="conteudo">
       <Cabecalho
         titulo={grupo.nome || "Novo grupo"}
         subtitulo="Escolha os centros de custo que este recorte reúne para ler o DRE."

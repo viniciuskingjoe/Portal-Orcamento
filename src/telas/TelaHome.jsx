@@ -100,7 +100,7 @@ export default function TelaHome({
                 <p>Os módulos acima consolidados, com margem e participação.</p>
               </div>
               <div className="grid-modulos grid-modulos--orcamento">
-                <button type="button" className="card-modulo card-modulo--receita" onClick={onAbrirDre}>
+                <button type="button" className="card-modulo card-modulo--resultado" onClick={onAbrirDre}>
                   <span className="card-modulo__icone">
                     <Icone nome="chart" tamanho={22} />
                   </span>

@@ -8,7 +8,7 @@ export default function TelaVisoes({ visoes, planos, nomeContabil, onAbrir, onNo
   const planosQueUsam = (visaoId) => planos.filter((plano) => plano.visaoId === visaoId).length;
 
   return (
-    <main className="conteudo conteudo--planos">
+    <main className="conteudo">
       <Cabecalho
         titulo="Visões"
         subtitulo="Uma visão define quais contas compõem cada módulo do orçamento. Os planos escolhem uma visão na criação."
