@@ -183,9 +183,18 @@ function valorDaLinhaNoMes(linhaId, contexto, metrica, mes, emResolucao) {
   const linha = contexto.linhasPorId.get(linhaId);
   if (!linha) return 0;
 
+  // A linha marcada como base da análise vertical (ex.: Receita Líquida) é
+  // pedida de novo por TODA outra linha, em TODO mês — sem cache, isso
+  // refaz o percurso filial×centro×conta inteiro dezenas de vezes pro
+  // mesmíssimo número, e é o que trava o navegador antes de o "Carregando"
+  // sequer aparecer na tela (achado do usuário, "DRE demora pra abrir").
+  const chave = `${linhaId}|${mes}|${metrica}`;
+  if (contexto.cache.has(chave)) return contexto.cache.get(chave);
+
+  let valor;
   if (linha.origem === "modulo") {
     if (metrica === "planejado") {
-      return planejadoDaLinhaModulo(
+      valor = planejadoDaLinhaModulo(
         linha,
         contexto.plano,
         contexto.visao,
@@ -193,41 +202,45 @@ function valorDaLinhaNoMes(linhaId, contexto, metrica, mes, emResolucao) {
         contexto.centrosPermitidos,
         mes
       );
+    } else {
+      const indice = metrica === "realizado" ? contexto.realizado : contexto.realizadoAnterior;
+      valor = realizadoDaLinhaModulo({
+        linha,
+        visao: contexto.visao,
+        filiais: contexto.filiais,
+        centrosPermitidos: contexto.centrosPermitidos,
+        catalogo: contexto.catalogo,
+        sinais: contexto.sinais,
+        visaoContabil: contexto.visaoContabil,
+        indice,
+        mes,
+      });
     }
-    const indice = metrica === "realizado" ? contexto.realizado : contexto.realizadoAnterior;
-    return realizadoDaLinhaModulo({
-      linha,
-      visao: contexto.visao,
-      filiais: contexto.filiais,
-      centrosPermitidos: contexto.centrosPermitidos,
-      catalogo: contexto.catalogo,
-      sinais: contexto.sinais,
-      visaoContabil: contexto.visaoContabil,
-      indice,
-      mes,
+  } else {
+    // origem: "formula" — soma/subtrai outras linhas (L[]) ou contas direto
+    // (V[], sem sinal próprio — o sinal vem do operador na própria
+    // expressão, igual em Despesas com pessoal). Referenciar a MESMA conta
+    // que já entra numa linha "módulo" que esta fórmula também soma é
+    // conta duas vezes — a tela não impede, é decisão de quem monta o
+    // demonstrativo.
+    if (emResolucao.has(chave)) {
+      throw new Error(`A fórmula de "${linha.titulo}" depende dela mesma (referência circular).`);
+    }
+    const proxima = new Set(emResolucao).add(chave);
+
+    valor = avaliarFormula(linha.formula, (codigo, prefixo) => {
+      if (prefixo === "L") {
+        return valorDaLinhaNoMes(codigo, contexto, metrica, mes, proxima);
+      }
+      if (prefixo === "V") {
+        return valorDaContaNoMes(codigo, contexto, metrica, mes);
+      }
+      throw new Error(`Fórmula de linha do DRE só referencia linhas (L[]) ou contas (V[]) — "${prefixo}[${codigo}]" não vale aqui.`);
     });
   }
 
-  // origem: "formula" — soma/subtrai outras linhas (L[]) ou contas direto
-  // (V[], sem sinal próprio — o sinal vem do operador na própria expressão,
-  // igual em Despesas com pessoal). Referenciar a MESMA conta que já entra
-  // numa linha "módulo" que esta fórmula também soma é conta duas vezes —
-  // a tela não impede, é decisão de quem monta o demonstrativo.
-  const chave = `${linhaId}|${mes}|${metrica}`;
-  if (emResolucao.has(chave)) {
-    throw new Error(`A fórmula de "${linha.titulo}" depende dela mesma (referência circular).`);
-  }
-  const proxima = new Set(emResolucao).add(chave);
-
-  return avaliarFormula(linha.formula, (codigo, prefixo) => {
-    if (prefixo === "L") {
-      return valorDaLinhaNoMes(codigo, contexto, metrica, mes, proxima);
-    }
-    if (prefixo === "V") {
-      return valorDaContaNoMes(codigo, contexto, metrica, mes);
-    }
-    throw new Error(`Fórmula de linha do DRE só referencia linhas (L[]) ou contas (V[]) — "${prefixo}[${codigo}]" não vale aqui.`);
-  });
+  contexto.cache.set(chave, valor);
+  return valor;
 }
 
 // Em que módulo esta conta está configurada nesta visão — procura nos oito
@@ -359,6 +372,10 @@ export function calcularDre({
     realizado,
     realizadoAnterior,
     linhasPorId,
+    // Uma instância por chamada a `calcularDre` — cada render tem seus
+    // próprios dados (planejado pode ter mudado), então o cache não pode
+    // sobreviver entre chamadas.
+    cache: new Map(),
   };
 
   const base = modelo.find((linha) => linha.baseAnaliseVertical) ?? null;

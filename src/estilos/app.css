@@ -2153,7 +2153,13 @@ dialog::backdrop {
   background: var(--surface);
   box-shadow: var(--shadow-md);
   opacity: 1;
-  transform: scale(1) translateY(0);
+  /* `none`, não `scale(1) translateY(0)` — visualmente idêntico em repouso,
+     mas qualquer transform diferente de `none` vira o containing block de
+     tudo que é `position: fixed` lá dentro, e o painel do Seletor (que
+     porta pro próprio <dialog>) calcula a posição relativa à tela toda.
+     Com o transform aqui, o painel abria deslocado/cortado (achado do
+     critique do Impeccable). */
+  transform: none;
   transition: opacity var(--duration-base) var(--ease-standard),
     transform var(--duration-base) var(--ease-standard);
 }
@@ -3168,8 +3174,11 @@ dialog::backdrop {
   border-left: 1px solid var(--border);
   box-shadow: var(--shadow-md);
   /* Desliza da borda por onde ele já mora (direita) — não é o mesmo gesto
-     de escala/fade do .modal central, é entrada de painel lateral. */
-  transform: translateX(0);
+     de escala/fade do .modal central, é entrada de painel lateral.
+     `none` em repouso pelo mesmo motivo do .modal: um transform diferente
+     de `none` vira containing block de `position: fixed`, e quebra a
+     posição do painel do Seletor aberto dentro do drawer. */
+  transform: none;
   transition: transform var(--duration-base) var(--ease-standard);
 }
 
