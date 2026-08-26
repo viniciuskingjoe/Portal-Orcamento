@@ -189,7 +189,11 @@ button {
   font-weight: 700;
   text-align: left;
   cursor: pointer;
-  transition: background 0.18s ease, color 0.18s ease;
+  transition: background 0.18s ease, color 0.18s ease, transform 0.12s ease;
+}
+
+.nav-item:active {
+  transform: scale(0.99);
 }
 
 .nav-item > span {
@@ -1591,6 +1595,10 @@ td.sem-contas {
   box-shadow: inset 3px 0 0 var(--accent);
 }
 
+.selecao-item:active {
+  transform: scale(0.99);
+}
+
 .selecao-item b {
   font-size: 12px;
   font-variant-numeric: tabular-nums;
@@ -1722,6 +1730,10 @@ td.sem-contas {
 .abas button.is-active {
   background: var(--accent-contraste);
   color: #fff;
+}
+
+.abas button:active {
+  transform: scale(0.96);
 }
 
 .dica-edicao {
@@ -2680,10 +2692,15 @@ dialog::backdrop {
   font-size: 11.5px;
   font-weight: 600;
   cursor: pointer;
+  transition: opacity 0.12s ease;
 }
 
 .botao-texto:hover:not(:disabled) {
   text-decoration: underline;
+}
+
+.botao-texto:active:not(:disabled) {
+  opacity: 0.7;
 }
 
 .botao-texto:disabled {
@@ -3810,11 +3827,11 @@ dialog::backdrop {
 }
 
 .campo-login__dica--erro {
-  color: var(--danger, #e5534b);
+  color: var(--danger, #b94a4a);
 }
 
 .campo-login input[aria-invalid="true"] {
-  border-color: var(--danger, #e5534b);
+  border-color: var(--danger, #b94a4a);
 }
 
 .botao--login {

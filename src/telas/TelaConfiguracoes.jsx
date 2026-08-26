@@ -47,7 +47,7 @@ export default function TelaConfiguracoes({
         {cartoes.map((cartao) => (
           <button
             type="button"
-            className="card-modulo card-modulo--config"
+            className="card-modulo"
             key={cartao.id}
             onClick={() => onAbrir(cartao.id)}
           >

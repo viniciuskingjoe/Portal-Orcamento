@@ -1,8 +1,12 @@
 // Cliente da API do portal. O Vite encaminha /api/* para o backend, então em
 // dev e em produção o caminho é o mesmo — sem base URL configurável, sem CORS.
 
-const RODAR_API =
-  "A API não está respondendo. Pare o servidor e rode `npm run dev`, que sobe a API junto com o front.";
+// Em dev, quem lê é quem programa — a dica técnica ajuda. Em produção, quem
+// lê é a pessoa lançando o orçamento, que não sabe o que é `npm run dev`
+// (achado do critique do Impeccable: mensagem de dev vazando pro usuário).
+const RODAR_API = import.meta.env?.DEV
+  ? "A API não está respondendo. Pare o servidor e rode `npm run dev`, que sobe a API junto com o front."
+  : "Não foi possível conectar ao servidor. Verifique sua conexão e tente novamente em instantes.";
 
 class ErroDaApi extends Error {
   constructor(mensagem, status) {
@@ -44,7 +48,9 @@ async function buscar(caminho, parametros, opcoes = {}) {
       body: corpoEnviado ? JSON.stringify(corpoEnviado) : undefined,
     });
   } catch (erro) {
-    throw new ErroDaApi(`${RODAR_API} (${erro.message})`, 0);
+    // O texto bruto do fetch ("Failed to fetch" etc.) só ajuda em dev —
+    // em produção é ruído técnico sem ação nenhuma pra quem lê.
+    throw new ErroDaApi(import.meta.env?.DEV ? `${RODAR_API} (${erro.message})` : RODAR_API, 0);
   }
 
   // Lê como texto para poder distinguir "a API respondeu um erro" de "quem

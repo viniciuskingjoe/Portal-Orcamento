@@ -219,10 +219,20 @@ function EditorLinhaDre({ linha, linhasExistentes, catalogo, visao, onSalvar, on
         </label>
 
         <div className="abas" role="group" aria-label="De onde vem o valor">
-          <button type="button" className={origem === "modulo" ? "is-active" : ""} onClick={() => setOrigem("modulo")}>
+          <button
+            type="button"
+            className={origem === "modulo" ? "is-active" : ""}
+            aria-pressed={origem === "modulo"}
+            onClick={() => setOrigem("modulo")}
+          >
             Módulo
           </button>
-          <button type="button" className={origem === "formula" ? "is-active" : ""} onClick={() => setOrigem("formula")}>
+          <button
+            type="button"
+            className={origem === "formula" ? "is-active" : ""}
+            aria-pressed={origem === "formula"}
+            onClick={() => setOrigem("formula")}
+          >
             Fórmula
           </button>
         </div>
@@ -245,10 +255,20 @@ function EditorLinhaDre({ linha, linhasExistentes, catalogo, visao, onSalvar, on
               <label className="campo">
                 <span>Sinal</span>
                 <div className="abas" role="group" aria-label="Sinal da linha">
-                  <button type="button" className={sinal === 1 ? "is-active" : ""} onClick={() => setSinal(1)}>
+                  <button
+                    type="button"
+                    className={sinal === 1 ? "is-active" : ""}
+                    aria-pressed={sinal === 1}
+                    onClick={() => setSinal(1)}
+                  >
                     + soma
                   </button>
-                  <button type="button" className={sinal === -1 ? "is-active" : ""} onClick={() => setSinal(-1)}>
+                  <button
+                    type="button"
+                    className={sinal === -1 ? "is-active" : ""}
+                    aria-pressed={sinal === -1}
+                    onClick={() => setSinal(-1)}
+                  >
                     − subtrai
                   </button>
                 </div>
@@ -342,12 +362,18 @@ function EditorLinhaDre({ linha, linhasExistentes, catalogo, visao, onSalvar, on
             <label className="campo">
               <span>Formato</span>
               <div className="abas" role="group" aria-label="Formato do valor calculado">
-                <button type="button" className={unidade === "moeda" ? "is-active" : ""} onClick={() => setUnidade("moeda")}>
+                <button
+                  type="button"
+                  className={unidade === "moeda" ? "is-active" : ""}
+                  aria-pressed={unidade === "moeda"}
+                  onClick={() => setUnidade("moeda")}
+                >
                   Valor (R$)
                 </button>
                 <button
                   type="button"
                   className={unidade === "percentual" ? "is-active" : ""}
+                  aria-pressed={unidade === "percentual"}
                   onClick={() => setUnidade("percentual")}
                 >
                   Percentual (%)

@@ -346,6 +346,17 @@ test("referência circular entre linhas fórmula vira 0, não trava", () => {
   assert.equal(linha(linhas, "b").total.planejado, 0);
 });
 
+test("fórmula que referencia linha excluída vira 0, não trava o demonstrativo", () => {
+  // Cenário do critique do Impeccable (persona Riley): a linha "resultado"
+  // referencia L[receita], mas "receita" nunca foi criada (ou foi excluída
+  // depois de a fórmula ter sido escrita) — não pode existir no modelo.
+  const visao = comLinhas(visaoBase(), [
+    { id: "resultado", ordem: 1, titulo: "Resultado", origem: "formula", formula: "L[receita]", mostra: true },
+  ]);
+  const linhas = calcularDre({ visao, plano: plano(), filiais: FILIAIS, meses: [1], catalogo, realizado });
+  assert.equal(linha(linhas, "resultado").total.planejado, 0);
+});
+
 test("fórmula pode encadear (subtotal em cima de subtotal)", () => {
   const visao = comLinhas(visaoBase(), [
     { id: "receita", ordem: 1, titulo: "Receita", origem: "modulo", moduloId: "receita-vendas", valores: [{ codigo: RECEITA, sinal: 1 }], mostra: true },

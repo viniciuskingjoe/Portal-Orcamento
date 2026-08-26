@@ -326,9 +326,12 @@ export default function TelaDre({
 
             <label className="filtro-periodo">
               <span>De</span>
+              {/* Desabilita mês depois do "Até" — impede o intervalo invertido
+                  na origem, em vez de corrigir escondido (achado do critique
+                  do Impeccable: mesesDoPeriodo trocava De/Até sem avisar). */}
               <select value={mesInicio} onChange={(evento) => setMesInicio(Number(evento.target.value))}>
                 {NOMES_MES.map((nome, indice) => (
-                  <option key={nome} value={indice + 1}>
+                  <option key={nome} value={indice + 1} disabled={indice + 1 > mesFim}>
                     {nome}
                   </option>
                 ))}
@@ -339,7 +342,7 @@ export default function TelaDre({
               <span>Até</span>
               <select value={mesFim} onChange={(evento) => setMesFim(Number(evento.target.value))}>
                 {NOMES_MES.map((nome, indice) => (
-                  <option key={nome} value={indice + 1}>
+                  <option key={nome} value={indice + 1} disabled={indice + 1 < mesInicio}>
                     {nome}
                   </option>
                 ))}

@@ -5,13 +5,13 @@ import Icone from "./Icone.jsx";
 // entre si. Cada tela passa o ícone que já usa em outro lugar pra essa
 // mesma coisa (nav da sidebar, aviso de conexão), pra não inventar um
 // terceiro símbolo pro mesmo conceito.
-export default function EstadoVazio({ texto, icone = "wallet" }) {
+export default function EstadoVazio({ texto, icone = "wallet", titulo = "Nenhum item por aqui" }) {
   return (
     <div className="estado-vazio">
       <span className="estado-vazio__icone">
         <Icone nome={icone} tamanho={24} />
       </span>
-      <strong>Nenhum item por aqui</strong>
+      <strong>{titulo}</strong>
       <p>{texto}</p>
     </div>
   );

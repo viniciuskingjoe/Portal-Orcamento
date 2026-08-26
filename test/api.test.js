@@ -43,14 +43,19 @@ test("500 sem corpo aponta que a API está fora", async () => {
   // Regressão: com o backend parado, o proxy do Vite responde 500 com corpo
   // vazio. A mensagem antes era "Erro 500 em /api/contas", que não diz o que
   // fazer — e o usuário lê como bug do portal.
+  //
+  // Fora do Vite (aqui, em `node --test`), `import.meta.env` não existe —
+  // `import.meta.env?.DEV` cai em falsy, então api.js sempre usa a mensagem
+  // de produção. É a mesma que roda de verdade fora do `npm run dev`, e é a
+  // que vale testar (achado do critique: o texto de dev vazava pro usuário).
   await comFetch(resposta(500, ""), async () => {
-    await assert.rejects(api.contas(), /npm run dev/);
+    await assert.rejects(api.contas(), /Não foi possível conectar ao servidor/);
   });
 });
 
 test("500 com HTML também aponta a API fora", async () => {
   await comFetch(resposta(500, "<html>Internal Server Error</html>"), async () => {
-    await assert.rejects(api.contas(), /npm run dev/);
+    await assert.rejects(api.contas(), /Não foi possível conectar ao servidor/);
   });
 });
 
@@ -60,7 +65,7 @@ test("falha de rede aponta a API fora", async () => {
     throw new TypeError("Failed to fetch");
   };
   try {
-    await assert.rejects(api.contas(), /npm run dev/);
+    await assert.rejects(api.contas(), /Não foi possível conectar ao servidor/);
   } finally {
     globalThis.fetch = original;
   }
