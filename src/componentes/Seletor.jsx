@@ -143,6 +143,14 @@ export default function Seletor({
 
   function teclado(evento) {
     if (evento.key === "Escape") {
+      // Só intercepta se havia algo aberto para fechar. Sem isso, o evento
+      // segue pro <dialog> pai sem `preventDefault`, que o cancela — Escape
+      // fechava o modal inteiro (perdendo o formulário) em vez de só o
+      // dropdown. Se o painel já estava fechado, deixa passar: é o Escape do
+      // próprio modal.
+      if (!aberto) return;
+      evento.preventDefault();
+      evento.stopPropagation();
       setAberto(false);
       return;
     }

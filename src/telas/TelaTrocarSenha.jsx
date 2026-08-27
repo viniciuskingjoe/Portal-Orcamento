@@ -121,7 +121,12 @@ export default function TelaTrocarSenha({ sessao, obrigatoria = false, onTrocar,
             recusa o resto do portal até a troca acontecer. Um botão que não
             leva a lugar nenhum só faz a pessoa tentar e achar que travou. */}
         {!obrigatoria && onCancelar ? (
-          <button type="button" className="botao botao--login" onClick={onCancelar} disabled={enviando}>
+          <button
+            type="button"
+            className="botao botao--secundario botao--login"
+            onClick={onCancelar}
+            disabled={enviando}
+          >
             Cancelar
           </button>
         ) : null}

@@ -4,6 +4,7 @@ import Cabecalho from "../componentes/Cabecalho.jsx";
 import EditorFormula from "../componentes/EditorFormula.jsx";
 import TabelaOrcamento from "../componentes/TabelaOrcamento.jsx";
 import Icone from "../componentes/Icone.jsx";
+import ModalConfirmacao from "../componentes/ModalConfirmacao.jsx";
 import Seletor from "../componentes/Seletor.jsx";
 import { Carregando } from "../componentes/Estados.jsx";
 import { DicaEdicao } from "../componentes/FiltrosOrcamento.jsx";
@@ -136,6 +137,11 @@ export default function TelaOrcamento({
   // sem trocar o que está em tela.
   const [editandoFormulaDe, setEditandoFormulaDe] = useState(null);
   const [funcEmEdicao, setFuncEmEdicao] = useState(false);
+  // "Sincronizar com o Linx" publica o PLANO INTEIRO (não só este módulo) —
+  // o comentário perto do botão já dizia que a confirmação explica isso, mas
+  // não existia confirmação nenhuma, só o title do botão (achado do critique
+  // do Impeccable, P2).
+  const [confirmarSincronizar, setConfirmarSincronizar] = useState(false);
   // Atalhos de teclado (Enter/Ctrl+D/Ctrl+Enter) nunca apareciam na tela —
   // só em comentário de código — então quem digitava dúzias de células nunca
   // descobria. A dica usa a faixa que já existe para `motivo` (mesmo espaço,
@@ -408,13 +414,33 @@ export default function TelaOrcamento({
           <button
             type="button"
             className="botao botao--primario botao-sincronizar"
-            onClick={onSincronizar}
+            onClick={() => setConfirmarSincronizar(true)}
             disabled={sincronizando}
             title="Deixa o orçamento deste plano no Linx igual ao que está aqui"
           >
             <Icone nome="sincronizar" tamanho={15} />
             {sincronizando ? "Sincronizando…" : "Sincronizar com o Linx"}
           </button>
+        ) : null}
+
+        {confirmarSincronizar ? (
+          <ModalConfirmacao
+            titulo="Sincronizar com o Linx"
+            icone="sincronizar"
+            perigo={false}
+            rotuloConfirmar="Sincronizar"
+            mensagem={
+              <>
+                Isto publica o <strong>plano inteiro</strong> (todos os módulos, não só{" "}
+                {modulo.titulo}) no orçamento do Linx — é de lá que o Power BI lê. Continuar?
+              </>
+            }
+            onConfirmar={() => {
+              setConfirmarSincronizar(false);
+              onSincronizar();
+            }}
+            onFechar={() => setConfirmarSincronizar(false)}
+          />
         ) : null}
       </div>
 

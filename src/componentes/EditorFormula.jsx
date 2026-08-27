@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useId, useState } from "react";
 
 import Botao from "./Botao.jsx";
 import Icone from "./Icone.jsx";
@@ -23,6 +23,7 @@ export default function EditorFormula({ conta, descricao, contasDisponiveis, for
   const [tipo, setTipo] = useState(formulaAtual ? "calculado" : "fixo");
   const [expressao, setExpressao] = useState(formulaAtual?.expressao ?? "");
   const [salvando, setSalvando] = useState(false);
+  const idErro = `${useId()}-erro-formula`;
 
   const erro = tipo === "calculado" ? validarFormula(expressao) : null;
   const referencias = (contasDisponiveis ?? []).filter((item) => item.codigo !== conta);
@@ -93,10 +94,15 @@ export default function EditorFormula({ conta, descricao, contasDisponiveis, for
                 onChange={(evento) => setExpressao(evento.target.value)}
                 placeholder={`Ex: (V[${referencias[0]?.codigo ?? "código"}] + V[${referencias[1]?.codigo ?? "código"}]) / 12`}
                 aria-invalid={erro ? "true" : "false"}
+                aria-describedby={erro ? idErro : undefined}
               />
             </label>
 
-            {erro ? <p className="erro-campo">{erro}</p> : null}
+            {erro ? (
+              <p id={idErro} className="erro-campo" role="alert">
+                {erro}
+              </p>
+            ) : null}
             {!erro && descricaoDaFormula ? (
               <p className="editor-formula__descricao">{descricaoDaFormula}</p>
             ) : null}

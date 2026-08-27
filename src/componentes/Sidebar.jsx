@@ -38,6 +38,7 @@ export default function Sidebar({
   onAlternarTema,
   sessao,
   onSair,
+  onTrocarSenha,
 }) {
   return (
     <aside className="sidebar">
@@ -114,7 +115,24 @@ export default function Sidebar({
             <small>{sessao ? (sessao.admin ? "Administrador" : empresa) : "Sessão local"}</small>
           </span>
           {sessao ? (
-            <button type="button" className="botao-sair" onClick={onSair} title="Sair">
+            <button
+              type="button"
+              className="botao-sair botao-sair--neutro"
+              onClick={onTrocarSenha}
+              title="Trocar senha"
+              aria-label="Trocar senha"
+            >
+              <Icone nome="chave" tamanho={16} />
+            </button>
+          ) : null}
+          {sessao ? (
+            <button
+              type="button"
+              className="botao-sair"
+              onClick={onSair}
+              title="Sair"
+              aria-label="Sair"
+            >
               <Icone nome="logout" tamanho={16} />
             </button>
           ) : null}

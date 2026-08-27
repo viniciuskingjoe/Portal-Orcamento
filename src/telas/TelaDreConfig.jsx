@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useId, useMemo, useState } from "react";
 
 import Botao from "../componentes/Botao.jsx";
 import Cabecalho from "../componentes/Cabecalho.jsx";
@@ -14,7 +14,7 @@ import {
   filtrarPorPrefixos,
 } from "../dados/contas.js";
 import { TOTAL_MODULO_TOKEN } from "../dados/dre.js";
-import { validarFormula } from "../dados/formula.js";
+import { referenciasDaFormula, validarFormula } from "../dados/formula.js";
 import { MODULOS, modulo as definicaoDoModulo } from "../dados/modulos.js";
 import { contasDaFilial, dreLinhasOrdenadas, filiaisDoModulo } from "../dados/visao.js";
 
@@ -114,6 +114,7 @@ function EditorLinhaDre({ linha, linhasExistentes, catalogo, visao, onSalvar, on
   const [linhaPrincipal, setLinhaPrincipal] = useState(linha?.linhaPrincipal === true);
   const [salvando, setSalvando] = useState(false);
   const [erro, setErro] = useState("");
+  const idErroFormula = `${useId()}-erro-formula`;
 
   const moduloEscolhido = definicaoDoModulo(moduloId);
 
@@ -355,9 +356,14 @@ function EditorLinhaDre({ linha, linhasExistentes, catalogo, visao, onSalvar, on
                 onChange={(evento) => setFormula(evento.target.value)}
                 placeholder="Ex: L[receita]-L[deducao]"
                 aria-invalid={erroFormula ? "true" : "false"}
+                aria-describedby={erroFormula ? idErroFormula : undefined}
               />
             </label>
-            {erroFormula ? <p className="erro-campo">{erroFormula}</p> : null}
+            {erroFormula ? (
+              <p id={idErroFormula} className="erro-campo" role="alert">
+                {erroFormula}
+              </p>
+            ) : null}
 
             <label className="campo">
               <span>Formato</span>
@@ -515,6 +521,39 @@ export default function TelaDreConfig({
 
   const linhas = dreLinhasOrdenadas(visao);
 
+  // L[] que a fórmula usa e não aponta pra nenhuma linha existente — sem
+  // isto, uma referência quebrada (linha excluída, id digitado errado)
+  // virava 0 em silêncio, sem nenhum aviso em lugar nenhum (achado do
+  // critique do Impeccable). Não avalia a fórmula, só confere se as
+  // referências existem; sintaxe inválida é responsabilidade do validador
+  // do editor, não daqui.
+  function referenciasQuebradasDaLinha(formula) {
+    try {
+      return referenciasDaFormula(formula)
+        .filter((referencia) => referencia.prefixo === "L")
+        .map((referencia) => referencia.codigo)
+        .filter((codigo) => !linhas.some((linha) => linha.id === codigo));
+    } catch {
+      return [];
+    }
+  }
+
+  // Quem de fato depende de uma linha — pra avisar com nomes reais em vez
+  // de prometer um erro que ninguém verificava (a mensagem antiga dizia
+  // "passam a dar erro", mas excluir nunca checou nada).
+  function linhasQueDependemDe(linhaId) {
+    return linhas.filter((linha) => {
+      if (linha.id === linhaId || linha.origem !== "formula") return false;
+      try {
+        return referenciasDaFormula(linha.formula).some(
+          (referencia) => referencia.prefixo === "L" && referencia.codigo === linhaId
+        );
+      } catch {
+        return false;
+      }
+    });
+  }
+
   function mover(indice, deslocamento) {
     const alvo = indice + deslocamento;
     if (alvo < 0 || alvo >= linhas.length) return;
@@ -575,6 +614,23 @@ export default function TelaDreConfig({
                       <>
                         {linha.unidade === "percentual" ? "Fórmula (%)" : "Fórmula"}
                         <code className="dre-linha__formula-lista">{linha.formula}</code>
+                        {(() => {
+                          const quebradas = referenciasQuebradasDaLinha(linha.formula);
+                          if (!quebradas.length) return null;
+                          return (
+                            <span
+                              className="dre-linha__aviso-quebrada"
+                              title={`Referencia linha que não existe (mais): ${quebradas
+                                .map((id) => `L[${id}]`)
+                                .join(", ")}. O cálculo considera isto como 0.`}
+                            >
+                              <Icone nome="info" tamanho={14} />
+                              <span className="sr-only">
+                                Referência quebrada — considerando 0 no cálculo
+                              </span>
+                            </span>
+                          );
+                        })()}
                       </>
                     ) : (
                       definicaoDoModulo(linha.moduloId)?.titulo ?? linha.moduloId
@@ -639,25 +695,44 @@ export default function TelaDreConfig({
         />
       ) : null}
 
-      {aExcluir ? (
-        <ModalConfirmacao
-          titulo="Excluir linha"
-          nome={aExcluir.titulo}
-          mensagem={
-            <>
-              Excluir <strong>{aExcluir.titulo}</strong>? Fórmulas de outras linhas que a
-              referenciam (<code>L[{aExcluir.id}]</code>) passam a dar erro até alguém tirar a
-              referência.
-            </>
-          }
-          rotuloConfirmar="Excluir"
-          onConfirmar={() => {
-            onRemoverLinha(aExcluir.id);
-            setAExcluir(null);
-          }}
-          onFechar={() => setAExcluir(null)}
-        />
-      ) : null}
+      {aExcluir
+        ? (() => {
+            // Antes a mensagem prometia "passam a dar erro" sem nunca checar
+            // se existia alguém dependendo — nem sempre era verdade, e quando
+            // era, o "erro" nunca aparecia em lugar nenhum (achado do
+            // critique do Impeccable). Agora avisa com nome real, ou nem
+            // menciona fórmula se ninguém depender.
+            const dependentes = linhasQueDependemDe(aExcluir.id);
+            return (
+              <ModalConfirmacao
+                titulo="Excluir linha"
+                nome={aExcluir.titulo}
+                mensagem={
+                  dependentes.length ? (
+                    <>
+                      Excluir <strong>{aExcluir.titulo}</strong>?{" "}
+                      {dependentes.length === 1 ? "A linha" : "As linhas"}{" "}
+                      <strong>{dependentes.map((linha) => linha.titulo).join(", ")}</strong>{" "}
+                      {dependentes.length === 1 ? "usa" : "usam"} <code>L[{aExcluir.id}]</code> na
+                      fórmula e {dependentes.length === 1 ? "passa" : "passam"} a considerar isto
+                      como 0 — não vai dar erro visível, o número só fica menor.
+                    </>
+                  ) : (
+                    <>
+                      Excluir <strong>{aExcluir.titulo}</strong>?
+                    </>
+                  )
+                }
+                rotuloConfirmar="Excluir"
+                onConfirmar={() => {
+                  onRemoverLinha(aExcluir.id);
+                  setAExcluir(null);
+                }}
+                onFechar={() => setAExcluir(null)}
+              />
+            );
+          })()
+        : null}
     </main>
   );
 }

@@ -1,7 +1,12 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { analisarFormula, avaliarFormula, validarFormula } from "../src/dados/formula.js";
+import {
+  analisarFormula,
+  avaliarFormula,
+  referenciasDaFormula,
+  validarFormula,
+} from "../src/dados/formula.js";
 
 function resolverDe(mapa) {
   return (codigo) => {
@@ -129,4 +134,23 @@ test("prefixo desconhecido (ex.: X[algo]) é rejeitado como caractere inesperado
 
 test("colchete vazio reclama do prefixo certo (L[], não sempre V[])", () => {
   assert.throws(() => analisarFormula("L[]"), /L\[\]/);
+});
+
+test("referenciasDaFormula lista cada L[]/V[] na ordem em que aparece", () => {
+  assert.deepEqual(referenciasDaFormula("L[a] + V[b] - L[c]"), [
+    { prefixo: "L", codigo: "a" },
+    { prefixo: "V", codigo: "b" },
+    { prefixo: "L", codigo: "c" },
+  ]);
+});
+
+test("referenciasDaFormula acha referência dentro de parênteses e negativo", () => {
+  assert.deepEqual(referenciasDaFormula("-(L[a] + L[b]) / 2"), [
+    { prefixo: "L", codigo: "a" },
+    { prefixo: "L", codigo: "b" },
+  ]);
+});
+
+test("referenciasDaFormula em número puro devolve lista vazia", () => {
+  assert.deepEqual(referenciasDaFormula("100"), []);
 });

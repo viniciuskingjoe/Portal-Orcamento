@@ -272,10 +272,12 @@ e coincidir com Emphasis seria acidental, não intencional.
 ## Layout
 
 Sidebar fixa de 256px + conteúdo à direita (`margin-left: var(--sidebar-width)`).
-Conteúdo é centralizado com largura variável por tela — `min(1420px, calc(100% - 64px))`
-no geral, 1180px em Planos (lista mais estreita), até 2200px na leitura do DRE
-(`calc(100% - 32px)`, `max-width: 2200px`) porque tabelas de muitos meses
-precisam de horizontal.
+Conteúdo é centralizado com uma largura só, `min(1600px, calc(100% - 64px))`,
+compartilhada por quase toda tela — variantes mais estreitas por tela (1420px
+geral, 1180px em Planos) existiram e foram removidas de propósito: criavam
+margens laterais inconsistentes sem motivo real. A única exceção que continua
+de pé é a leitura do DRE, até 2200px (`calc(100% - 32px)`, `max-width: 2200px`),
+porque tabelas de muitos meses/filiais precisam de horizontal.
 
 Densidade é alta por padrão: padding de tabela 10×14px, cards com
 `min-height` só o suficiente pro conteúdo (82px em módulo, sem excesso).

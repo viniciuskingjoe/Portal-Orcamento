@@ -283,6 +283,7 @@ export default function TabelaOrcamento({
           .filter(Boolean)
           .join(" ")}
         tabIndex={editavel && !emEdicao ? 0 : undefined}
+        role={editavel && !emEdicao ? "button" : undefined}
         aria-invalid={falhou && !emEdicao ? true : undefined}
         onClick={editavel && !emEdicao ? () => irPara(indice, campo) : undefined}
         onKeyDown={

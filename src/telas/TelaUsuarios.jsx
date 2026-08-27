@@ -250,7 +250,7 @@ export default function TelaUsuarios({ filiais, centros, sessao, onVoltar }) {
                   {usuario.admin ? <span className="chip chip--receita">admin</span> : null}
                   {usuario.semSenhaDoPortal ? (
                     <span
-                      className="chip"
+                      className="chip chip--leitura"
                       title="Nunca entrou. No primeiro acesso usa a senha da rede e define a senha do portal."
                     >
                       1º acesso pendente

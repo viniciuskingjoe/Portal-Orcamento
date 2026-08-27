@@ -164,3 +164,27 @@ export function validarFormula(expressao) {
     return erro.message;
   }
 }
+
+// Toda referência (L[]/V[]) usada numa fórmula, na ordem em que aparece —
+// não avalia nada, só percorre a árvore já validada. Serve pra checar se
+// alguma referência aponta pra algo que não existe (mais) sem precisar
+// resolver a fórmula de verdade (achado do critique do Impeccable: fórmula
+// quebrada virava 0 em silêncio, sem nenhum aviso em lugar nenhum).
+export function referenciasDaFormula(expressao) {
+  const referencias = [];
+  function visitar(no) {
+    if (!no) return;
+    if (no.tipo === "referencia") {
+      referencias.push({ prefixo: no.prefixo, codigo: no.codigo });
+      return;
+    }
+    if (no.tipo === "negativo") {
+      visitar(no.valor);
+      return;
+    }
+    visitar(no.esquerda);
+    visitar(no.direita);
+  }
+  visitar(analisarFormula(expressao));
+  return referencias;
+}

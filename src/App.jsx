@@ -141,10 +141,17 @@ export default function App() {
 
   // `key` remonta o portal inteiro quando troca o usuário: estado de tela, de
   // filtro e de edição de outra pessoa não pode sobreviver ao login seguinte.
-  return <PlanejamentoOrcamentario key={sessao.login} sessao={sessao} onSair={sair} />;
+  return (
+    <PlanejamentoOrcamentario
+      key={sessao.login}
+      sessao={sessao}
+      onSair={sair}
+      trocarSenha={trocarSenha}
+    />
+  );
 }
 
-function PlanejamentoOrcamentario({ sessao, onSair }) {
+function PlanejamentoOrcamentario({ sessao, onSair, trocarSenha }) {
   const [configuracao, setConfiguracao] = useState(estadoInicial().configuracao);
   const [visoes, setVisoes] = useState([]);
   const [planos, setPlanos] = useState([]);
@@ -171,6 +178,11 @@ function PlanejamentoOrcamentario({ sessao, onSair }) {
   const [modalVisao, setModalVisao] = useState(null);
   const [confirmacao, setConfirmacao] = useState(null);
   const [confirmarMapeamentoPadrao, setConfirmarMapeamentoPadrao] = useState(false);
+  // Troca de senha por vontade própria (menu do usuário) — TelaTrocarSenha já
+  // aceitava `obrigatoria=false`/`onCancelar`, mas nada no app levava até
+  // aqui; só existia o caminho obrigatório, forçado pelo servidor (achado do
+  // critique do Impeccable, P2).
+  const [trocandoSenha, setTrocandoSenha] = useState(false);
 
   const [filtros, setFiltros] = useState(FILTROS_PADRAO);
   const [editingCell, setEditingCell] = useState(null);
@@ -1054,6 +1066,13 @@ function PlanejamentoOrcamentario({ sessao, onSair }) {
     if (!loteParaDesfazer) return undefined;
     function aoTeclar(evento) {
       if ((evento.ctrlKey || evento.metaKey) && evento.key.toLowerCase() === "z") {
+        // Campo com foco quer dizer que a pessoa já saiu do lote e está
+        // digitando outra coisa — aí Ctrl+Z é o desfazer nativo do campo, não
+        // o desfazer do lote antigo. Sem essa checagem, corrigir um typo numa
+        // célula diferente e apertar Ctrl+Z reverte o lote de minutos atrás
+        // em vez do que acabou de ser digitado.
+        const emCampo = ["INPUT", "TEXTAREA"].includes(document.activeElement?.tagName);
+        if (emCampo) return;
         evento.preventDefault();
         desfazerLote();
       }
@@ -1492,6 +1511,19 @@ function PlanejamentoOrcamentario({ sessao, onSair }) {
     );
   }
 
+  // Voluntária, pelo menu — a mesma tela do primeiro acesso, mas com
+  // "Cancelar" e sem travar o resto do portal enquanto isso (obrigatória
+  // continua sendo o retorno antecipado lá no componente de fora).
+  if (trocandoSenha) {
+    return (
+      <TelaTrocarSenha
+        sessao={sessao}
+        onTrocar={trocarSenha}
+        onCancelar={() => setTrocandoSenha(false)}
+      />
+    );
+  }
+
   return (
     <div className="app">
       <Sidebar
@@ -1503,6 +1535,7 @@ function PlanejamentoOrcamentario({ sessao, onSair }) {
         }
         sessao={sessao}
         onSair={onSair}
+        onTrocarSenha={() => setTrocandoSenha(true)}
         tela={tela}
         onNavegar={navegar}
         tema={tema}
@@ -1533,7 +1566,15 @@ function PlanejamentoOrcamentario({ sessao, onSair }) {
           </p>
         ) : null}
         {mapeamentoAplicado ? (
-          <p className="toast-desfazer" role="status">
+          <p
+            className="toast-desfazer"
+            role="status"
+            // Os dois toasts de desfazer são independentes, mesmo canto — se
+            // os dois estiverem ativos ao mesmo tempo (raro, mas possível
+            // dentro da janela de 10s de cada um), este sobe pra não cobrir
+            // o outro (achado do critique do Impeccable).
+            style={loteParaDesfazer ? { bottom: 84 } : undefined}
+          >
             {mapeamentoAplicado.quantidade} centros atualizados com o mapeamento padrão.
             <button type="button" className="botao-texto" onClick={desfazerMapeamentoPadrao}>
               Desfazer
