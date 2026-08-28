@@ -3541,6 +3541,16 @@ dialog::backdrop {
     width: 38px;
     height: 38px;
   }
+
+  /* A única interação de arrastar do sistema — e a única pequena que a
+     passada de toque acima tinha deixado passar. 9px é inatingível debaixo
+     do dedo. */
+  .alca-preenchimento {
+    width: 16px;
+    height: 16px;
+    right: -7px;
+    bottom: -7px;
+  }
 }
 
 /* Aviso que muda a leitura do número na tela, não só informa. */

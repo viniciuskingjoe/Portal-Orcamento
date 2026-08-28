@@ -1511,19 +1511,6 @@ function PlanejamentoOrcamentario({ sessao, onSair, trocarSenha }) {
     );
   }
 
-  // Voluntária, pelo menu — a mesma tela do primeiro acesso, mas com
-  // "Cancelar" e sem travar o resto do portal enquanto isso (obrigatória
-  // continua sendo o retorno antecipado lá no componente de fora).
-  if (trocandoSenha) {
-    return (
-      <TelaTrocarSenha
-        sessao={sessao}
-        onTrocar={trocarSenha}
-        onCancelar={() => setTrocandoSenha(false)}
-      />
-    );
-  }
-
   return (
     <div className="app">
       <Sidebar
@@ -1698,6 +1685,17 @@ function PlanejamentoOrcamentario({ sessao, onSair, trocarSenha }) {
             setConfirmarMapeamentoPadrao(false);
           }}
           onFechar={() => setConfirmarMapeamentoPadrao(false)}
+        />
+      ) : null}
+
+      {/* Voluntária, pelo menu — vira modal por cima do app (a obrigatória,
+          antes de qualquer sessão liberada, continua com retorno antecipado
+          lá no componente de fora, em tela cheia). */}
+      {trocandoSenha ? (
+        <TelaTrocarSenha
+          sessao={sessao}
+          onTrocar={trocarSenha}
+          onCancelar={() => setTrocandoSenha(false)}
         />
       ) : null}
     </div>

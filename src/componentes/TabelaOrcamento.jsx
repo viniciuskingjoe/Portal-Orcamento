@@ -9,10 +9,15 @@ const LINHAS_RESUMO = new Set(["total", "media"]);
 // isto seria preciso clicar antes de cada número.
 const ABRE_EDICAO = /^[0-9,.]$/;
 
-function classeVariacao(valor) {
-  if (valor > 0) return "positivo";
-  if (valor < 0) return "negativo";
-  return "";
+// Verde/vermelho tem que significar "bom/ruim", não "subiu/desceu": receita
+// que cresce é notícia boa (verde), mas despesa que cresce é notícia ruim
+// (vermelho) — a mesma variação positiva é favorável num tipo de módulo e
+// desfavorável no outro. Sem isto, os 7 módulos de despesa do sistema
+// pintavam gasto crescente de verde.
+function classeVariacao(valor, tipoModulo) {
+  if (!valor) return "";
+  const favoravel = tipoModulo === "despesa" ? valor < 0 : valor > 0;
+  return favoravel ? "positivo" : "negativo";
 }
 
 export default function TabelaOrcamento({
@@ -22,6 +27,10 @@ export default function TabelaOrcamento({
   // coluna em reais, e as DUAS aceitam digitação — o % é o que fica gravado, e
   // digitar em reais é o mesmo lançamento pelo outro lado.
   percentual = false,
+  // "receita" ou "despesa" — decide se uma variação positiva é notícia boa
+  // (verde) ou ruim (vermelho). Default "receita" preserva o sentido antigo
+  // onde não for passado.
+  tipoModulo = "receita",
   podeEditar,
   editingCell,
   // Ids (formato de `idDaCelula`) cuja última gravação falhou — fica marcada
@@ -331,7 +340,10 @@ export default function TabelaOrcamento({
             onFocus={(evento) => evento.currentTarget.select()}
             autoFocus
             inputMode="decimal"
-            aria-label={`Editar planejado de ${linha.label}`}
+            // Em módulo percentual há duas células editáveis por linha (%
+            // e R$) — sem o campo no rótulo, as duas anunciavam a mesma
+            // coisa e quem usa leitor de tela não sabia qual tinha foco.
+            aria-label={`Editar ${campo === "percentual" ? "percentual" : "planejado"} de ${linha.label}`}
           />
         ) : (
           formatarValor(valorDoCampo(linha, campo))
@@ -444,15 +456,15 @@ export default function TabelaOrcamento({
 
                 <td>{formatar(linha.realizado)}</td>
                 <td>{formatar(linha.anterior)}</td>
-                <td className={classeVariacao(linha.variacao)}>
+                <td className={classeVariacao(linha.variacao, tipoModulo)}>
                   {linha.variacao > 0 ? "+" : ""}
                   {formatar(linha.variacao)}
                 </td>
-                <td className={classeVariacao(linha.variacaoPercentual)}>
+                <td className={classeVariacao(linha.variacaoPercentual, tipoModulo)}>
                   {linha.variacaoPercentual > 0 ? "+" : ""}
                   {formatarPercentual(linha.variacaoPercentual)}
                 </td>
-                <td className={linha.vsOrcado == null ? "" : classeVariacao(linha.vsOrcado)}>
+                <td className={linha.vsOrcado == null ? "" : classeVariacao(linha.vsOrcado, tipoModulo)}>
                   {linha.vsOrcado == null ? (
                     "—"
                   ) : (

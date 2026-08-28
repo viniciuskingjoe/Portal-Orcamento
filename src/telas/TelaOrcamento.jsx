@@ -496,6 +496,7 @@ export default function TelaOrcamento({
           <TabelaOrcamento
             linhas={linhas}
             percentual={percentual}
+            tipoModulo={modulo.tipo}
             podeEditar={podeEditar && !contaCalculada}
             prefixoCelula={`${modulo.id}|${filtros.filial}|${filtros.centro}|${filtros.conta}|${filtros.receita}`}
             colunaFuncionarios={

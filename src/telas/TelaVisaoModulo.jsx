@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from "react";
 import Cabecalho from "../componentes/Cabecalho.jsx";
 import Icone from "../componentes/Icone.jsx";
 import LinhaConta from "../componentes/LinhaConta.jsx";
+import ModalConfirmacao from "../componentes/ModalConfirmacao.jsx";
 import { AvisoErro, Carregando } from "../componentes/Estados.jsx";
 import {
   ancestrais,
@@ -42,6 +43,12 @@ export default function TelaVisaoModulo({
   const [filialId, setFilialId] = useState(() => filiais[0]?.id ?? null);
   const [centroId, setCentroId] = useState(SEM_CENTRO);
   const [busca, setBusca] = useState("");
+  // Desmarcar "centro em uso" apaga as contas já escolhidas dele — do jeito
+  // que excluir plano/linha do DRE/permissão já confirmam antes, isto
+  // também confirma quando há algo pra perder. Ligado ao contrário
+  // (marcar) ou desligado sem conta nenhuma passam direto: não há o que
+  // avisar.
+  const [confirmandoDesligar, setConfirmandoDesligar] = useState(null);
 
   // Filial que sumiu do ERP não pode continuar selecionada.
   useEffect(() => {
@@ -257,6 +264,10 @@ export default function TelaVisaoModulo({
                         checked={emUso}
                         disabled={!filialId}
                         onChange={() => {
+                          if (emUso && quantas > 0) {
+                            setConfirmandoDesligar({ centro, quantas });
+                            return;
+                          }
                           onDefinirUsoDoCentro(modulo.id, filialId, centro.id, !emUso);
                           setCentroId(emUso ? SEM_CENTRO : centro.id);
                         }}
@@ -361,6 +372,28 @@ export default function TelaVisaoModulo({
             ) : null}
           </section>
         </div>
+      ) : null}
+
+      {confirmandoDesligar ? (
+        <ModalConfirmacao
+          titulo="Deixar de usar o centro"
+          rotuloConfirmar="Deixar de usar"
+          mensagem={
+            <>
+              Isto tira {confirmandoDesligar.quantas === 1 ? "a conta já escolhida" : (
+                <>as <strong>{confirmandoDesligar.quantas} contas</strong> já escolhidas</>
+              )}{" "}
+              do centro <strong>{confirmandoDesligar.centro.nome}</strong> nesta filial. Pra
+              voltar a usar, as contas precisam ser escolhidas de novo. Continuar?
+            </>
+          }
+          onConfirmar={() => {
+            onDefinirUsoDoCentro(modulo.id, filialId, confirmandoDesligar.centro.id, false);
+            setCentroId(SEM_CENTRO);
+            setConfirmandoDesligar(null);
+          }}
+          onFechar={() => setConfirmandoDesligar(null)}
+        />
       ) : null}
     </main>
   );

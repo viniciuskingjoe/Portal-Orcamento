@@ -1,7 +1,9 @@
 import { useState } from "react";
 
+import Botao from "../componentes/Botao.jsx";
 import CampoSenha from "../componentes/CampoSenha.jsx";
 import Icone from "../componentes/Icone.jsx";
+import Modal from "../componentes/Modal.jsx";
 import { EMPRESA } from "../dados/seeds.js";
 
 // ============================================================================
@@ -56,6 +58,72 @@ export default function TelaTrocarSenha({ sessao, obrigatoria = false, onTrocar,
     }
   }
 
+  const campos = (
+    <>
+      <CampoSenha
+        nome="senhaAtual"
+        rotulo={primeiroAcesso ? "Senha da rede (Windows)" : "Senha atual"}
+        valor={senhaAtual}
+        aoMudar={setSenhaAtual}
+        disabled={enviando}
+        autoFocus
+      />
+
+      <CampoSenha
+        nome="senhaNova"
+        rotulo="Senha nova"
+        valor={senhaNova}
+        aoMudar={setSenhaNova}
+        autoComplete="new-password"
+        disabled={enviando}
+        dica="Pelo menos 10 caracteres. Não pode conter o seu nome nem o seu login."
+      />
+
+      <CampoSenha
+        nome="repetida"
+        rotulo="Repita a senha nova"
+        valor={repetida}
+        aoMudar={setRepetida}
+        autoComplete="new-password"
+        disabled={enviando}
+        invalido={diferem}
+        dica={diferem ? "As duas não são iguais." : null}
+      />
+
+      {erro ? (
+        <p className="login-erro" role="alert">
+          <Icone nome="info" tamanho={16} />
+          <span>{erro}</span>
+        </p>
+      ) : null}
+    </>
+  );
+
+  // Voluntária (pelo menu, com o app já aberto atrás) vira modal — a pessoa
+  // não saiu de lugar nenhum, só abriu uma caixa por cima. A tela cheia de
+  // login fica só pra obrigatória: aí ainda não tem app nenhum atrás pra
+  // mostrar, e a sidebar some porque a sessão nem está liberada ainda.
+  if (!obrigatoria) {
+    return (
+      <Modal titulo="Trocar senha" onFechar={onCancelar} largura="440px">
+        <form onSubmit={enviar}>
+          <div className="modal__conteudo">
+            <p className="campo__ajuda">Você está logado como {sessao?.nome ?? sessao?.login}.</p>
+            {campos}
+          </div>
+          <div className="modal__rodape">
+            <Botao variante="secundario" onClick={onCancelar} disabled={enviando}>
+              Cancelar
+            </Botao>
+            <Botao type="submit" disabled={enviando}>
+              {enviando ? "Salvando…" : "Salvar senha"}
+            </Botao>
+          </div>
+        </form>
+      </Modal>
+    );
+  }
+
   return (
     <main className="tela-login">
       <div className="login-marca">
@@ -66,71 +134,22 @@ export default function TelaTrocarSenha({ sessao, obrigatoria = false, onTrocar,
 
       <form className="cartao-login" onSubmit={enviar}>
         <div className="cartao-login__titulo">
-          <h1>{obrigatoria ? "Defina a senha do portal" : "Trocar senha"}</h1>
+          <h1>Defina a senha do portal</h1>
           <p>
             {primeiroAcesso
               ? "Você entrou com a senha da rede. Escolha agora uma senha só deste portal — é ela que vai valer daqui em diante."
-              : obrigatoria
-                ? "Escolha uma senha nova para continuar."
-                : `Você está logado como ${sessao?.nome ?? sessao?.login}.`}
+              : "Escolha uma senha nova para continuar."}
           </p>
         </div>
 
-        <CampoSenha
-          nome="senhaAtual"
-          rotulo={primeiroAcesso ? "Senha da rede (Windows)" : "Senha atual"}
-          valor={senhaAtual}
-          aoMudar={setSenhaAtual}
-          disabled={enviando}
-          autoFocus
-        />
+        {campos}
 
-        <CampoSenha
-          nome="senhaNova"
-          rotulo="Senha nova"
-          valor={senhaNova}
-          aoMudar={setSenhaNova}
-          autoComplete="new-password"
-          disabled={enviando}
-          dica="Pelo menos 10 caracteres. Não pode conter o seu nome nem o seu login."
-        />
-
-        <CampoSenha
-          nome="repetida"
-          rotulo="Repita a senha nova"
-          valor={repetida}
-          aoMudar={setRepetida}
-          autoComplete="new-password"
-          disabled={enviando}
-          invalido={diferem}
-          dica={diferem ? "As duas não são iguais." : null}
-        />
-
-        {erro ? (
-          <p className="login-erro" role="alert">
-            <Icone nome="info" tamanho={16} />
-            <span>{erro}</span>
-          </p>
-        ) : null}
-
+        {/* Sem "cancelar": não há para onde ir — o servidor recusa o resto do
+            portal até a troca acontecer. Um botão que não leva a lugar
+            nenhum só faz a pessoa tentar e achar que travou. */}
         <button type="submit" className="botao botao--primario botao--login" disabled={enviando}>
           {enviando ? "Salvando…" : "Salvar senha"}
         </button>
-
-        {/* Sem "cancelar" quando é obrigatória: não há para onde ir — o servidor
-            recusa o resto do portal até a troca acontecer. Um botão que não
-            leva a lugar nenhum só faz a pessoa tentar e achar que travou. */}
-        {!obrigatoria && onCancelar ? (
-          <button
-            type="button"
-            className="botao botao--secundario botao--login"
-            onClick={onCancelar}
-            disabled={enviando}
-          >
-            Cancelar
-          </button>
-        ) : null}
-
       </form>
 
       <p className="login-rodape">{EMPRESA}</p>
