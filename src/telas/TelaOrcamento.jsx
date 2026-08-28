@@ -235,9 +235,15 @@ export default function TelaOrcamento({
   const contaCalculada =
     temFuncionarios && filtros.conta !== TODAS_AS_CONTAS && contaEhCalculada(visao, modulo.id, filtros.conta);
 
-  const motivo = !podeLancar && filtros.filial !== "total"
-    ? "Você tem acesso de leitura nesta combinação — os valores aparecem, mas não podem ser alterados."
-    : !contasDisponiveis.length
+  // "Acesso de leitura" só pode vir DEPOIS de filial e centro estarem
+  // totalmente escolhidos: `podeLancar` (dados/permissoes.js) já devolve
+  // falso enquanto falta escolher um dos dois, mesmo pra quem tem permissão
+  // de verdade — testado ao vivo com um admin com "edita" concedido: a
+  // mensagem de "só leitura" aparecia igual, só sumia depois de escolher o
+  // centro. Checar essa ordem antes garante que, quando o motivo for mesmo
+  // falta de permissão, filial e centro já estão fixados e `podeLancar`
+  // reflete a permissão de verdade, não um filtro incompleto.
+  const motivo = !contasDisponiveis.length
     ? "Nenhuma conta configurada para esta combinação. Ajuste a visão."
     : percentual && !receitas.length
       ? "Nenhuma conta de receita configurada nesta filial. Ajuste Receita de vendas na visão."
@@ -247,11 +253,13 @@ export default function TelaOrcamento({
           ? "Esta filial não tem centro de custo nesta visão. Marque os centros dela em Visões."
           : filtros.centro === SEM_CENTRO
             ? "Escolha um centro de custo acima — o Total é só leitura."
-            : filtros.conta === TODAS_AS_CONTAS
-              ? "Escolha uma conta na lista à esquerda para lançar o planejado."
-              : percentual && filtros.receita === TODAS_AS_CONTAS
-                ? "Escolha também a receita sobre a qual o percentual incide."
-                : null;
+            : !podeLancar
+              ? "Você tem acesso de leitura nesta combinação — os valores aparecem, mas não podem ser alterados."
+              : filtros.conta === TODAS_AS_CONTAS
+                ? "Escolha uma conta na lista à esquerda para lançar o planejado."
+                : percentual && filtros.receita === TODAS_AS_CONTAS
+                  ? "Escolha também a receita sobre a qual o percentual incide."
+                  : null;
 
   // Pronto pra lançar e ninguém nunca disse que dá pra digitar sem tirar a
   // mão do teclado: os atalhos só existiam em comentário de código. Some pra
