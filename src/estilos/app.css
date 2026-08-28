@@ -273,6 +273,10 @@ button {
   color: var(--on-dark);
 }
 
+.tema-toggle:active {
+  transform: scale(0.99);
+}
+
 .card-usuario {
   display: flex;
   align-items: center;
@@ -2111,6 +2115,10 @@ td.sem-contas {
   border-bottom-color: var(--accent);
 }
 
+.link-modulo:active:not(:disabled) {
+  opacity: 0.7;
+}
+
 .link-modulo:disabled {
   cursor: not-allowed;
   opacity: 0.75;
@@ -3769,6 +3777,10 @@ dialog::backdrop {
   color: var(--accent);
 }
 
+.campo-senha__olho:active:not(:disabled) {
+  transform: scale(0.92);
+}
+
 .campo-senha__olho:disabled {
   opacity: 0.45;
   cursor: not-allowed;
@@ -3901,6 +3913,10 @@ dialog::backdrop {
 .botao-sair:hover {
   border-color: var(--danger);
   color: var(--danger);
+}
+
+.botao-sair:active {
+  transform: scale(0.92);
 }
 
 /* Trocar senha não é uma ação de risco como sair — usa o azul de destaque
@@ -4100,46 +4116,6 @@ dialog::backdrop {
   max-width: 760px;
 }
 
-.lista-concessoes {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-.lista-concessoes:empty {
-  display: none;
-}
-
-/* Cada concessão é uma etiqueta do tamanho do que diz, não uma linha de tabela:
-   elas são curtas ("tudo", "E-COMMERCE") e cabem várias por linha. */
-.concessao {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  padding: 5px 6px 5px 5px;
-  border: 1px solid var(--border);
-  border-radius: 999px;
-  background: var(--surface);
-  font-size: 12px;
-}
-
-.concessao__texto {
-  min-width: 0;
-}
-
-/* O "remover" só ganha peso quando a etiqueta está sob o ponteiro — com uma
-   dúzia de concessões, doze links vermelhos competem com o conteúdo. */
-.concessao .botao-texto {
-  color: var(--muted);
-}
-
-.concessao:hover .botao-texto {
-  color: var(--danger);
-}
-
 /* --- permissão: onde atua + o que faz ----------------------------------- */
 
 .editor-permissao {
@@ -4284,6 +4260,10 @@ dialog::backdrop {
   color: var(--text);
 }
 
+.matriz-estado:active {
+  transform: scale(0.96);
+}
+
 .matriz-estado.is-ativo {
   background: var(--accent-contraste);
   color: var(--on-dark);
@@ -4323,60 +4303,6 @@ dialog::backdrop {
 
 .editor-permissao__previa p:last-child {
   margin-bottom: 0;
-}
-
-.nova-concessao {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  padding: 12px;
-  border: 1px solid var(--border-strong);
-  border-radius: var(--radius-md);
-}
-
-.nova-concessao__atalhos {
-  display: flex;
-  gap: 8px;
-  flex-wrap: wrap;
-}
-
-.nova-concessao__campos {
-  display: flex;
-  align-items: end;
-  gap: 10px;
-  flex-wrap: wrap;
-}
-
-.nova-concessao__campos label:not(.check-inline) {
-  display: flex;
-  flex-direction: column;
-  gap: 5px;
-}
-
-.nova-concessao__campos span {
-  color: var(--muted);
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-}
-
-.nova-concessao__campos select {
-  min-height: 36px;
-  min-width: 160px;
-  max-width: 220px;
-  padding: 0 10px;
-  border: 1px solid var(--border-strong);
-  border-radius: var(--radius-sm);
-  background: var(--surface);
-  color: var(--text);
-  font-size: 13px;
-}
-
-.nova-concessao__previa {
-  margin: 0;
-  color: var(--muted);
-  font-size: 12px;
 }
 
 .botao-texto--perigo:hover:not(:disabled) {
@@ -4425,6 +4351,10 @@ dialog::backdrop {
 
 .seletor__campo:hover:not(:disabled) {
   border-color: var(--accent);
+}
+
+.seletor__campo:active:not(:disabled) {
+  transform: scale(0.98);
 }
 
 .seletor__campo:disabled {
@@ -4514,6 +4444,10 @@ dialog::backdrop {
   cursor: pointer;
 }
 
+.seletor__opcao:active {
+  transform: scale(0.98);
+}
+
 .seletor__opcao > span {
   overflow: hidden;
   text-overflow: ellipsis;
@@ -4582,75 +4516,8 @@ dialog::backdrop {
   color: var(--danger);
 }
 
-/* A prévia vira lista quando a escolha múltipla multiplica as combinações. */
-.nova-concessao__previa {
-  color: var(--muted);
-  font-size: 12px;
-}
-
-.nova-concessao__previa ul {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px 8px;
-  margin: 4px 0 0;
-  padding: 0;
-  list-style: none;
-}
-
-.nova-concessao__previa li {
-  padding: 2px 8px;
-  border: 1px solid var(--border);
-  border-radius: 999px;
-  color: var(--text-soft);
-}
-
-/* Concessão que não muda nada porque já existe outra mais ampla. Fica visível
-   mas apagada: continua sendo real e removível, só não tem efeito. */
-.concessao.is-redundante {
-  opacity: 0.55;
-}
-
-.nova-concessao__botoes {
-  display: flex;
-  gap: 8px;
-  flex-wrap: wrap;
-}
-
-/* O chip da concessão virou botão: alterna edita/só vê no lugar, em vez de
-   obrigar a remover e conceder de novo a mesma combinação. */
-.chip--acao {
-  border: 0;
-  cursor: pointer;
-  font-family: inherit;
-  transition: 0.14s ease;
-}
-
-.chip--acao:hover {
-  filter: brightness(1.15);
-  box-shadow: inset 0 0 0 1px currentColor;
-}
-
-.concessao__remover {
-  display: grid;
-  place-items: center;
-  width: 22px;
-  height: 22px;
-  padding: 0;
-  border: 0;
-  border-radius: 999px;
-  background: none;
-  color: var(--muted);
-  cursor: pointer;
-  transition: 0.14s ease;
-}
-
-.concessao:hover .concessao__remover {
-  color: var(--text-soft);
-}
-
-.concessao__remover:hover {
-  background: var(--danger-soft);
-  color: var(--danger);
+.seletor__limpar:active {
+  transform: scale(0.98);
 }
 
 /* ---------------------------------------------------------------------------
@@ -4906,26 +4773,6 @@ dialog::backdrop {
   padding: 7px 12px;
   border-bottom: 1px solid var(--border);
   text-align: left;
-}
-
-.grupo-filial-toggle {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  width: 100%;
-  padding: 0;
-  border: 0;
-  background: none;
-  color: var(--text);
-  font: inherit;
-  font-size: 13px;
-  font-weight: 700;
-  cursor: pointer;
-  text-align: left;
-}
-
-.grupo-filial-toggle:hover {
-  color: var(--accent);
 }
 
 .tabela-qtde tfoot th,

@@ -48,15 +48,15 @@ export default function CampoSenha({
           aria-invalid={invalido || undefined}
           aria-describedby={dica ? idDica : undefined}
         />
-        {/* `tabIndex={-1}` de propósito: quem navega pelo teclado sai da senha
-            direto para o botão de entrar. O olho é gesto de mouse, e ficar no
-            caminho do Tab atrapalharia mais gente do que ajudaria. */}
+        {/* Sem tabIndex: quem digita a senha errada e quer conferir antes de
+            enviar precisa alcançar isto pelo teclado — a tela de login é
+            justamente a que trava 5 minutos depois de 5 erros, então não dá
+            pra deixar essa conferência só pra quem usa mouse. */}
         <button
           type="button"
           className="campo-senha__olho"
           onClick={() => setVisivel((atual) => !atual)}
           disabled={disabled}
-          tabIndex={-1}
           aria-pressed={visivel}
           aria-label={visivel ? "Ocultar a senha" : "Mostrar a senha"}
           title={visivel ? "Ocultar a senha" : "Mostrar a senha"}
