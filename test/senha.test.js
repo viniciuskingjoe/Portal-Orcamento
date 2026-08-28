@@ -49,7 +49,10 @@ describe("força da senha", () => {
   });
 
   it("exige o tamanho mínimo", () => {
-    assert.match(criticarSenha("a".repeat(TAMANHO_MINIMO - 1), contexto), /10 caracteres/);
+    assert.match(
+      criticarSenha("a".repeat(TAMANHO_MINIMO - 1), contexto),
+      new RegExp(`${TAMANHO_MINIMO} caracteres`)
+    );
   });
 
   it("recusa a palavra óbvia com número no fim", () => {

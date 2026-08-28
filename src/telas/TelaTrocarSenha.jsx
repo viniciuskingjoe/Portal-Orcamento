@@ -76,7 +76,7 @@ export default function TelaTrocarSenha({ sessao, obrigatoria = false, onTrocar,
         aoMudar={setSenhaNova}
         autoComplete="new-password"
         disabled={enviando}
-        dica="Pelo menos 10 caracteres. Não pode conter o seu nome nem o seu login."
+        dica="Pelo menos 6 caracteres. Não pode conter o seu nome nem o seu login."
       />
 
       <CampoSenha

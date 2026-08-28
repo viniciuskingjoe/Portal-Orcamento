@@ -28,7 +28,7 @@ const scryptAsync = promisify(scrypt);
 const PARAMETROS = { N: 32768, r: 8, p: 1, tamanho: 64, sal: 16 };
 const VERSAO = "s1";
 
-export const TAMANHO_MINIMO = 10;
+export const TAMANHO_MINIMO = 6;
 
 async function derivar(senha, sal, { N, r, p, tamanho }) {
   // `maxmem` precisa acompanhar o N: o padrao do Node (32MB) estoura com 2^15.
