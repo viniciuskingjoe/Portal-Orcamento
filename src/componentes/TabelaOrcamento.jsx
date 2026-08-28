@@ -20,6 +20,16 @@ function classeVariacao(valor, tipoModulo) {
   return favoravel ? "positivo" : "negativo";
 }
 
+// "Favorável"/"desfavorável" fica só na cor — quem não distingue verde de
+// vermelho (ou usa leitor de tela) não tinha nenhum outro jeito de saber o
+// que o número significa, ainda mais agora que o sentido depende do tipo do
+// módulo, não é mais sempre "positivo é bom".
+function rotuloVariacao(classe) {
+  if (classe === "positivo") return "favorável";
+  if (classe === "negativo") return "desfavorável";
+  return null;
+}
+
 export default function TabelaOrcamento({
   linhas,
   formato = "moeda",
@@ -456,24 +466,40 @@ export default function TabelaOrcamento({
 
                 <td>{formatar(linha.realizado)}</td>
                 <td>{formatar(linha.anterior)}</td>
-                <td className={classeVariacao(linha.variacao, tipoModulo)}>
-                  {linha.variacao > 0 ? "+" : ""}
-                  {formatar(linha.variacao)}
-                </td>
-                <td className={classeVariacao(linha.variacaoPercentual, tipoModulo)}>
-                  {linha.variacaoPercentual > 0 ? "+" : ""}
-                  {formatarPercentual(linha.variacaoPercentual)}
-                </td>
-                <td className={linha.vsOrcado == null ? "" : classeVariacao(linha.vsOrcado, tipoModulo)}>
-                  {linha.vsOrcado == null ? (
-                    "—"
-                  ) : (
-                    <>
+                {(() => {
+                  const classeVar = classeVariacao(linha.variacao, tipoModulo);
+                  const rotuloVar = rotuloVariacao(classeVar);
+                  return (
+                    <td className={classeVar}>
+                      {linha.variacao > 0 ? "+" : ""}
+                      {formatar(linha.variacao)}
+                      {rotuloVar ? <span className="sr-only"> ({rotuloVar})</span> : null}
+                    </td>
+                  );
+                })()}
+                {(() => {
+                  const classeVar = classeVariacao(linha.variacaoPercentual, tipoModulo);
+                  const rotuloVar = rotuloVariacao(classeVar);
+                  return (
+                    <td className={classeVar}>
+                      {linha.variacaoPercentual > 0 ? "+" : ""}
+                      {formatarPercentual(linha.variacaoPercentual)}
+                      {rotuloVar ? <span className="sr-only"> ({rotuloVar})</span> : null}
+                    </td>
+                  );
+                })()}
+                {(() => {
+                  if (linha.vsOrcado == null) return <td>—</td>;
+                  const classeVar = classeVariacao(linha.vsOrcado, tipoModulo);
+                  const rotuloVar = rotuloVariacao(classeVar);
+                  return (
+                    <td className={classeVar}>
                       {linha.vsOrcado > 0 ? "+" : ""}
                       {formatarPercentual(linha.vsOrcado)}
-                    </>
-                  )}
-                </td>
+                      {rotuloVar ? <span className="sr-only"> ({rotuloVar})</span> : null}
+                    </td>
+                  );
+                })()}
               </tr>
             );
           })}

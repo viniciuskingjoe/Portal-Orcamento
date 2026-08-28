@@ -265,9 +265,10 @@ senha do portal é apagada e a conta volta a entrar pela rede — nada é gerado
 anotado ou dito por telefone. É também o que fazer quando se desconfia que uma
 senha vazou; as sessões abertas caem junto.
 
-**Força**: mínimo 10 caracteres, e barra o óbvio (`senha123`, `portal@2026`), o
-próprio login e o próprio nome. Não exige maiúscula-número-símbolo — isso produz
-`Senha@123` e um papel colado no monitor.
+**Força**: mínimo 6 caracteres, com alguma variedade (não pode repetir quase
+tudo), e barra o óbvio (`senha123`, `portal@2026`), o próprio login e o
+próprio nome. Não exige maiúscula-número-símbolo — isso produz `Senha@123` e
+um papel colado no monitor.
 
 O login aceita as três formas que a pessoa já usa (`fulano`, `DOMINIO\fulano`,
 `fulano@dominio`) e todas viram um só login em `normalizarLogin`.

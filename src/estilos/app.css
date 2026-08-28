@@ -3608,7 +3608,9 @@ dialog::backdrop {
   gap: 14px;
   font-size: 22px;
   font-weight: 800;
-  letter-spacing: 0.06em;
+  /* Mesmo valor de .marca (sidebar) — é a mesma marca em duas telas, não
+     pode ter dois tamanhos/espaçamentos. */
+  letter-spacing: 0.18em;
 }
 
 .login-marca span:last-child {
@@ -3885,8 +3887,8 @@ dialog::backdrop {
   flex: 0 0 auto;
   display: grid;
   place-items: center;
-  width: 30px;
-  height: 30px;
+  width: 34px;
+  height: 34px;
   padding: 0;
   border: 1px solid transparent;
   border-radius: var(--radius-sm);

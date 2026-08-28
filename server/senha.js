@@ -114,7 +114,14 @@ export function criticarSenha(senha, { login, nome } = {}) {
   if (primeiroNome && primeiroNome.length >= 4 && simples.includes(primeiroNome.toLowerCase())) {
     return "A senha não pode conter o seu nome.";
   }
-  if (new Set(valor).size < 5) return "A senha tem repetição demais. Varie mais os caracteres.";
+  // Calibrada pra ~metade dos caracteres distintos — a mesma proporção de
+  // quando o piso era 10 (10 caracteres, 5 distintos). Um número fixo de 5
+  // ficaria cada vez mais apertado à medida que TAMANHO_MINIMO cai: numa
+  // senha de 6 caracteres viraria ~83% de variedade em vez de ~50%.
+  const distintosMinimos = Math.min(5, Math.max(3, Math.ceil(valor.length / 2)));
+  if (new Set(valor).size < distintosMinimos) {
+    return "A senha tem repetição demais. Varie mais os caracteres.";
+  }
 
   return null;
 }

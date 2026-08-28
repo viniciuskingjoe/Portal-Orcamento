@@ -269,7 +269,12 @@ export default function TelaVisaoModulo({
                             return;
                           }
                           onDefinirUsoDoCentro(modulo.id, filialId, centro.id, !emUso);
-                          setCentroId(emUso ? SEM_CENTRO : centro.id);
+                          // Ligar sempre abre este centro pra edição. Desligar só fecha a
+                          // tela de edição se era ESTE centro que estava aberto — desligar
+                          // um centro diferente do que se está editando não pode derrubar
+                          // a tela de outro sem aviso.
+                          if (!emUso) setCentroId(centro.id);
+                          else if (centro.id === centroId) setCentroId(SEM_CENTRO);
                         }}
                       />
                       <span className="checkbox-visual">
@@ -389,7 +394,7 @@ export default function TelaVisaoModulo({
           }
           onConfirmar={() => {
             onDefinirUsoDoCentro(modulo.id, filialId, confirmandoDesligar.centro.id, false);
-            setCentroId(SEM_CENTRO);
+            if (confirmandoDesligar.centro.id === centroId) setCentroId(SEM_CENTRO);
             setConfirmandoDesligar(null);
           }}
           onFechar={() => setConfirmandoDesligar(null)}
