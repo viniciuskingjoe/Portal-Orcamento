@@ -431,8 +431,9 @@ export default function TelaOrcamento({
             rotuloConfirmar="Sincronizar"
             mensagem={
               <>
-                Isto publica o <strong>plano inteiro</strong> (todos os módulos, não só{" "}
-                {modulo.titulo}) no orçamento do Linx — é de lá que o Power BI lê. Continuar?
+                Isto sincroniza o valor do <strong>Planejado</strong> do{" "}
+                <strong>plano inteiro</strong> (todos os módulos, não só {modulo.titulo}) para o
+                orçamento do Linx. Continuar?
               </>
             }
             onConfirmar={() => {
