@@ -649,9 +649,13 @@ export async function salvarModulo(visaoId, modulo, mudanca, login) {
       throw erro;
     }
 
+    // Ordem importa: tira do módulo par ANTES de inserir no módulo novo. Ver
+    // o comentário equivalente em salvarMapeamentos — inserir primeiro faz o
+    // trigger de exclusividade (sql/014) ver a linha antiga ainda viva no par
+    // e abortar a transação, travando o próprio "mover conta de módulo".
     for (const lote of mudanca.lotes ?? []) {
-      await definirContasCom(q, visaoId, modulo, lote.filial, lote.centro, lote.contas);
       await garantirExclusividadeCom(q, visaoId, modulo, lote.filial, lote.centro, lote.contas);
+      await definirContasCom(q, visaoId, modulo, lote.filial, lote.centro, lote.contas);
     }
     if (mudanca.usoDoCentro !== undefined) {
       await definirUsoDoCentroCom(
@@ -664,8 +668,8 @@ export async function salvarModulo(visaoId, modulo, mudanca, login) {
       );
     }
     if (mudanca.contas !== undefined) {
-      await definirContasCom(q, visaoId, modulo, mudanca.filial, mudanca.centro, mudanca.contas);
       await garantirExclusividadeCom(q, visaoId, modulo, mudanca.filial, mudanca.centro, mudanca.contas);
+      await definirContasCom(q, visaoId, modulo, mudanca.filial, mudanca.centro, mudanca.contas);
     }
     if (mudanca.sinal !== undefined) {
       await definirSinalCom(q, visaoId, modulo, mudanca.sinal.conta, mudanca.sinal.tipo);
@@ -735,8 +739,13 @@ export async function salvarMapeamentos(visaoId, mapeamentos) {
       throw erro;
     }
 
+    // Tira do módulo par ANTES de inserir no módulo novo: o trigger de
+    // exclusividade (sql/014) dispara em cada INSERT e vê o estado da tabela
+    // NAQUELE instante. Inserir primeiro e só depois remover do par faz o
+    // trigger encontrar a linha antiga ainda viva e abortar a transação
+    // inteira — travando exatamente o "mover conta de um módulo pro outro"
+    // que esta função existe para fazer.
     for (const item of mapeamentos) {
-      await definirContasCom(q, visaoId, item.modulo, item.filial, item.centro, item.contas);
       await garantirExclusividadeCom(
         q,
         visaoId,
@@ -745,6 +754,9 @@ export async function salvarMapeamentos(visaoId, mapeamentos) {
         item.centro,
         item.contas
       );
+    }
+    for (const item of mapeamentos) {
+      await definirContasCom(q, visaoId, item.modulo, item.filial, item.centro, item.contas);
     }
 
     const [duplicada] = await q(
