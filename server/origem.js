@@ -29,19 +29,29 @@ export function validarOrigemMutavel({
 }) {
   if (METODOS_SEGUROS.has(String(method ?? "GET").toUpperCase())) return null;
 
-  const origemRecebida = normalizarOrigem(origin);
-  const permitidas = new Set(origensExtras);
-  const origemAtual = normalizarOrigem(origemDaRequisicao);
-  if (origemAtual) permitidas.add(origemAtual);
+  // `Sec-Fetch-Site` é calculado pelo próprio navegador comparando a origem da
+  // PÁGINA com a URL pedida, antes de qualquer proxy — não pode ser forjado
+  // por JavaScript. "same-origin" já prova que a chamada nasceu aqui mesmo,
+  // mesmo quando um proxy no meio (Vite em dev, Cloudflare Tunnel em
+  // produção) reescreve o Host que o Express enxerga e o Origin comparado
+  // contra esse Host deixaria de bater — foi exatamente esse descompasso que
+  // bloqueava o login inteiro em `npm run dev` antes deste ajuste.
+  if (secFetchSite !== "same-origin") {
+    const origemRecebida = normalizarOrigem(origin);
+    const permitidas = new Set(origensExtras);
+    const origemAtual = normalizarOrigem(origemDaRequisicao);
+    if (origemAtual) permitidas.add(origemAtual);
 
-  if (origin && (!origemRecebida || !permitidas.has(origemRecebida))) {
-    return "Origem da requisição não autorizada.";
-  }
+    if (origin && (!origemRecebida || !permitidas.has(origemRecebida))) {
+      return "Origem da requisição não autorizada.";
+    }
 
-  // Browsers modernos enviam este cabeçalho e não permitem que JavaScript o
-  // forje. `same-site` ainda aceita outro subdomínio, portanto só same-origin.
-  if (!origin && secFetchSite && secFetchSite !== "same-origin" && secFetchSite !== "none") {
-    return "Origem da requisição não autorizada.";
+    // Browsers modernos enviam Origin em quase todo POST/PUT/DELETE; a falta
+    // dele só é normal em scripts sem navegador. Chegando aqui, Sec-Fetch-Site
+    // já não é "same-origin" — só bloqueia se o navegador afirma outra coisa.
+    if (!origin && secFetchSite && secFetchSite !== "none") {
+      return "Origem da requisição não autorizada.";
+    }
   }
 
   // Formulário HTML simples é o principal vetor para POST sem JSON. Scripts de
