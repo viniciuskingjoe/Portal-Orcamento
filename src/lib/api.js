@@ -134,6 +134,11 @@ export const api = {
         corpo: mudanca,
       }
     ),
+  salvarMapeamentos: (visaoId, mapeamentos) =>
+    buscar(`/api/visoes/${encodeURIComponent(visaoId)}/mapeamentos`, null, {
+      metodo: "PUT",
+      corpo: { mapeamentos },
+    }),
 
   salvarLinhaDre: (visaoId, linha) =>
     buscar(

@@ -86,6 +86,19 @@ const TELAS_ERP = new Set(["filiais", "centros"]);
 const INTERVALO_ATUALIZACAO = 5 * 60_000;
 const IDADE_MINIMA_PARA_ATUALIZAR = 60_000;
 
+function mapeamentosDaVisao(visao, filiais) {
+  return MODULOS.flatMap((modulo) =>
+    filiais.flatMap((filial) =>
+      centrosDaFilial(visao, modulo.id, filial.id).map((centro) => ({
+        modulo: modulo.id,
+        filial: filial.id,
+        centro,
+        contas: contasDoCentro(visao, modulo.id, filial.id, centro),
+      }))
+    )
+  );
+}
+
 // O que a sincronização fez, em português.
 //
 // A sincronização manda só a diferença, então "7121 linhas" era o total gravado
@@ -232,6 +245,8 @@ function PlanejamentoOrcamentario({ sessao, onSair, trocarSenha }) {
 
   // Guardas da atualização de fundo — ver o efeito mais abaixo.
   const gravacoesEmVoo = useRef(0);
+  const versaoDasGravacoes = useRef(0);
+  const versaoDaFalha = useRef(0);
   const editandoAgora = useRef(false);
   const ultimaAtualizacao = useRef(0);
   // `editingCell` só cobre a célula de reais (Planejado). Nº de funcionários e
@@ -367,9 +382,16 @@ function PlanejamentoOrcamentario({ sessao, onSair, trocarSenha }) {
       if (editandoAgora.current || edicaoAuxiliarEmAndamento.current || gravacoesEmVoo.current > 0) return;
       if (Date.now() - ultimaAtualizacao.current < IDADE_MINIMA_PARA_ATUALIZAR) return;
 
+      const versaoAoIniciar = versaoDasGravacoes.current;
       try {
         const [dados, lista] = await Promise.all([carregarEstado(), repo.grupos()]);
-        if (!vivo) return;
+        if (
+          !vivo ||
+          editandoAgora.current ||
+          edicaoAuxiliarEmAndamento.current ||
+          gravacoesEmVoo.current > 0 ||
+          versaoDasGravacoes.current !== versaoAoIniciar
+        ) return;
         setConfiguracao(dados.configuracao);
         setVisoes(dados.visoes);
         setPlanos(dados.planos);
@@ -411,17 +433,35 @@ function PlanejamentoOrcamentario({ sessao, onSair, trocarSenha }) {
     // Conta as gravações em voo para a atualização de fundo não ler o banco no
     // meio de uma e trazer o valor antigo de volta.
     gravacoesEmVoo.current += 1;
-    Promise.resolve(promessa)
-      .then(() => setAvisoPersistencia(""))
+    versaoDasGravacoes.current += 1;
+    const falhaAoIniciar = versaoDaFalha.current;
+    return Promise.resolve(promessa)
+      .then(() => {
+        // Um sucesso antigo não pode apagar uma falha nova de outra gravação.
+        // Já uma tentativa iniciada depois do erro funciona como retry e limpa.
+        if (versaoDaFalha.current === falhaAoIniciar) setAvisoPersistencia("");
+      })
       .catch((erro) => {
+        versaoDaFalha.current += 1;
         setAvisoPersistencia(
           opts.mensagemDeErro?.(erro) ?? `Não foi possível salvar: ${erro.message}`
         );
-        opts.aoFalhar?.(erro);
+        if (opts.aoFalhar) opts.aoFalhar(erro);
+        else reconciliarComServidor().catch(() => {});
       })
       .finally(() => {
         gravacoesEmVoo.current -= 1;
       });
+  }
+
+  async function reconciliarComServidor() {
+    const [dados, lista] = await Promise.all([carregarEstado(), repo.grupos()]);
+    setConfiguracao(dados.configuracao);
+    setVisoes(dados.visoes);
+    setPlanos(dados.planos);
+    mesclarGrupos(lista);
+    realizado.recarregar();
+    ultimaAtualizacao.current = Date.now();
   }
 
   async function importarLegado() {
@@ -504,13 +544,21 @@ function PlanejamentoOrcamentario({ sessao, onSair, trocarSenha }) {
     return mapa;
   }, [planoAtivo, visaoDoPlano, receitasDisponiveis, filiaisDoFiltro]);
 
-  const contasDaTabela = filtros.conta === TODAS_AS_CONTAS ? contasDisponiveis : [filtros.conta];
+  const contasDaTabela = useMemo(
+    () => (filtros.conta === TODAS_AS_CONTAS ? contasDisponiveis : [filtros.conta]),
+    [contasDisponiveis, filtros.conta]
+  );
   // Só recorta quando há uma receita escolhida. Em "Todas as receitas" o
   // planejado cai no fallback (todas as da filial) e o realizado fica com a
   // conta contábil inteira — que é o mesmo número, sem risco de perder o
   // movimento de um centro que a visão não tenha configurado.
-  const receitasDaTabela =
-    moduloDaTela?.percentual && filtros.receita !== TODAS_AS_CONTAS ? [filtros.receita] : undefined;
+  const receitasDaTabela = useMemo(
+    () =>
+      moduloDaTela?.percentual && filtros.receita !== TODAS_AS_CONTAS
+        ? [filtros.receita]
+        : undefined,
+    [moduloDaTela?.percentual, filtros.receita]
+  );
 
   const linhasOrcamento = useMemo(() => {
     if (!planoAtivo || !moduloDaTela) return [];
@@ -537,7 +585,8 @@ function PlanejamentoOrcamentario({ sessao, onSair, trocarSenha }) {
     contasDaTabela,
     receitasDaTabela,
     contas.catalogo,
-    realizado,
+    realizado.doAno,
+    realizado.doAnoAnterior,
   ]);
 
   // --------------------------------------------------------------------------
@@ -757,50 +806,33 @@ function PlanejamentoOrcamentario({ sessao, onSair, trocarSenha }) {
   function aplicarMapeamentoPadrao() {
     if (!visaoAberta || !temMapeamentoPadrao(visaoAberta.visaoContabil)) return;
     const antes = visaoAberta;
+    let proxima = antes;
     let centrosAtualizados = 0;
 
-    atualizarVisaoAberta((visao) => {
-      let proxima = visao;
+    MODULOS.forEach((modulo) => {
+      const codigos = contasDoMapeamento(contas.catalogo, modulo.id);
+      if (!codigos.length) return;
 
-      MODULOS.forEach((modulo) => {
-        const codigos = contasDoMapeamento(contas.catalogo, modulo.id);
-        if (!codigos.length) return;
-
-        const lote = [];
-        filiaisAtivas.forEach((filial) => {
-          centrosDaFilial(visao, modulo.id, filial.id).forEach((centro) => {
-            // As faixas padrão de Despesas operacionais cobrem a folha
-            // inteira (4.2.1., 4.3.1., 4.4.1.); a variante exclusiva evita
-            // reintroduzir uma conta que alguém já tinha movido para
-            // Despesas com pessoal.
-            proxima = definirContasDoCentroExclusivo(proxima, modulo.id, filial.id, centro, codigos);
-            lote.push({ filial: filial.id, centro, contas: codigos });
-          });
-        });
-
-        // Um lote por módulo: centro a centro seriam centenas de requisições.
-        if (lote.length) {
-          gravar(repo.visao.contasEmLote(visaoAberta.id, modulo.id, lote));
-          centrosAtualizados += lote.length;
-        }
-      });
-
-      // O mapeamento padrão não tem entrada para Despesas com pessoal (não
-      // existe equivalente no Scoreplan), então o lote acima nunca avisa o
-      // backend desse módulo. Se a exclusividade tirou conta dele em algum
-      // centro, avisa aqui — senão o banco fica com uma conta que a tela já
-      // não mostra mais.
       filiaisAtivas.forEach((filial) => {
-        centrosDaFilial(antes, MODULO_PESSOAL, filial.id).forEach((centro) => {
-          const antesPessoal = contasDoCentro(antes, MODULO_PESSOAL, filial.id, centro);
-          const depoisPessoal = contasDoCentro(proxima, MODULO_PESSOAL, filial.id, centro);
-          if (antesPessoal.length !== depoisPessoal.length) {
-            gravar(repo.visao.contas(visaoAberta.id, MODULO_PESSOAL, filial.id, centro, depoisPessoal));
-          }
+        centrosDaFilial(antes, modulo.id, filial.id).forEach((centro) => {
+          // As faixas padrão de Despesas operacionais cobrem a folha inteira;
+          // a variante exclusiva já produz o estado final dos dois módulos.
+          proxima = definirContasDoCentroExclusivo(
+            proxima,
+            modulo.id,
+            filial.id,
+            centro,
+            codigos
+          );
+          centrosAtualizados += 1;
         });
       });
+    });
 
-      return proxima;
+    atualizarVisaoAberta(() => proxima);
+    gravar(repo.visao.mapeamentos(visaoAberta.id, mapeamentosDaVisao(proxima, filiaisAtivas)), {
+      aoFalhar: () => atualizarVisaoAberta(() => antes),
+      mensagemDeErro: (erro) => `Não foi possível aplicar o mapeamento padrão: ${erro.message}`,
     });
 
     // Achado do critique do Impeccable, P1: a ação mais arriscada da tela
@@ -819,49 +851,16 @@ function PlanejamentoOrcamentario({ sessao, onSair, trocarSenha }) {
     if (!mapeamentoAplicado || !visaoAberta) return;
     if (cronometroMapeamentoRef.current) clearTimeout(cronometroMapeamentoRef.current);
     const antes = mapeamentoAplicado.antes;
+    const atual = visaoAberta;
 
-    atualizarVisaoAberta((visao) => {
-      let proxima = visao;
-
-      MODULOS.forEach((modulo) => {
-        const lote = [];
-        filiaisAtivas.forEach((filial) => {
-          centrosDaFilial(antes, modulo.id, filial.id).forEach((centro) => {
-            const contasAntes = contasDoCentro(antes, modulo.id, filial.id, centro);
-            proxima = definirContasDoCentroExclusivo(proxima, modulo.id, filial.id, centro, contasAntes);
-            lote.push({ filial: filial.id, centro, contas: contasAntes });
-          });
-        });
-        if (lote.length) gravar(repo.visao.contasEmLote(visaoAberta.id, modulo.id, lote));
-      });
-
-      filiaisAtivas.forEach((filial) => {
-        centrosDaFilial(antes, MODULO_PESSOAL, filial.id).forEach((centro) => {
-          const contasAntes = contasDoCentro(antes, MODULO_PESSOAL, filial.id, centro);
-          gravar(repo.visao.contas(visaoAberta.id, MODULO_PESSOAL, filial.id, centro, contasAntes));
-        });
-      });
-
-      return proxima;
+    atualizarVisaoAberta(() => antes);
+    gravar(repo.visao.mapeamentos(visaoAberta.id, mapeamentosDaVisao(antes, filiaisAtivas)), {
+      aoFalhar: () => atualizarVisaoAberta(() => atual),
+      mensagemDeErro: (erro) => `Não foi possível desfazer o mapeamento: ${erro.message}`,
     });
 
     setMapeamentoAplicado(null);
   }
-
-  // Quantos centros o padrão alcançaria — é o que a tela precisa dizer antes de
-  // alguém clicar e achar que não funcionou.
-  const centrosParaOPadrao = useMemo(() => {
-    if (!visaoAberta) return 0;
-    return MODULOS.reduce(
-      (total, modulo) =>
-        total +
-        filiaisAtivas.reduce(
-          (soma, filial) => soma + centrosDaFilial(visaoAberta, modulo.id, filial.id).length,
-          0
-        ),
-      0
-    );
-  }, [visaoAberta, filiaisAtivas]);
 
   // `visaoAbertaId` é a visão em edição na seção Visões; `visaoDoPlano` pode
   // ser outra (ou nenhuma das duas telas estar aberta). As duas apontam para o
@@ -1030,6 +1029,15 @@ function PlanejamentoOrcamentario({ sessao, onSair, trocarSenha }) {
   // desmarcar a célula errada na tela se ESTA gravação falhar; o dado em si
   // já usa a chave de `chaveDoFiltro`, que é outra.
   function gravarPlanejado(alteracoes, celulasAfetadas = []) {
+    const anteriores = new Map(
+      Object.keys(alteracoes).map((chave) => [
+        chave,
+        {
+          existe: Object.hasOwn(planoAtivo.planejado, chave),
+          valor: planoAtivo.planejado[chave],
+        },
+      ])
+    );
     setPlanos((atuais) =>
       atuais.map((plano) =>
         plano.id === planoAtivoId
@@ -1058,7 +1066,22 @@ function PlanejamentoOrcamentario({ sessao, onSair, trocarSenha }) {
       celulasAfetadas.length
         ? {
             aoFalhar: () =>
-              setCelulasFalhas((atuais) => new Set([...atuais, ...celulasAfetadas])),
+              {
+                setCelulasFalhas((atuais) => new Set([...atuais, ...celulasAfetadas]));
+                setPlanos((atuais) =>
+                  atuais.map((plano) => {
+                    if (plano.id !== planoAtivoId) return plano;
+                    const restaurado = { ...plano.planejado };
+                    Object.entries(alteracoes).forEach(([chave, enviado]) => {
+                      if (restaurado[chave] !== enviado) return;
+                      const anterior = anteriores.get(chave);
+                      if (anterior?.existe) restaurado[chave] = anterior.valor;
+                      else delete restaurado[chave];
+                    });
+                    return { ...plano, planejado: restaurado };
+                  })
+                );
+              },
             mensagemDeErro: (erro) =>
               `Não foi possível salvar: ${erro.message} A célula fica marcada em vermelho na tabela — edite ela de novo para tentar salvar.`,
           }
@@ -1365,17 +1388,30 @@ function PlanejamentoOrcamentario({ sessao, onSair, trocarSenha }) {
                 : moduloId === MODULO_OPERACIONAIS
                   ? MODULO_PESSOAL
                   : null;
-            const doParAntes = par ? contasDoCentro(visaoAberta, par, filialId, centroId) : [];
-
-            atualizarVisaoAberta((visao) =>
-              definirContasDoCentroExclusivo(visao, moduloId, filialId, centroId, lista)
+            const antes = visaoAberta;
+            const proxima = definirContasDoCentroExclusivo(
+              antes,
+              moduloId,
+              filialId,
+              centroId,
+              lista
             );
-            gravar(repo.visao.contas(visaoAberta.id, moduloId, filialId, centroId, lista));
-
-            const doParDepois = doParAntes.filter((codigo) => !lista.includes(codigo));
-            if (par && doParDepois.length !== doParAntes.length) {
-              gravar(repo.visao.contas(visaoAberta.id, par, filialId, centroId, doParDepois));
+            const mapeamentos = [
+              { modulo: moduloId, filial: filialId, centro: centroId, contas: lista },
+            ];
+            if (par) {
+              mapeamentos.push({
+                modulo: par,
+                filial: filialId,
+                centro: centroId,
+                contas: contasDoCentro(proxima, par, filialId, centroId),
+              });
             }
+
+            atualizarVisaoAberta(() => proxima);
+            gravar(repo.visao.mapeamentos(visaoAberta.id, mapeamentos), {
+              aoFalhar: () => atualizarVisaoAberta(() => antes),
+            });
           }}
           onDefinirUsoDoCentro={(moduloId, filialId, centroId, usa) => {
             atualizarVisaoAberta((visao) =>

@@ -199,7 +199,11 @@ async function montarSessao(login, nome) {
     { login, app: APP }
   );
 
-  const admin = adminsDoEnv().has(login) || acessoApp?.ADMIN === true;
+  const adminDoAmbiente = adminsDoEnv().has(login);
+  // O admin de bootstrap do .env continua entrando mesmo antes de existir uma
+  // linha. Já o admin concedido no banco precisa estar ativo como qualquer
+  // outro acesso; marcar a linha como inativa tem que cortar a sessão.
+  const admin = adminDoAmbiente || (acessoApp?.ADMIN === true && acessoApp.SITUACAO === "ativo");
   if (!admin && (!acessoApp || acessoApp.SITUACAO !== "ativo")) return null;
 
   const acessos = await query(

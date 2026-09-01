@@ -36,6 +36,9 @@ jobs:
       - name: Verificar sintaxe do backend e das regras
         run: npm run check
 
+      - name: Executar análise estática
+        run: npm run lint
+
       - name: Gerar build de produção
         run: npm run build
 

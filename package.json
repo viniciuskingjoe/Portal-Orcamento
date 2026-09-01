@@ -4,7 +4,7 @@
   "version": "1.0.0",
   "type": "module",
   "engines": {
-    "node": ">=20"
+    "node": ">=22"
   },
   "scripts": {
     "dev": "node scripts/dev.mjs",
@@ -12,6 +12,7 @@
     "api": "node --env-file=.env server/index.js",
     "build": "vite build",
     "check": "node scripts/verificar-codigo.mjs",
+    "lint": "eslint .",
     "preview": "vite preview",
     "test": "node --test",
     "schema:check": "node --env-file=.env scripts/verificar-schema.mjs",
@@ -25,7 +26,17 @@
     "react-dom": "^19.2.0"
   },
   "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@testing-library/jest-dom": "^7.0.1",
+    "@testing-library/react": "^16.3.3",
+    "@testing-library/user-event": "^14.6.6",
     "@vitejs/plugin-react": "^4.7.0",
-    "vite": "^6.4.3"
+    "eslint": "^10.9.1",
+    "eslint-plugin-react-hooks": "^7.1.1",
+    "eslint-plugin-react-refresh": "^0.5.5",
+    "globals": "^17.12.0",
+    "jsdom": "^26.1.0",
+    "vite": "^6.4.3",
+    "vitest": "^3.2.4"
   }
 }

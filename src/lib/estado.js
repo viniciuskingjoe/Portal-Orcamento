@@ -34,6 +34,7 @@ export const estado = {
     contas: (visaoId, modulo, filial, centro, contas) =>
       api.salvarModulo(visaoId, modulo, { filial, centro: centro ?? "", contas }),
     contasEmLote: (visaoId, modulo, lotes) => api.salvarModulo(visaoId, modulo, { lotes }),
+    mapeamentos: (visaoId, mapeamentos) => api.salvarMapeamentos(visaoId, mapeamentos),
     usoDoCentro: (visaoId, modulo, filial, centro, usa) =>
       api.salvarModulo(visaoId, modulo, { filial, centro, usoDoCentro: usa }),
     sinal: (visaoId, modulo, conta, tipo) =>

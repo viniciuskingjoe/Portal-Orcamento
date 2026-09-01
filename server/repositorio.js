@@ -1,13 +1,16 @@
 import { query, transaction } from "./sqlserver.js";
 import { chaveFuncionario, chavePlanejado } from "../src/dados/plano.js";
-import { referenciasDaFormula, validarFormula } from "../src/dados/formula.js";
-import { ehModulo } from "../src/dados/modulos.js";
+import { referenciasDaFormula } from "../src/dados/formula.js";
+import { ehModulo, MODULO_OPERACIONAIS, MODULO_PESSOAL } from "../src/dados/modulos.js";
 import { filtrarEstadoPorSessao } from "./escopo.js";
 import {
   exigirPlanoAtivo,
   indexarMapeamentos,
   validarCelulasDeFuncionarios,
   validarCelulasPlanejadas,
+  validarAlteracaoModulo,
+  validarExclusividadeDeMapeamentos,
+  validarFiliaisAtivas,
   validarLinhaDre,
   validarPlano,
   validarVisao,
@@ -510,9 +513,29 @@ async function definirContasCom(executar, visaoId, modulo, filial, centro, conta
   }
 }
 
+function moduloPar(modulo) {
+  if (modulo === MODULO_PESSOAL) return MODULO_OPERACIONAIS;
+  if (modulo === MODULO_OPERACIONAIS) return MODULO_PESSOAL;
+  return null;
+}
+
+async function garantirExclusividadeCom(q, visaoId, modulo, filial, centro, contas) {
+  const par = moduloPar(modulo);
+  if (!par || !contas.length) return;
+  for (const conta of contas) {
+    await q(
+      `DELETE FROM dbo.KING_PORTAL_ORC_VISAO_CONTA
+        WHERE VISAO_ID = @visao AND MODULO = @par AND COD_FILIAL = @filial
+          AND CENTRO_CUSTO = @centro AND CLASSIFICACAO = @conta`,
+      { visao: visaoId, par, filial, centro: centro ?? SEM_CENTRO, conta }
+    );
+  }
+}
+
 export async function definirContas(visaoId, modulo, filial, centro, contas) {
   await transaction(async ({ query: q }) => {
     await definirContasCom(q, visaoId, modulo, filial, centro, contas);
+    await garantirExclusividadeCom(q, visaoId, modulo, filial, centro, contas);
   });
 }
 
@@ -628,6 +651,7 @@ export async function salvarModulo(visaoId, modulo, mudanca, login) {
 
     for (const lote of mudanca.lotes ?? []) {
       await definirContasCom(q, visaoId, modulo, lote.filial, lote.centro, lote.contas);
+      await garantirExclusividadeCom(q, visaoId, modulo, lote.filial, lote.centro, lote.contas);
     }
     if (mudanca.usoDoCentro !== undefined) {
       await definirUsoDoCentroCom(
@@ -641,6 +665,7 @@ export async function salvarModulo(visaoId, modulo, mudanca, login) {
     }
     if (mudanca.contas !== undefined) {
       await definirContasCom(q, visaoId, modulo, mudanca.filial, mudanca.centro, mudanca.contas);
+      await garantirExclusividadeCom(q, visaoId, modulo, mudanca.filial, mudanca.centro, mudanca.contas);
     }
     if (mudanca.sinal !== undefined) {
       await definirSinalCom(q, visaoId, modulo, mudanca.sinal.conta, mudanca.sinal.tipo);
@@ -691,6 +716,55 @@ export async function salvarModulo(visaoId, modulo, mudanca, login) {
         mudanca.formula.expressao,
         login
       );
+    }
+  });
+}
+
+// Uma configuração como "preencher com o padrão" atravessa vários módulos.
+// O lock da visão serializa administradores concorrentes, e a transação torna
+// o conjunto inteiro indivisível: ou todos os centros mudam, ou nenhum muda.
+export async function salvarMapeamentos(visaoId, mapeamentos) {
+  await transaction(async ({ query: q }) => {
+    const [visao] = await q(
+      "SELECT ID FROM dbo.KING_PORTAL_ORC_VISAO WITH (UPDLOCK, HOLDLOCK) WHERE ID = @id",
+      { id: visaoId }
+    );
+    if (!visao) {
+      const erro = new Error("Visão não encontrada.");
+      erro.status = 404;
+      throw erro;
+    }
+
+    for (const item of mapeamentos) {
+      await definirContasCom(q, visaoId, item.modulo, item.filial, item.centro, item.contas);
+      await garantirExclusividadeCom(
+        q,
+        visaoId,
+        item.modulo,
+        item.filial,
+        item.centro,
+        item.contas
+      );
+    }
+
+    const [duplicada] = await q(
+      `SELECT TOP 1 pessoal.COD_FILIAL, pessoal.CENTRO_CUSTO, pessoal.CLASSIFICACAO
+         FROM dbo.KING_PORTAL_ORC_VISAO_CONTA AS pessoal
+         INNER JOIN dbo.KING_PORTAL_ORC_VISAO_CONTA AS operacional
+                 ON operacional.VISAO_ID = pessoal.VISAO_ID
+                AND operacional.COD_FILIAL = pessoal.COD_FILIAL
+                AND operacional.CENTRO_CUSTO = pessoal.CENTRO_CUSTO
+                AND operacional.CLASSIFICACAO = pessoal.CLASSIFICACAO
+        WHERE pessoal.VISAO_ID = @visao AND pessoal.MODULO = @pessoal
+          AND operacional.MODULO = @operacional`,
+      { visao: visaoId, pessoal: MODULO_PESSOAL, operacional: MODULO_OPERACIONAIS }
+    );
+    if (duplicada) {
+      const erro = new Error(
+        `A conta ${duplicada.CLASSIFICACAO} não pode ficar em Pessoal e Operacionais no mesmo centro.`
+      );
+      erro.status = 409;
+      throw erro;
     }
   });
 }
@@ -1323,7 +1397,7 @@ export async function bancoVazio() {
   return linha[0]?.total === 0;
 }
 
-export async function importar(estado, login) {
+export async function importar(estado, login, catalogos = {}) {
   if (!estado || typeof estado !== "object" || Array.isArray(estado)) {
     const erro = new Error("Estado legado inválido.");
     erro.status = 400;
@@ -1356,6 +1430,49 @@ export async function importar(estado, login) {
     }
   }
 
+  const visoesContabeis = new Set(
+    (catalogos.visoesContabeis ?? []).map((item) => String(item.id ?? item.codigo))
+  );
+  for (const visao of visoes) {
+    if (visoesContabeis.size && !visoesContabeis.has(visao.visaoContabil)) {
+      const erro = new Error(`A visão contábil ${visao.visaoContabil} não existe no ERP.`);
+      erro.status = 409;
+      throw erro;
+    }
+  }
+
+  const filiaisAtivasImportadas =
+    estado.configuracao?.filiaisAtivas === undefined
+      ? undefined
+      : validarFiliaisAtivas(estado.configuracao.filiaisAtivas, catalogos.filiais);
+
+  const mapeamentosPorVisao = new Map();
+  for (let indice = 0; indice < visoes.length; indice += 1) {
+    const visao = visoes[indice];
+    const original = estado.visoes[indice];
+    const contas = catalogos.contasPorVisao?.get(visao.visaoContabil) ?? [];
+    const validados = [];
+    for (const [moduloId, modulo] of Object.entries(original.modulos ?? {})) {
+      if (!ehModulo(moduloId) || !modulo || typeof modulo !== "object" || Array.isArray(modulo)) {
+        const erro = new Error(`Módulo inválido na visão ${visao.id}.`);
+        erro.status = 400;
+        throw erro;
+      }
+      for (const [filialId, daFilial] of Object.entries(modulo.filiais ?? {})) {
+        for (const [centroId, doCentro] of Object.entries(daFilial?.centros ?? {})) {
+          const validada = validarAlteracaoModulo(
+            moduloId,
+            { filial: filialId, centro: centroId, contas: doCentro },
+            { filiais: catalogos.filiais, centros: catalogos.centros, contas }
+          );
+          validados.push({ modulo: moduloId, ...validada });
+        }
+      }
+    }
+    validarExclusividadeDeMapeamentos(validados);
+    mapeamentosPorVisao.set(visao.id, validados);
+  }
+
   const [comFuncionarios, comFormulas, comDre, comUnidade, comSinalConta, comPublicacao, comSituacao] =
     await Promise.all([
       temFuncionarios(),
@@ -1382,18 +1499,14 @@ export async function importar(estado, login) {
       throw erro;
     }
 
-    if (estado.configuracao?.filiaisAtivas !== undefined) {
-      if (!Array.isArray(estado.configuracao.filiaisAtivas)) {
-        const erro = new Error("Configuração `filiaisAtivas` inválida.");
-        erro.status = 400;
-        throw erro;
-      }
-      await salvarConfiguracaoCom(q, "filiaisAtivas", estado.configuracao.filiaisAtivas, login);
+    if (filiaisAtivasImportadas !== undefined) {
+      await salvarConfiguracaoCom(q, "filiaisAtivas", filiaisAtivasImportadas, login);
     }
 
     for (let indice = 0; indice < visoes.length; indice += 1) {
       const visao = visoes[indice];
       const original = estado.visoes[indice];
+      const contasDaVisao = catalogos.contasPorVisao?.get(visao.visaoContabil) ?? [];
       await salvarVisaoCom(q, visao, login, { comFuncionarios, comFormulas, comDre });
 
       for (const [moduloId, modulo] of Object.entries(original.modulos ?? {})) {
@@ -1405,42 +1518,47 @@ export async function importar(estado, login) {
         await marcarModuloCom(q, visao.id, moduloId);
 
         for (const [conta, tipo] of Object.entries(modulo.sinais ?? {})) {
-          if (!["receita", "despesa"].includes(tipo)) {
-            const erro = new Error(`Sinal inválido para a conta ${conta}.`);
-            erro.status = 400;
-            throw erro;
-          }
-          await definirSinalCom(q, visao.id, moduloId, conta, tipo);
+          const validada = validarAlteracaoModulo(
+            moduloId,
+            { sinal: { conta, tipo } },
+            { filiais: catalogos.filiais, centros: catalogos.centros, contas: contasDaVisao }
+          );
+          await definirSinalCom(q, visao.id, moduloId, validada.sinal.conta, validada.sinal.tipo);
         }
         for (const [conta, formula] of Object.entries(modulo.formulas ?? {})) {
           const expressao = String(formula?.expressao ?? "").trim();
-          const critica = validarFormula(expressao);
-          if (!comFormulas || !expressao || expressao.length > 500 || critica) {
+          if (!comFormulas) {
             const erro = new Error(
-              !comFormulas
-                ? "O banco ainda não possui a migração de fórmulas necessária para importar este legado."
-                : `Fórmula inválida para a conta ${conta}: ${critica ?? "expressão vazia ou longa demais"}.`
+              "O banco ainda não possui a migração de fórmulas necessária para importar este legado."
             );
-            erro.status = comFormulas ? 400 : 503;
+            erro.status = 503;
             throw erro;
           }
-          await definirFormulaCom(q, visao.id, moduloId, conta, expressao, login);
+          const validada = validarAlteracaoModulo(
+            moduloId,
+            { formula: { conta, expressao } },
+            { filiais: catalogos.filiais, centros: catalogos.centros, contas: contasDaVisao }
+          );
+          if (!validada.formula.expressao) {
+            const erro = new Error(`Fórmula inválida para a conta ${conta}: expressão vazia.`);
+            erro.status = 400;
+            throw erro;
+          }
+          await definirFormulaCom(
+            q,
+            visao.id,
+            moduloId,
+            validada.formula.conta,
+            validada.formula.expressao,
+            login
+          );
         }
 
-        for (const [filialId, daFilial] of Object.entries(modulo.filiais ?? {})) {
-          for (const [centroId, doCentro] of Object.entries(daFilial?.centros ?? {})) {
-            if (!Array.isArray(doCentro)) {
-              const erro = new Error(`Contas inválidas em ${filialId}/${centroId}.`);
-              erro.status = 400;
-              throw erro;
-            }
-            await definirUsoDoCentroCom(q, visao.id, moduloId, filialId, centroId, true);
-            if (doCentro.length) {
-              await definirContasCom(q, visao.id, moduloId, filialId, centroId, [
-                ...new Set(doCentro.map(String)),
-              ]);
-            }
-          }
+        for (const item of (mapeamentosPorVisao.get(visao.id) ?? []).filter(
+          (mapeamento) => mapeamento.modulo === moduloId
+        )) {
+          await definirUsoDoCentroCom(q, visao.id, moduloId, item.filial, item.centro, true);
+          await definirContasCom(q, visao.id, moduloId, item.filial, item.centro, item.contas);
         }
       }
 
@@ -1456,7 +1574,7 @@ export async function importar(estado, login) {
         throw erro;
       }
       for (const linhaOriginal of linhasDre) {
-        const linha = validarLinhaDre(linhaOriginal, { linhas: linhasDre });
+        const linha = validarLinhaDre(linhaOriginal, { linhas: linhasDre, contas: contasDaVisao });
         await salvarLinhaDreCom(q, visao.id, linha, login, { comUnidade, comSinalConta });
       }
     }

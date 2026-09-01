@@ -1,4 +1,5 @@
-import { MODULOS } from "./modulos.js";
+import { MODULOS, MODULO_OPERACIONAIS, MODULO_PESSOAL } from "./modulos.js";
+export { MODULO_OPERACIONAIS, MODULO_PESSOAL } from "./modulos.js";
 
 // ============================================================================
 // VISÃO
@@ -145,9 +146,6 @@ export function definirContasDoCentro(visao, moduloId, filialId, centroId, conta
 // marcada lá é, por definição, conta que precisa sair de Despesas
 // operacionais no mesmo centro — e vice-versa.
 // --------------------------------------------------------------------------
-
-export const MODULO_PESSOAL = "despesas-pessoal";
-export const MODULO_OPERACIONAIS = "despesas-operacionais";
 
 // Grava as contas no módulo pedido e tira as mesmas contas do módulo par, no
 // mesmo filial·centro. Funciona nas duas direções: marcar uma conta em

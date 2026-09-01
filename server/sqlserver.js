@@ -177,7 +177,14 @@ export async function transaction(executar) {
     await transacao.commit();
     return resultado;
   } catch (erro) {
-    await transacao.rollback();
+    try {
+      await transacao.rollback();
+    } catch (erroDoRollback) {
+      // Rollback quebrado é diagnóstico adicional; nunca deve esconder a causa
+      // que fez a operação financeira falhar em primeiro lugar.
+      erro.cause ??= erroDoRollback;
+      console.error("[sql] rollback falhou:", erroDoRollback);
+    }
     throw erro;
   }
 }

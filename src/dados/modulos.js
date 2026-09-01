@@ -26,6 +26,9 @@ export const GRUPOS = {
   DF: { rotulo: "Despesa fixa", chip: "despesa" },
 };
 
+export const MODULO_OPERACIONAIS = "despesas-operacionais";
+export const MODULO_PESSOAL = "despesas-pessoal";
+
 export const MODULOS = [
   {
     id: "receita-vendas",
@@ -66,7 +69,7 @@ export const MODULOS = [
     icone: "percent",
   },
   {
-    id: "despesas-operacionais",
+    id: MODULO_OPERACIONAIS,
     titulo: "Despesas operacionais",
     tipo: "despesa",
     grupo: "DF",
@@ -86,7 +89,7 @@ export const MODULOS = [
   // Despesas operacionais para o mesmo centro, senão o valor dobra no DRE e na
   // publicação para o Linx; `dados/visao.js` garante essa exclusividade.
   {
-    id: "despesas-pessoal",
+    id: MODULO_PESSOAL,
     titulo: "Despesas com pessoal",
     tipo: "despesa",
     grupo: "DF",

@@ -1,0 +1,73 @@
+const METODOS_SEGUROS = new Set(["GET", "HEAD", "OPTIONS"]);
+
+function normalizarOrigem(valor) {
+  try {
+    const url = new URL(String(valor ?? "").trim());
+    if (!url.protocol.startsWith("http")) return null;
+    return url.origin;
+  } catch {
+    return null;
+  }
+}
+
+export function origensDaEnv(valor = process.env.APP_ORIGINS) {
+  return new Set(
+    String(valor ?? "")
+      .split(",")
+      .map(normalizarOrigem)
+      .filter(Boolean)
+  );
+}
+
+export function validarOrigemMutavel({
+  method,
+  origin,
+  secFetchSite,
+  contentType,
+  origemDaRequisicao,
+  origensExtras = new Set(),
+}) {
+  if (METODOS_SEGUROS.has(String(method ?? "GET").toUpperCase())) return null;
+
+  const origemRecebida = normalizarOrigem(origin);
+  const permitidas = new Set(origensExtras);
+  const origemAtual = normalizarOrigem(origemDaRequisicao);
+  if (origemAtual) permitidas.add(origemAtual);
+
+  if (origin && (!origemRecebida || !permitidas.has(origemRecebida))) {
+    return "Origem da requisição não autorizada.";
+  }
+
+  // Browsers modernos enviam este cabeçalho e não permitem que JavaScript o
+  // forje. `same-site` ainda aceita outro subdomínio, portanto só same-origin.
+  if (!origin && secFetchSite && secFetchSite !== "same-origin" && secFetchSite !== "none") {
+    return "Origem da requisição não autorizada.";
+  }
+
+  // Formulário HTML simples é o principal vetor para POST sem JSON. Scripts de
+  // manutenção sem corpo continuam aceitos; se houver Content-Type, tem que ser
+  // o mesmo JSON que a API documenta.
+  if (contentType && !String(contentType).toLowerCase().startsWith("application/json")) {
+    return "Envie alterações como application/json.";
+  }
+
+  return null;
+}
+
+export function protegerOrigem(req, _res, next) {
+  const host = req.get("host");
+  const origemDaRequisicao = host ? `${req.protocol}://${host}` : null;
+  const erroDeValidacao = validarOrigemMutavel({
+    method: req.method,
+    origin: req.get("origin"),
+    secFetchSite: req.get("sec-fetch-site"),
+    contentType: req.get("content-type"),
+    origemDaRequisicao,
+    origensExtras: origensDaEnv(),
+  });
+  if (!erroDeValidacao) return next();
+
+  const erro = new Error(erroDeValidacao);
+  erro.status = 403;
+  next(erro);
+}

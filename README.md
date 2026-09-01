@@ -10,14 +10,15 @@ API em Node + Express sobre SQL Server.
 
 ## Executar
 
-Requer Node.js 20 ou superior.
+Requer Node.js 22 ou superior. O frontend e a API usam o mesmo runtime em
+desenvolvimento, no CI e em produção.
 
 ```bash
 npm install
 npm run dev        # sobe a API e o front juntos — é o comando do dia a dia
 npm test           # testes da camada de dados (sem banco, sem rede)
 npm run build      # build de produção em dist/
-npm run schema:check # confere, sem alterar, se o banco tem as migrations 001–013
+npm run schema:check # confere, sem alterar, migrations 001–014 e integridade essencial
 
 # separados, se precisar:
 npm run api        # só a API, em http://localhost:3000 (precisa de .env)
@@ -475,8 +476,11 @@ a aplicação nunca executa DDL:
 | `007`–`009` | quantidade de funcionários no ERP e no portal |
 | `010-formula-conta.sql` | contas calculadas por fórmula |
 | `011`–`013` | DRE configurável, unidade e sinal por conta da linha |
+| `014-integridade-e-migrations.sql` | ledger de migrations e exclusividade Pessoal × Operacionais |
 
 São idempotentes (`IF OBJECT_ID … IS NULL`): rodar de novo não apaga nada.
+Antes do próximo deploy, aplique a `014`; o `schema:check` bloqueia a atualização
+se o ledger, o trigger ou os objetos essenciais estiverem incompletos.
 
 `PLANEJADO.VALOR` é `DECIMAL(18,6)` porque a mesma coluna guarda reais e
 percentuais — em módulo percentual, 38,959531% arredondado a duas casas vira uns
@@ -571,8 +575,10 @@ vem do repositório, e sobrescrever derrubaria o portal.
 desenvolvimento, com as tabelas já criadas; subir na VM é apontar outro processo
 para o mesmo lugar.
 
-O Node do sistema (v20.x) basta: este portal não usa `node:sqlite`, então não
-depende do Node 24 do nvm como o portal-bi e o portal-envio-documentos.
+O serviço requer Node 22 ou superior: `ldapts` e o driver SQL usado por `mssql`
+não oferecem suporte ao Node 20. Como a VM hospeda outros portais, atualize o
+runtime deste serviço de forma versionada e confira os demais serviços antes de
+trocar o `/usr/bin/node` compartilhado.
 
 ### O front em produção
 
@@ -588,6 +594,7 @@ build existe, então `npm run api` sozinho continua sendo API pura.
 | `API_PORT` | `3004` | 3000–3003 ocupadas |
 | `API_HOST` | `127.0.0.1` | só o `cloudflared`, no mesmo host, precisa alcançar |
 | `TRUST_PROXY` | (padrão `loopback`) | ler o IP real do visitante no `X-Forwarded-For` |
+| `APP_ORIGINS` | vazio | origens adicionais autorizadas a fazer mutações; normalmente o próprio Host basta |
 
 `API_HOST` e `TRUST_PROXY` andam juntos e não são detalhe: atrás do túnel, toda
 requisição chega como `127.0.0.1`, e sem `trust proxy` o limite por origem

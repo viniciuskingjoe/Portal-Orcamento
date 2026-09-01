@@ -25,18 +25,6 @@ import { api } from "../lib/api.js";
 
 // Vazio em qualquer dimensão vale por "todos" — e é assim que a concessão sem
 // restrição continua sendo uma linha só, em vez de 42.
-function combinar(modulos, filiais, centros) {
-  const ou = (lista) => (lista.length ? lista : [null]);
-  const combinacoes = [];
-
-  ou(modulos).forEach((modulo) =>
-    ou(filiais).forEach((filial) =>
-      ou(centros).forEach((centro) => combinacoes.push({ modulo, filial, centro }))
-    )
-  );
-  return combinacoes;
-}
-
 function BuscaNoAd({ jaTem, onAdicionar }) {
   const [termo, setTermo] = useState("");
   const [achados, setAchados] = useState([]);
@@ -385,4 +373,3 @@ export default function TelaUsuarios({ filiais, centros, sessao, onVoltar }) {
     </main>
   );
 }
-

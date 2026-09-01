@@ -34,9 +34,11 @@ erro() { echo "erro: $*" >&2; exit 1; }
 command -v node >/dev/null || erro "node nao encontrado."
 command -v git  >/dev/null || erro "git nao encontrado."
 
-# Node 20.6+ por causa de `--env-file`, que este servico usa para ler o .env.
-node -e 'const [a,b]=process.versions.node.split(".").map(Number);
-         if (a<20 || (a===20 && b<6)) { console.error("Node 20.6+ necessario, achei "+process.versions.node); process.exit(1); }'
+# As dependencias atuais (`ldapts` e o driver SQL `tedious`) exigem Node 22+.
+# Falhar antes do npm ci evita instalar com EBADENGINE e deixar um servico que
+# parece subir, mas roda fora do contrato suportado pelas bibliotecas.
+node -e 'const [a]=process.versions.node.split(".").map(Number);
+         if (a<22) { console.error("Node 22+ necessario, achei "+process.versions.node); process.exit(1); }'
 
 # Branch a implantar. `git clone` sem isto traz a branch padrao do repositorio,
 # que pode nao ser a que tem o que se quer publicar -- e o portal subiria sem

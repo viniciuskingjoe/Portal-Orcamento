@@ -1,5 +1,7 @@
 import {
   MODULO_BASE_DO_PERCENTUAL,
+  MODULO_OPERACIONAIS,
+  MODULO_PESSOAL,
   ehModulo,
   ehPercentual,
   modulo as definicaoDoModulo,
@@ -12,6 +14,7 @@ const MAIOR_DECIMAL_18_6 = 999_999_999_999.999999;
 const MAIOR_INT = 2_147_483_647;
 const LIMITE_DE_ACESSOS = 500;
 const LIMITE_DE_LOTES = 200;
+const LIMITE_DE_MAPEAMENTOS = 2000;
 
 function falha(mensagem, status = 400) {
   const erro = new Error(mensagem);
@@ -165,6 +168,46 @@ export function validarAlteracaoModulo(moduloId, mudanca, catalogos = {}) {
     saida.formula = { conta, expressao };
   }
   return saida;
+}
+
+export function validarMapeamentos(mapeamentos, catalogos = {}) {
+  const validados = lista(mapeamentos, "mapeamentos", LIMITE_DE_MAPEAMENTOS).map(
+    (item, indice) => {
+      objeto(item, `mapeamentos[${indice}]`);
+      const modulo = texto(item.modulo, `mapeamentos[${indice}].modulo`, 40);
+      const mudanca = validarAlteracaoModulo(
+        modulo,
+        { filial: item.filial, centro: item.centro, contas: item.contas },
+        catalogos
+      );
+      return { modulo, filial: mudanca.filial, centro: mudanca.centro, contas: mudanca.contas };
+    }
+  );
+
+  const chaves = new Set();
+  for (const item of validados) {
+    const chave = `${item.modulo}|${item.filial}|${item.centro}`;
+    if (chaves.has(chave)) falha(`Mapeamento duplicado para ${chave}.`);
+    chaves.add(chave);
+  }
+  validarExclusividadeDeMapeamentos(validados);
+  return validados;
+}
+
+export function validarExclusividadeDeMapeamentos(mapeamentos) {
+  const ocupadas = new Map();
+  for (const item of mapeamentos ?? []) {
+    if (item.modulo !== MODULO_PESSOAL && item.modulo !== MODULO_OPERACIONAIS) continue;
+    for (const conta of item.contas ?? []) {
+      const chave = `${item.filial}|${item.centro ?? SEM_CENTRO}|${conta}`;
+      const anterior = ocupadas.get(chave);
+      if (anterior && anterior !== item.modulo) {
+        falha(`A conta ${conta} não pode ficar em Pessoal e Operacionais no mesmo centro.`, 409);
+      }
+      ocupadas.set(chave, item.modulo);
+    }
+  }
+  return mapeamentos;
 }
 
 export function validarLinhaDre(linha, { contas = [], linhas = [] } = {}) {

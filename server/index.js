@@ -41,6 +41,7 @@ import {
   salvarConfiguracao,
   salvarLinhaDre,
   salvarModulo,
+  salvarMapeamentos,
   salvarPlano,
   salvarVisao,
   visaoContabilDaVisao,
@@ -64,6 +65,7 @@ import {
 } from "../src/dados/permissoes.js";
 import { filtrarGruposPorSessao, filtrarRealizadoPorSessao } from "./escopo.js";
 import { trustProxyDaEnv } from "./proxy.js";
+import { protegerOrigem } from "./origem.js";
 import {
   validarAcessos,
   validarAlteracaoModulo,
@@ -71,6 +73,7 @@ import {
   validarFiliaisAtivas,
   validarGrupo,
   validarLinhaDre,
+  validarMapeamentos,
   validarNovoUsuario,
   validarOrdemDre,
   validarVisao,
@@ -134,6 +137,7 @@ app.use((_req, res, next) => {
 // próprio host. Confiando em qualquer peer, bastaria alcançar a porta na rede e
 // mandar um `X-Forwarded-For` inventado para escapar do limite a cada tentativa.
 app.set("trust proxy", trustProxyDaEnv(process.env.TRUST_PROXY));
+app.use("/api", protegerOrigem);
 app.use(express.json({ limit: "1mb" }));
 
 // Envolve handler async para que rejeição vire resposta de erro, não crash.
@@ -330,7 +334,30 @@ app.get(
 app.post(
   "/api/estado/importar",
   exigirAdmin,
-  rota(async (req, res) => res.json(await importar(req.body, req.sessao.login)))
+  rota(async (req, res) => {
+    const visoes = Array.isArray(req.body?.visoes) ? req.body.visoes.map(validarVisao) : [];
+    const [filiais, centros, visoesContabeis] = await Promise.all([
+      listarFiliais(),
+      listarCentrosDeCusto(),
+      listarVisoesContabeis(),
+    ]);
+    const contasPorVisao = new Map(
+      await Promise.all(
+        [...new Set(visoes.map((visao) => visao.visaoContabil))].map(async (visao) => [
+          visao,
+          await listarContas({ visao }),
+        ])
+      )
+    );
+    res.json(
+      await importar(req.body, req.sessao.login, {
+        filiais,
+        centros,
+        visoesContabeis,
+        contasPorVisao,
+      })
+    );
+  })
 );
 
 app.put(
@@ -420,6 +447,22 @@ app.put(
     });
     await salvarModulo(req.params.id, req.params.modulo, mudanca, req.sessao.login);
     res.json({ ok: true });
+  })
+);
+
+app.put(
+  "/api/visoes/:id/mapeamentos",
+  exigirAdmin,
+  rota(async (req, res) => {
+    const visaoContabil = await visaoContabilDaVisao(req.params.id);
+    const [filiais, centros, contas] = await Promise.all([
+      listarFiliais(),
+      listarCentrosDeCusto(),
+      listarContas({ visao: visaoContabil }),
+    ]);
+    const mapeamentos = validarMapeamentos(req.body?.mapeamentos, { filiais, centros, contas });
+    await salvarMapeamentos(req.params.id, mapeamentos, req.sessao.login);
+    res.json({ ok: true, gravados: mapeamentos.length });
   })
 );
 
@@ -623,9 +666,18 @@ app.put(
   "/api/usuarios/:login",
   exigirAdmin,
   rota(async (req, res) => {
+    const mudanca = validarAlteracaoUsuario(req.body);
+    if (
+      req.params.login === req.sessao.login &&
+      (mudanca.admin === false || mudanca.situacao === "inativo")
+    ) {
+      const erro = new Error("Você não pode retirar o seu próprio acesso administrativo.");
+      erro.status = 400;
+      throw erro;
+    }
     await alterarUsuario(
       req.params.login,
-      validarAlteracaoUsuario(req.body),
+      mudanca,
       req.sessao.login
     );
     res.json({ ok: true });

@@ -15,6 +15,23 @@ import { validarAcessos } from "./validacao.js";
 
 const APP = "orcamento";
 
+function adminsDoAmbiente() {
+  return new Set(
+    String(process.env.PORTAL_ADMINS ?? "")
+      .split(",")
+      .map(normalizarLogin)
+      .filter(Boolean)
+  );
+}
+
+export function retiraAdministracao({ adminAtual, situacaoAtual, admin, situacao }) {
+  const efetivoAgora = adminAtual === true && situacaoAtual === "ativo";
+  const efetivoDepois =
+    (admin === undefined ? adminAtual : admin === true) &&
+    (situacao === undefined ? situacaoAtual : situacao) === "ativo";
+  return efetivoAgora && !efetivoDepois;
+}
+
 export async function listarUsuarios() {
   const [usuarios, acessos] = await Promise.all([
     query(
@@ -97,27 +114,68 @@ export async function darAcesso({ login, nome, email }, quem) {
 // É o que fazer quando alguém esquece a senha ou quando se desconfia que ela
 // vazou.
 export async function limparSenha(login, quem) {
-  await query(
-    `UPDATE dbo.KING_IDENTIDADE_USUARIO
-        SET SENHA_HASH = NULL, TROCAR_SENHA = 0, ATUALIZADO_EM = SYSUTCDATETIME()
-      WHERE LOGIN = @login`,
-    { login }
-  );
+  await transaction(async ({ query: q }) => {
+    const alterados = await q(
+      `UPDATE dbo.KING_IDENTIDADE_USUARIO
+          SET SENHA_HASH = NULL, TROCAR_SENHA = 0, ATUALIZADO_EM = SYSUTCDATETIME()
+        OUTPUT inserted.LOGIN
+        WHERE LOGIN = @login`,
+      { login }
+    );
+    if (!alterados.length) {
+      const erro = new Error("Usuário não encontrado.");
+      erro.status = 404;
+      throw erro;
+    }
 
-  // Sessões abertas caem: se a senha foi apagada por suspeita, deixar a sessão
-  // de pé até expirar não resolve nada.
-  await query("DELETE FROM dbo.KING_IDENTIDADE_SESSAO WHERE LOGIN = @login", { login });
-
-  await query(
-    `INSERT INTO dbo.KING_IDENTIDADE_AUDITORIA (LOGIN, APP, EVENTO, DETALHE)
-     VALUES (@login, @app, 'senha-redefinida', @detalhe)`,
-    { login, app: APP, detalhe: `apagada por ${quem ?? "?"}` }
-  ).catch(() => {});
+    // Senha, sessões e trilha mudam juntas: uma falha no meio não deixa uma
+    // sessão suspeita viva nem registra uma redefinição que não aconteceu.
+    await q("DELETE FROM dbo.KING_IDENTIDADE_SESSAO WHERE LOGIN = @login", { login });
+    await q(
+      `INSERT INTO dbo.KING_IDENTIDADE_AUDITORIA (LOGIN, APP, EVENTO, DETALHE)
+       VALUES (@login, @app, 'senha-redefinida', @detalhe)`,
+      { login, app: APP, detalhe: `apagada por ${quem ?? "?"}` }
+    );
+  });
 }
 
 export async function alterarUsuario(login, { admin, situacao }, quem) {
-  if (admin !== undefined || situacao !== undefined) {
-    await query(
+  await transaction(async ({ query: q }) => {
+    const [alvo] = await q(
+      `SELECT ADMIN, SITUACAO
+         FROM dbo.KING_IDENTIDADE_ACESSO WITH (UPDLOCK, HOLDLOCK)
+        WHERE LOGIN = @login AND APP = @app`,
+      { login, app: APP }
+    );
+    if (!alvo) {
+      const erro = new Error("Usuário não encontrado neste portal.");
+      erro.status = 404;
+      throw erro;
+    }
+
+    if (
+      retiraAdministracao({
+        adminAtual: alvo.ADMIN === true,
+        situacaoAtual: alvo.SITUACAO,
+        admin,
+        situacao,
+      }) &&
+      ![...adminsDoAmbiente()].some((item) => item !== login)
+    ) {
+      const [restantes] = await q(
+        `SELECT COUNT(*) AS TOTAL
+           FROM dbo.KING_IDENTIDADE_ACESSO WITH (UPDLOCK, HOLDLOCK)
+          WHERE APP = @app AND LOGIN <> @login AND ADMIN = 1 AND SITUACAO = 'ativo'`,
+        { login, app: APP }
+      );
+      if (Number(restantes?.TOTAL ?? 0) === 0) {
+        const erro = new Error("O portal precisa manter pelo menos um administrador ativo.");
+        erro.status = 409;
+        throw erro;
+      }
+    }
+
+    await q(
       `UPDATE dbo.KING_IDENTIDADE_ACESSO
           SET ADMIN = COALESCE(@admin, ADMIN), SITUACAO = COALESCE(@situacao, SITUACAO)
         WHERE LOGIN = @login AND APP = @app`,
@@ -128,17 +186,17 @@ export async function alterarUsuario(login, { admin, situacao }, quem) {
         situacao: situacao ?? null,
       }
     );
-  }
 
-  await query(
-    `INSERT INTO dbo.KING_IDENTIDADE_AUDITORIA (LOGIN, APP, EVENTO, DETALHE)
-     VALUES (@login, @app, 'acesso-alterado', @detalhe)`,
-    {
-      login,
-      app: APP,
-      detalhe: `por ${quem ?? "?"}: ${JSON.stringify({ admin, situacao })}`.slice(0, 400),
-    }
-  ).catch(() => {});
+    await q(
+      `INSERT INTO dbo.KING_IDENTIDADE_AUDITORIA (LOGIN, APP, EVENTO, DETALHE)
+       VALUES (@login, @app, 'acesso-alterado', @detalhe)`,
+      {
+        login,
+        app: APP,
+        detalhe: `por ${quem ?? "?"}: ${JSON.stringify({ admin, situacao })}`.slice(0, 400),
+      }
+    );
+  });
 }
 
 // Tira do portal, mas não do cadastro: a pessoa pode usar outro portal.
