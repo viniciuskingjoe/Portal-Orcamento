@@ -28,7 +28,7 @@ const scryptAsync = promisify(scrypt);
 const PARAMETROS = { N: 32768, r: 8, p: 1, tamanho: 64, sal: 16 };
 const VERSAO = "s1";
 
-export const TAMANHO_MINIMO = 6;
+export const TAMANHO_MINIMO = 12;
 
 async function derivar(senha, sal, { N, r, p, tamanho }) {
   // `maxmem` precisa acompanhar o N: o padrao do Node (32MB) estoura com 2^15.
@@ -114,10 +114,9 @@ export function criticarSenha(senha, { login, nome } = {}) {
   if (primeiroNome && primeiroNome.length >= 4 && simples.includes(primeiroNome.toLowerCase())) {
     return "A senha não pode conter o seu nome.";
   }
-  // Calibrada pra ~metade dos caracteres distintos — a mesma proporção de
-  // quando o piso era 10 (10 caracteres, 5 distintos). Um número fixo de 5
-  // ficaria cada vez mais apertado à medida que TAMANHO_MINIMO cai: numa
-  // senha de 6 caracteres viraria ~83% de variedade em vez de ~50%.
+  // Calibrada para exigir alguma variedade sem empurrar a pessoa para regras
+  // artificiais de maiúscula/número/símbolo. O teto de cinco distintos deixa
+  // passphrases longas continuarem válidas.
   const distintosMinimos = Math.min(5, Math.max(3, Math.ceil(valor.length / 2)));
   if (new Set(valor).size < distintosMinimos) {
     return "A senha tem repetição demais. Varie mais os caracteres.";

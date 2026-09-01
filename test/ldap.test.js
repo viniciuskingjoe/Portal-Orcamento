@@ -6,7 +6,7 @@ import { test } from "node:test";
 process.env.LDAP_BASE_DN = "DC=exemplo,DC=local";
 process.env.LDAP_URL = "ldaps://exemplo:636";
 
-const { escaparFiltro, identidadeDeBind, normalizarLogin } = await import("../server/ldap.js");
+const { escaparFiltro, filtroDeUsuarioAtivo, identidadeDeBind, normalizarLogin } = await import("../server/ldap.js");
 
 // ---------------------------------------------------------------------------
 // Escape de filtro
@@ -32,6 +32,13 @@ test("tentativa de injeção vira texto", () => {
   const malicioso = "*)(objectClass=*";
   assert.equal(escaparFiltro(malicioso), "\\2a\\29\\28objectClass=\\2a");
   assert.ok(!escaparFiltro(malicioso).includes("(objectClass="));
+});
+
+test("consulta de desligamento exige usuário habilitado e escapa o login", () => {
+  const filtro = filtroDeUsuarioAtivo("*)(objectClass=*");
+  assert.match(filtro, /userAccountControl/);
+  assert.match(filtro, /sAMAccountName=\\2a\\29\\28objectclass=\\2a/i);
+  assert.ok(!filtro.includes("(sAMAccountName=*)(objectClass=*"));
 });
 
 // ---------------------------------------------------------------------------

@@ -5,8 +5,9 @@ import { Client } from "ldapts";
 //
 // A senha do usuário NUNCA é gravada nem trafega para lugar nenhum além do
 // controlador de domínio: o `bind` é a própria validação. O portal não tem
-// tabela de senha, não tem reset e não tem troca no primeiro acesso — quem
-// manda na credencial é o AD. Desligou lá, perdeu o acesso aqui na hora.
+// primeiro acesso usa o bind; depois, contas de origem AD continuam sendo
+// conferidas por uma busca de conta ativa. Assim a senha local não contorna o
+// desligamento corporativo.
 //
 // Adaptado de MenuBI/src/ldap.js, que já roda contra este domínio. Mantidos os
 // mesmos nomes de variável para o .env poder ser o mesmo.
@@ -229,6 +230,50 @@ export async function buscarUsuarios(termo, limite = 20) {
         email: primeiro(entrada.mail) || null,
       }))
       .slice(0, limite);
+  } finally {
+    await cliente.unbind().catch(() => {});
+  }
+}
+
+export function filtroDeUsuarioAtivo(login) {
+  return (
+    `(&(objectCategory=person)(objectClass=user)${NAO_DESABILITADA}` +
+    `(sAMAccountName=${escaparFiltro(normalizarLogin(login))}))`
+  );
+}
+
+// Confere o vínculo corporativo sem conhecer a senha da pessoa. É usado no
+// login por senha do portal e, a cada renovação, nas sessões já abertas.
+export async function usuarioAtivoNoDiretorio(login) {
+  if (!buscaConfigurada()) {
+    const erro = new Error(
+      "Validação de contas no AD não configurada (conta de serviço ausente no .env)."
+    );
+    erro.status = 503;
+    throw erro;
+  }
+
+  const cliente = new Client(opcoes());
+  try {
+    try {
+      await cliente.bind(LDAP_BIND_DN, LDAP_BIND_PASSWORD);
+    } catch (erro) {
+      throw ehCredencialInvalida(erro)
+        ? Object.assign(new Error("Conta de serviço do AD com credencial inválida."), { status: 503 })
+        : falhaDeConexao(erro);
+    }
+
+    try {
+      const { searchEntries } = await cliente.search(LDAP_SEARCH_BASE, {
+        scope: "sub",
+        filter: filtroDeUsuarioAtivo(login),
+        attributes: ["sAMAccountName"],
+        sizeLimit: 1,
+      });
+      return searchEntries.length > 0;
+    } catch (erro) {
+      throw falhaDeConexao(erro);
+    }
   } finally {
     await cliente.unbind().catch(() => {});
   }

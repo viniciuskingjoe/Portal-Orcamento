@@ -575,7 +575,7 @@ test("módulo percentual: digitar em reais grava o percentual equivalente", () =
 test("módulo percentual sem base não inventa percentual", () => {
   assert.equal(
     valorParaGravar({ digitado: 50000, emReais: true, percentual: true, base: 0 }),
-    0
+    null
   );
 });
 
@@ -786,6 +786,30 @@ test("referência circular na fórmula devolve 0 em vez de travar", () => {
   visao = definirFormulaDaConta(visao, MODULO_PESSOAL, ABONO, `V[${SALARIO}]`);
 
   assert.equal(valorPlanejadoDaConta(plano(), visao, MODULO_PESSOAL, "000001", CENTRO, SALARIO, 1), 0);
+});
+
+test("publicação estrita recusa fórmula circular antes de gerar linhas para o ERP", () => {
+  let visao = visaoDeFolha();
+  visao = definirFormulaDaConta(visao, MODULO_PESSOAL, SALARIO, `V[${ABONO}]`);
+  visao = definirFormulaDaConta(visao, MODULO_PESSOAL, ABONO, `V[${SALARIO}]`);
+
+  assert.throws(
+    () => linhasParaOrcamento({ plano: plano(), visao, estrito: true }),
+    (erro) => erro.status === 409 && /circular/i.test(erro.message)
+  );
+});
+
+test("publicação estrita recusa referência a conta que saiu do módulo", () => {
+  const visao = definirFormulaDaConta(
+    visaoDeFolha(),
+    MODULO_PESSOAL,
+    DECIMO,
+    "V[4.2.1.10.999]"
+  );
+  assert.throws(
+    () => linhasParaOrcamento({ plano: plano(), visao, estrito: true }),
+    (erro) => erro.status === 409 && /não pertence ao mesmo módulo/i.test(erro.message)
+  );
 });
 
 // A partir daqui a publicação entra em cena. Nº de funcionários é dado à

@@ -6,6 +6,7 @@ After=network.target
 Type=simple
 User=king
 WorkingDirectory=/opt/portal-orcamento
+Environment=NODE_ENV=production
 
 # `--env-file` do Node, e nao `EnvironmentFile=` do systemd, de proposito: o
 # parser do systemd trata `#` como comentario e lida com aspas de outro jeito,

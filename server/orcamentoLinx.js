@@ -1,4 +1,5 @@
-import { query, transaction } from "./sqlserver.js";
+import { transaction } from "./sqlserver.js";
+import { carregarEstado } from "./repositorio.js";
 import { linhasParaOrcamento } from "../src/dados/plano.js";
 import { modulo } from "../src/dados/modulos.js";
 
@@ -124,14 +125,13 @@ async function espelharQuantidades(q, idOrcamento, plano) {
 
 // Cria o orçamento no ERP para um plano que ainda não tem. O id não é IDENTITY:
 // quem escolhe é a aplicação, então pegamos o próximo livre.
-export async function garantirOrcamento(planoId, login) {
-  const plano = await umPlano(planoId);
+async function garantirOrcamentoNaTransacao(q, plano, login) {
   if (plano.ID_ORCAMENTO) return plano.ID_ORCAMENTO;
 
   // O exercício é do calendário contábil do Linx, não nosso: quem o cria é quem
   // administra o ERP. Sem esta checagem o erro seria uma violação de chave
   // estrangeira crua, que não diz o que fazer nem para quem pedir.
-  const [exercicio] = await query(
+  const [exercicio] = await q(
     "SELECT ID_EXERCICIO FROM dbo.CTB_EXERCICIO WHERE ID_EXERCICIO = @ano AND ID_VERSAO_CONTABIL = @versao",
     { ano: plano.ANO, versao: VERSAO_CONTABIL }
   );
@@ -145,52 +145,65 @@ export async function garantirOrcamento(planoId, login) {
     throw erro;
   }
 
-  return transaction(async ({ query: q }) => {
-    const [{ proximo }] = await q(
-      "SELECT ISNULL(MAX(ID_ORCAMENTO), 0) + 1 AS proximo FROM dbo.CTB_ORCAMENTO"
-    );
-
-    await q(
-      `INSERT INTO dbo.CTB_ORCAMENTO
-         (ID_ORCAMENTO, DESC_ORCAMENTO, COD_MATRIZ_CONTABIL, VISAO_CONTABIL,
-          ID_VERSAO_CONTABIL, ID_EXERCICIO, INATIVO, COD_STATUS_ORCAMENTO)
-       VALUES (@id, @desc, @matriz, @visao, @versao, @ano, 0, @status)`,
-      {
-        id: proximo,
-        desc: `${plano.NOME} (PORTAL)`.slice(0, 40),
-        matriz: plano.COD_MATRIZ ?? "000001",
-        visao: plano.VISAO_CONTABIL ?? "25",
-        versao: VERSAO_CONTABIL,
-        ano: plano.ANO,
-        status: STATUS_EM_ELABORACAO,
-      }
-    );
-
-    await q("UPDATE dbo.KING_PORTAL_ORC_PLANO SET ID_ORCAMENTO = @id WHERE ID = @plano", {
-      id: proximo,
-      plano: planoId,
-    });
-
-    await registrar(q, planoId, login, `orçamento ${proximo} criado no ERP`);
-    return proximo;
-  });
-}
-
-async function umPlano(planoId) {
-  const [plano] = await query(
-    `SELECT p.ID, p.NOME, p.ANO, p.ID_ORCAMENTO, v.VISAO_CONTABIL
-       FROM dbo.KING_PORTAL_ORC_PLANO AS p
-       LEFT JOIN dbo.KING_PORTAL_ORC_VISAO AS v ON v.ID = p.VISAO_ID
-      WHERE p.ID = @id`,
-    { id: planoId }
+  const [{ proximo }] = await q(
+    `SELECT ISNULL(MAX(ID_ORCAMENTO), 0) + 1 AS proximo
+       FROM dbo.CTB_ORCAMENTO WITH (UPDLOCK, HOLDLOCK)`
   );
 
-  if (!plano) {
-    const erro = new Error("Plano não encontrado.");
-    erro.status = 404;
-    throw erro;
-  }
-  return plano;
+  await q(
+    `INSERT INTO dbo.CTB_ORCAMENTO
+       (ID_ORCAMENTO, DESC_ORCAMENTO, COD_MATRIZ_CONTABIL, VISAO_CONTABIL,
+        ID_VERSAO_CONTABIL, ID_EXERCICIO, INATIVO, COD_STATUS_ORCAMENTO)
+     VALUES (@id, @desc, @matriz, @visao, @versao, @ano, 0, @status)`,
+    {
+      id: proximo,
+      desc: `${plano.NOME} (PORTAL)`.slice(0, 40),
+      matriz: plano.COD_MATRIZ ?? "000001",
+      visao: plano.VISAO_CONTABIL ?? "25",
+      versao: VERSAO_CONTABIL,
+      ano: plano.ANO,
+      status: STATUS_EM_ELABORACAO,
+    }
+  );
+
+  await q("UPDATE dbo.KING_PORTAL_ORC_PLANO SET ID_ORCAMENTO = @id WHERE ID = @plano", {
+    id: proximo,
+    plano: plano.ID,
+  });
+
+  await registrar(q, plano.ID, login, `orçamento ${proximo} criado no ERP`);
+  return proximo;
+}
+
+// Mantida como operação pública para o roteiro de integração, mas agora usa o
+// mesmo lock e as mesmas guardas da publicação completa.
+export async function garantirOrcamento(planoId, login) {
+  return transaction(async ({ query: q }) => {
+    const [plano] = await q(
+      `SELECT p.ID, p.NOME, p.ANO, p.ID_ORCAMENTO, p.SITUACAO,
+              v.VISAO_CONTABIL
+         FROM dbo.KING_PORTAL_ORC_PLANO AS p WITH (UPDLOCK, HOLDLOCK)
+         LEFT JOIN dbo.KING_PORTAL_ORC_VISAO AS v ON v.ID = p.VISAO_ID
+        WHERE p.ID = @id`,
+      { id: planoId }
+    );
+    if (!plano) {
+      const erro = new Error("Plano não encontrado.");
+      erro.status = 404;
+      throw erro;
+    }
+    if (plano.SITUACAO !== "ativo") {
+      const erro = new Error("Este plano está inativo e não pode criar orçamento no Linx.");
+      erro.status = 409;
+      throw erro;
+    }
+    if (!plano.VISAO_CONTABIL) {
+      const erro = new Error("Este plano não tem visão contábil associada.");
+      erro.status = 409;
+      throw erro;
+    }
+    return garantirOrcamentoNaTransacao(q, plano, login);
+  });
 }
 
 function registrar(q, planoId, login, detalhe) {
@@ -205,31 +218,57 @@ function registrar(q, planoId, login, detalhe) {
 // Publicar
 // --------------------------------------------------------------------------
 
-export async function publicar(planoId, estado, login) {
-  const plano = (estado?.planos ?? []).find((item) => item.id === planoId);
-  const visao = (estado?.visoes ?? []).find((item) => item.id === plano?.visaoId);
-
-  if (!plano) {
-    const erro = new Error("Plano não encontrado.");
-    erro.status = 404;
-    throw erro;
-  }
-  if (!visao) {
-    const erro = new Error("Este plano não tem visão associada — não há o que publicar.");
-    erro.status = 400;
-    throw erro;
-  }
-
-  const idOrcamento = await garantirOrcamento(planoId, login);
-  const linhas = linhasParaOrcamento({ plano, visao });
-
+export async function publicar(planoId, login) {
   return transaction(async ({ query: q }) => {
-    // Dentro da transação, de propósito: entre ler o status e inserir, alguém
-    // poderia ativar o orçamento pelo Linx e o gatilho passaria a somar no
-    // saldo. Aqui a leitura e a escrita são o mesmo instante.
+    // Este é o lock que transforma "o que li" em "o que publiquei". Toda
+    // gravação de célula e toda mudança de situação também bloqueiam esta linha,
+    // então nenhuma delas pode entrar entre o snapshot e PUBLICADO_EM.
+    const [cadastro] = await q(
+      `SELECT p.ID, p.NOME, p.ANO, p.VISAO_ID, p.ID_ORCAMENTO, p.SITUACAO,
+              v.VISAO_CONTABIL
+         FROM dbo.KING_PORTAL_ORC_PLANO AS p WITH (UPDLOCK, HOLDLOCK)
+         LEFT JOIN dbo.KING_PORTAL_ORC_VISAO AS v ON v.ID = p.VISAO_ID
+        WHERE p.ID = @id`,
+      { id: planoId }
+    );
+    if (!cadastro) {
+      const erro = new Error("Plano não encontrado.");
+      erro.status = 404;
+      throw erro;
+    }
+    if (cadastro.SITUACAO !== "ativo") {
+      const erro = new Error("Este plano está inativo e não pode ser publicado.");
+      erro.status = 409;
+      throw erro;
+    }
+    if (!cadastro.VISAO_ID || !cadastro.VISAO_CONTABIL) {
+      const erro = new Error("Este plano não tem visão associada — não há o que publicar.");
+      erro.status = 409;
+      throw erro;
+    }
+
+    const idOrcamento = await garantirOrcamentoNaTransacao(q, cadastro, login);
+
+    // A leitura usa a própria transação e acontece com a linha do plano ainda
+    // travada. `estrito` faz qualquer fórmula inválida abortar antes de tocar no
+    // orçamento do ERP; a tela, por outro lado, continua podendo renderizar os
+    // demais valores e mostrar o editor responsável pelo erro.
+    const estado = await carregarEstado({ admin: true }, { executar: q });
+    const plano = (estado.planos ?? []).find((item) => item.id === planoId);
+    const visao = (estado.visoes ?? []).find((item) => item.id === plano?.visaoId);
+    if (!plano || !visao) {
+      const erro = new Error("O plano ou a visão deixou de existir durante a publicação.");
+      erro.status = 409;
+      throw erro;
+    }
+    const linhas = linhasParaOrcamento({ plano, visao, estrito: true });
+
+    // O lock de atualização é mantido até o commit. Assim o Linx não consegue
+    // ativar este orçamento entre a conferência e os INSERTs, e duas
+    // publicações do portal para o mesmo orçamento também ficam serializadas.
     const [orcamento] = await q(
       `SELECT o.COD_STATUS_ORCAMENTO, s.LX_STATUS_ORCAMENTO, o.ID_EXERCICIO
-         FROM dbo.CTB_ORCAMENTO AS o
+         FROM dbo.CTB_ORCAMENTO AS o WITH (UPDLOCK, HOLDLOCK)
          JOIN dbo.CTB_STATUS_ORCAMENTO AS s
            ON s.COD_STATUS_ORCAMENTO = o.COD_STATUS_ORCAMENTO
         WHERE o.ID_ORCAMENTO = @id`,
@@ -242,10 +281,19 @@ export async function publicar(planoId, estado, login) {
       throw erro;
     }
 
-    if (orcamento.LX_STATUS_ORCAMENTO === 2) {
+    if (Number(orcamento.COD_STATUS_ORCAMENTO) !== STATUS_EM_ELABORACAO) {
+      const estadoLinx = orcamento.LX_STATUS_ORCAMENTO === 2 ? "ATIVO" : `status ${orcamento.COD_STATUS_ORCAMENTO}`;
       const erro = new Error(
-        `O orçamento ${idOrcamento} está ATIVO no Linx. Publicar nele somaria no ` +
-          `saldo orçado sem forma de desfazer. Volte para EM ELABORAÇÃO antes.`
+        `O orçamento ${idOrcamento} está ${estadoLinx} no Linx. O portal só publica ` +
+          `quando ele está EM ELABORAÇÃO.`
+      );
+      erro.status = 409;
+      throw erro;
+    }
+    if (Number(orcamento.ID_EXERCICIO) !== Number(plano.ano)) {
+      const erro = new Error(
+        `O orçamento ${idOrcamento} pertence ao exercício ${orcamento.ID_EXERCICIO}, ` +
+          `mas o plano está em ${plano.ano}. Corrija o vínculo antes de publicar.`
       );
       erro.status = 409;
       throw erro;

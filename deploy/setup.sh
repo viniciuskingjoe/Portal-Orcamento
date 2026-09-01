@@ -17,9 +17,9 @@
 # Idempotente: roda de novo para atualizar. Nao cria nem sobrescreve o `.env` —
 # credencial nao vem do repositorio, e sobrescrever derrubaria o portal.
 #
-# O banco NAO precisa de migracao: e o mesmo KINGEJOE que o portal ja usa em
-# desenvolvimento, com as tabelas KING_PORTAL_ORC_* e KING_IDENTIDADE_* ja
-# criadas. Subir aqui e apontar outro processo para o mesmo banco.
+# O script nao aplica DDL automaticamente: esse banco e compartilhado com o
+# Linx e as migrations continuam sob controle do DBA. Antes de reiniciar, ele
+# confere se os scripts 001-013 ja deixaram o schema compativel.
 # ============================================================================
 set -euo pipefail
 
@@ -89,6 +89,9 @@ sudo -u $DONO npm run build --prefix "$DESTINO"
 
 echo "==> testes"
 sudo -u $DONO npm test --prefix "$DESTINO"
+
+echo "==> conferindo schema do banco"
+sudo -u $DONO npm run schema:check --prefix "$DESTINO"
 
 echo "==> servico systemd"
 install -m 644 "$DESTINO/deploy/$APP.service" "/etc/systemd/system/$APP.service"

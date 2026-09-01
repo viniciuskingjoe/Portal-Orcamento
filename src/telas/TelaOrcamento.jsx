@@ -112,6 +112,7 @@ export default function TelaOrcamento({
   onAlterarFiltro,
   escopo,
   podeLancar = true,
+  planoInativo = false,
   podeSincronizar = false,
   sincronizando = false,
   onSincronizar,
@@ -176,7 +177,10 @@ export default function TelaOrcamento({
   // coluna em reais fica em 0,00 com o percentual digitado ao lado, e parece
   // que a digitação não pegou.
   const totalDaTabela = linhas.find((linha) => linha.id === "total");
-  const semBase = percentual && !totalDaTabela?.base;
+  const mesesSemBase = linhas.filter(
+    (linha) => Number.isInteger(linha.id) && linha.id >= 1 && linha.id <= 12 && !linha.base
+  );
+  const semBase = percentual && mesesSemBase.length > 0;
 
   // Receita escolhida que não recebe realizado nenhum. Sem explicar, a coluna
   // zerada ao lado de um planejado cheio parece cálculo errado — e não é: o ERP
@@ -225,9 +229,8 @@ export default function TelaOrcamento({
     (!percentual || (filtros.receita !== TODAS_AS_CONTAS && receitas.length > 0));
 
   // Nº de funcionários é do CENTRO, não da conta: aparece mesmo vendo "Total
-  // do módulo" (soma das contas), porque a multiplicação distribui — Σ(valor
-  // da conta) × gente = Σ(valor da conta × gente). Só precisa de filial e
-  // centro únicos.
+  // do módulo" (soma das contas) como informação operacional. Ele não altera
+  // o planejado; só precisa de filial e centro únicos.
   const podeMostrarFuncionarios =
     temFuncionarios && filtros.filial !== "total" && filtros.centro !== SEM_CENTRO;
   const podeEditarFuncionarios =
@@ -243,7 +246,9 @@ export default function TelaOrcamento({
   // centro. Checar essa ordem antes garante que, quando o motivo for mesmo
   // falta de permissão, filial e centro já estão fixados e `podeLancar`
   // reflete a permissão de verdade, não um filtro incompleto.
-  const motivo = !contasDisponiveis.length
+  const motivo = planoInativo
+    ? "Este plano está inativo e disponível apenas para consulta. Reative-o em Planos para lançar novamente."
+    : !contasDisponiveis.length
     ? "Nenhuma conta configurada para esta combinação. Ajuste a visão."
     : percentual && !receitas.length
       ? "Nenhuma conta de receita configurada nesta filial. Ajuste Receita de vendas na visão."
@@ -418,7 +423,7 @@ export default function TelaOrcamento({
             chave filial · centro · classificação · mês e não guarda de que
             módulo a linha veio, então publicação parcial não é expressável
             lá. A confirmação diz isso. */}
-        {podeSincronizar ? (
+        {podeSincronizar && !planoInativo ? (
           <button
             type="button"
             className="botao botao--primario botao-sincronizar"
@@ -462,10 +467,10 @@ export default function TelaOrcamento({
         <p className="modulo-aviso modulo-aviso--atencao">
           <Icone nome="info" tamanho={16} />
           <span>
-            Este módulo é lançado em percentual sobre a receita de vendas planejada, e não há receita
-            planejada para {filtros.filial === "total" ? "estas filiais" : "esta filial"} em{" "}
-            {plano.ano}. Enquanto isso, a coluna em reais fica zerada. Lance Receita de vendas
-            primeiro.
+            Este módulo é lançado em percentual sobre a receita planejada, e há mês sem base para{" "}
+            {filtros.filial === "total" ? "estas filiais" : "esta filial"} em {plano.ano}. Nesses
+            meses, o valor em reais fica somente para leitura para evitar apagar um lançamento por
+            uma conversão impossível. Lance Receita de vendas primeiro ou edite o percentual.
           </span>
         </p>
       ) : null}

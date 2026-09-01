@@ -1,7 +1,7 @@
 import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 
 import { query, queryOne } from "./sqlserver.js";
-import { autenticar, normalizarLogin } from "./ldap.js";
+import { autenticar, normalizarLogin, usuarioAtivoNoDiretorio } from "./ldap.js";
 import { criarLimite } from "./limite.js";
 import { conferir, criticarSenha, gerarHash } from "./senha.js";
 
@@ -23,7 +23,8 @@ const HASH_FANTASMA = await gerarHash(randomBytes(32).toString("hex"));
 //   SEM senha  →  entra com a do Windows (bind no AD) e define a do portal na
 //                 hora. É o primeiro acesso, e é o que dispensa alguém ter que
 //                 distribuir senha inicial.
-//   COM senha  →  o AD não é mais consultado para esta conta.
+//   COM senha  →  confere a senha local e também se a conta de origem AD segue
+//                 ativa; contas locais não dependem do diretório.
 //
 // A senha do portal nunca é guardada em texto: o que fica é scrypt com sal
 // (server/senha.js).
@@ -31,6 +32,7 @@ const HASH_FANTASMA = await gerarHash(randomBytes(32).toString("hex"));
 
 const APP = "orcamento";
 const HORAS_DE_SESSAO = 8;
+const MINUTOS_ENTRE_RENOVACOES = 15;
 
 // Quem entra como administrador mesmo sem linha na tabela. Sem isto ninguém
 // consegue conceder a primeira permissão — não há como criar o primeiro admin
@@ -66,24 +68,34 @@ export function cookieDaRequisicao(req) {
     const corte = parte.indexOf("=");
     if (corte < 0) continue;
     if (parte.slice(0, corte).trim() === COOKIE) {
-      return decodeURIComponent(parte.slice(corte + 1).trim());
+      try {
+        return decodeURIComponent(parte.slice(corte + 1).trim());
+      } catch {
+        // Um Cookie arbitrário vem do cliente. Percent-encoding quebrado não
+        // pode transformar toda chamada à API em erro 500.
+        return null;
+      }
     }
   }
   return null;
 }
 
-export function gravarCookie(res, id) {
-  res.cookie(COOKIE, id, {
+export function opcoesDoCookie({ comDuracao = true } = {}) {
+  return {
     httpOnly: true, // JavaScript da página não lê: XSS não rouba a sessão
     sameSite: "lax", // corta CSRF nas navegações de terceiros
     secure: process.env.NODE_ENV === "production",
     path: "/",
-    maxAge: HORAS_DE_SESSAO * 3600 * 1000,
-  });
+    ...(comDuracao ? { maxAge: HORAS_DE_SESSAO * 3600 * 1000 } : {}),
+  };
+}
+
+export function gravarCookie(res, id) {
+  res.cookie(COOKIE, id, opcoesDoCookie());
 }
 
 export function limparCookie(res) {
-  res.clearCookie(COOKIE, { path: "/" });
+  res.clearCookie(COOKIE, opcoesDoCookie({ comDuracao: false }));
 }
 
 async function criarSessao(login, { ip, userAgent }) {
@@ -116,12 +128,12 @@ export async function encerrarSessao(id) {
 
 // Sessão expirada é apagada na leitura: sem uma rotina de limpeza, a tabela só
 // cresce e a expiração vira só uma coluna que ninguém honra.
-export async function sessaoDoCookie(id) {
+export async function sessaoDoCookie(id, { aoRenovar } = {}) {
   if (!id) return null;
   const hash = hashDoId(id);
 
   const linha = await queryOne(
-    `SELECT s.LOGIN, s.EXPIRA_EM, u.NOME, u.SITUACAO, u.TROCAR_SENHA,
+    `SELECT s.LOGIN, s.EXPIRA_EM, s.VISTA_EM, u.NOME, u.SITUACAO, u.ORIGEM, u.TROCAR_SENHA,
             CASE WHEN u.SENHA_HASH IS NULL THEN 1 ELSE 0 END AS SEM_SENHA
        FROM dbo.KING_IDENTIDADE_SESSAO AS s
        INNER JOIN dbo.KING_IDENTIDADE_USUARIO AS u ON u.LOGIN = s.LOGIN
@@ -135,13 +147,32 @@ export async function sessaoDoCookie(id) {
     return null;
   }
 
-  // Renova a validade a cada uso: quem está trabalhando não é deslogado no meio.
-  await query(
-    `UPDATE dbo.KING_IDENTIDADE_SESSAO
-        SET VISTA_EM = SYSUTCDATETIME(), EXPIRA_EM = @expira
-      WHERE SID_HASH = @hash`,
-    { hash, expira: new Date(Date.now() + HORAS_DE_SESSAO * 3600 * 1000) }
-  );
+  // Renova em blocos, não a cada asset/API: quinze minutos ainda mantêm a
+  // sessão deslizante, mas evitam uma escrita no SQL Server por requisição.
+  const ultimaVista = linha.VISTA_EM ? new Date(linha.VISTA_EM).getTime() : 0;
+  if (Date.now() - ultimaVista >= MINUTOS_ENTRE_RENOVACOES * 60_000) {
+    if (linha.ORIGEM === "ad" && !(await usuarioAtivoNoDiretorio(linha.LOGIN))) {
+      await query(
+        "DELETE FROM dbo.KING_IDENTIDADE_SESSAO WHERE LOGIN = @login AND APP = @app",
+        { login: linha.LOGIN, app: APP }
+      );
+      await registrar({
+        login: linha.LOGIN,
+        evento: "negado",
+        detalhe: "conta inativa ou ausente no AD durante renovação",
+      });
+      return null;
+    }
+    await query(
+      `UPDATE dbo.KING_IDENTIDADE_SESSAO
+          SET VISTA_EM = SYSUTCDATETIME(), EXPIRA_EM = @expira
+        WHERE SID_HASH = @hash`,
+      { hash, expira: new Date(Date.now() + HORAS_DE_SESSAO * 3600 * 1000) }
+    );
+    // O vencimento precisa deslizar dos dois lados. Renovar só a linha no banco
+    // deixaria o cookie expirar no navegador oito horas após o primeiro login.
+    aoRenovar?.();
+  }
 
   const sessao = await montarSessao(linha.LOGIN, linha.NOME);
 
@@ -237,7 +268,7 @@ export async function entrar({ usuario, senha, ip, userAgent, res }) {
 
   const cadastro = login
     ? await queryOne(
-        `SELECT LOGIN, NOME, SENHA_HASH, TROCAR_SENHA, SITUACAO
+        `SELECT LOGIN, NOME, SENHA_HASH, TROCAR_SENHA, SITUACAO, ORIGEM
            FROM dbo.KING_IDENTIDADE_USUARIO WHERE LOGIN = @login`,
         { login }
       )
@@ -261,8 +292,8 @@ export async function entrar({ usuario, senha, ip, userAgent, res }) {
   //   SEM senha  →  entra com a do Windows (bind no AD) e é obrigada a definir
   //                 a do portal na hora. É assim que o primeiro acesso funciona
   //                 sem ninguém precisar distribuir senha.
-  //   COM senha  →  o AD não é mais consultado. Daí em diante a senha do portal
-  //                 é a única que abre esta conta.
+  //   COM senha  →  confere a senha do portal e, para cadastro vindo do AD,
+  //                 confirma também se a conta corporativa segue ativa.
   const primeiroAcesso = !cadastro.SENHA_HASH;
 
   if (primeiroAcesso) {
@@ -280,6 +311,19 @@ export async function entrar({ usuario, senha, ip, userAgent, res }) {
     limite.registrarFalha(login, origem);
     await registrar({ login, evento: "negado", detalhe: "senha", ip });
     throw negar();
+  }
+
+  if (!primeiroAcesso && cadastro.ORIGEM === "ad") {
+    const ativo = await usuarioAtivoNoDiretorio(cadastro.LOGIN);
+    if (!ativo) {
+      limite.registrarFalha(login, origem);
+      await query(
+        "DELETE FROM dbo.KING_IDENTIDADE_SESSAO WHERE LOGIN = @login AND APP = @app",
+        { login: cadastro.LOGIN, app: APP }
+      );
+      await registrar({ login, evento: "negado", detalhe: "conta inativa ou ausente no AD", ip });
+      throw negar();
+    }
   }
 
   if (cadastro.SITUACAO !== "ativo") {
@@ -319,9 +363,12 @@ export async function entrar({ usuario, senha, ip, userAgent, res }) {
 // --------------------------------------------------------------------------
 
 export function comSessao() {
-  return async (req, _res, next) => {
+  return async (req, res, next) => {
     try {
-      req.sessao = await sessaoDoCookie(cookieDaRequisicao(req));
+      const id = cookieDaRequisicao(req);
+      req.sessao = await sessaoDoCookie(id, {
+        aoRenovar: () => gravarCookie(res, id),
+      });
       next();
     } catch (erro) {
       next(erro);

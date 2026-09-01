@@ -6,12 +6,14 @@ import { resumoDaVisao, resumoDoModulo } from "../dados/visao.js";
 function CardModulo({ modulo, visao, onAbrir }) {
   const resumo = resumoDoModulo(visao, modulo.id);
   const configurado = resumo.filiais > 0;
+  const Componente = onAbrir ? "button" : "div";
 
   return (
-    <button
-      type="button"
-      className={`card-visao card-visao--${modulo.tipo} ${configurado ? "is-configurado" : ""}`}
-      onClick={() => onAbrir(modulo.id)}
+    <Componente
+      {...(onAbrir ? { type: "button", onClick: () => onAbrir(modulo.id) } : {})}
+      className={`card-visao card-visao--${modulo.tipo} ${configurado ? "is-configurado" : ""} ${
+        onAbrir ? "" : "is-somente-leitura"
+      }`}
     >
       <span className="card-visao__icone">
         <Icone nome={modulo.icone} tamanho={19} />
@@ -28,8 +30,8 @@ function CardModulo({ modulo, visao, onAbrir }) {
         </small>
       </span>
       <span className="card-visao__grupo">{modulo.grupo}</span>
-      <Icone nome="chevron" tamanho={16} />
-    </button>
+      {onAbrir ? <Icone nome="chevron" tamanho={16} /> : null}
+    </Componente>
   );
 }
 
@@ -89,7 +91,12 @@ export default function TelaVisao({
           <h2>{grupo.titulo}</h2>
           <div className="grid-visao">
             {grupo.modulos.map((modulo) => (
-              <CardModulo key={modulo.id} modulo={modulo} visao={visao} onAbrir={onAbrirModulo} />
+              <CardModulo
+                key={modulo.id}
+                modulo={modulo}
+                visao={visao}
+                onAbrir={somenteLeitura ? null : onAbrirModulo}
+              />
             ))}
           </div>
         </section>
@@ -97,7 +104,7 @@ export default function TelaVisao({
 
       {/* O DRE não orça: ele lê o que os módulos acima já orçam, então fica
           numa seção à parte, no fim — é a ordem em que se configura. */}
-      {onAbrirDre ? (
+      {onAbrirDre && !somenteLeitura ? (
         <section className="secao-visao">
           <h2>Demonstrativo</h2>
           <div className="grid-visao">

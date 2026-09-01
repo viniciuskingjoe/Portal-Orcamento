@@ -244,14 +244,16 @@ export default function TabelaOrcamento({
     }
     if (evento.key === "Enter" || evento.key === "Tab") {
       evento.preventDefault();
-      onConfirmarEdicao();
-      irPara(evento.shiftKey ? indice - 1 : indice + 1, campo);
+      if (onConfirmarEdicao() !== false) {
+        irPara(evento.shiftKey ? indice - 1 : indice + 1, campo);
+      }
       return;
     }
     if (evento.key === "ArrowUp" || evento.key === "ArrowDown") {
       evento.preventDefault();
-      onConfirmarEdicao();
-      irPara(evento.key === "ArrowUp" ? indice - 1 : indice + 1, campo);
+      if (onConfirmarEdicao() !== false) {
+        irPara(evento.key === "ArrowUp" ? indice - 1 : indice + 1, campo);
+      }
     }
   }
 
@@ -281,7 +283,8 @@ export default function TabelaOrcamento({
   function celulaDigitavel(linha, indice, campo, comAlca) {
     const celulaId = idDaCelula(linha, campo);
     const emEdicao = editingCell?.id === celulaId;
-    const editavel = podeEditar && indice >= 0;
+    const semBaseParaReais = percentual && campo === "reais" && !linha.base;
+    const editavel = podeEditar && indice >= 0 && !semBaseParaReais;
     const falhou = celulasFalhas?.has(celulaId);
     const formatarValor = campo === "reais" ? formatarMoeda : formatarPercentual;
 
@@ -301,24 +304,6 @@ export default function TabelaOrcamento({
         ]
           .filter(Boolean)
           .join(" ")}
-        tabIndex={editavel && !emEdicao ? 0 : undefined}
-        role={editavel && !emEdicao ? "button" : undefined}
-        aria-invalid={falhou && !emEdicao ? true : undefined}
-        onClick={editavel && !emEdicao ? () => irPara(indice, campo) : undefined}
-        onKeyDown={
-          editavel && !emEdicao
-            ? (evento) => teclasNaCelula(evento, linha, indice, campo)
-            : undefined
-        }
-        title={
-          falhou && !emEdicao
-            ? "Não foi salvo — clique ou tecle Enter para editar e tentar de novo"
-            : editavel
-              ? campo === "reais" && percentual
-                ? "Digite o valor: o percentual é calculado sobre a receita do mês"
-                : "Clique ou tecle Enter para editar"
-              : undefined
-        }
       >
         {/* A alça só existe fora da edição: durante a digitação o canto da
             célula é do input. */}
@@ -355,8 +340,34 @@ export default function TabelaOrcamento({
             // coisa e quem usa leitor de tela não sabia qual tinha foco.
             aria-label={`Editar ${campo === "percentual" ? "percentual" : "planejado"} de ${linha.label}`}
           />
+        ) : editavel ? (
+          <button
+            type="button"
+            className="celula-editavel__controle"
+            aria-label={`Editar ${campo === "percentual" ? "percentual" : "planejado"} de ${linha.label}`}
+            aria-invalid={falhou ? true : undefined}
+            onClick={() => irPara(indice, campo)}
+            onKeyDown={(evento) => teclasNaCelula(evento, linha, indice, campo)}
+            title={
+              falhou
+                ? "Não foi salvo — clique ou tecle Enter para editar e tentar de novo"
+                : campo === "reais" && percentual
+                  ? "Digite o valor: o percentual é calculado sobre a receita do mês"
+                  : "Clique ou tecle Enter para editar"
+            }
+          >
+            {formatarValor(valorDoCampo(linha, campo))}
+          </button>
         ) : (
-          formatarValor(valorDoCampo(linha, campo))
+          <span
+            title={
+              semBaseParaReais
+                ? "Lance a receita planejada deste mês antes de editar o valor em reais"
+                : undefined
+            }
+          >
+            {formatarValor(valorDoCampo(linha, campo))}
+          </span>
         )}
       </td>
     );

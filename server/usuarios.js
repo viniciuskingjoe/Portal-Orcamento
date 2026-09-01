@@ -1,5 +1,6 @@
 import { query, transaction } from "./sqlserver.js";
 import { normalizarLogin } from "./ldap.js";
+import { validarAcessos } from "./validacao.js";
 
 // ============================================================================
 // ADMINISTRAÇÃO DE USUÁRIOS
@@ -210,13 +211,14 @@ async function permissaoAtual(login) {
 // Lote em transação: marcar cinco centros e gravar três é pior que não gravar
 // nada — a pessoa sai achando que concedeu os cinco.
 export async function concederAcessos(login, lista, quem) {
+  const acessos = validarAcessos(lista);
   await transaction(async ({ query: q }) => {
-    for (const acesso of lista ?? []) {
+    for (const acesso of acessos) {
       await gravarConcessao(q, login, acesso, quem);
     }
   });
 
-  await anotarPermissao(login, quem, `concedeu [${resumirParaAuditoria(lista)}]`);
+  await anotarPermissao(login, quem, `concedeu [${resumirParaAuditoria(acessos)}]`);
 }
 
 export async function concederAcesso(login, acesso, quem) {
@@ -232,12 +234,13 @@ export async function concederAcesso(login, acesso, quem) {
 // Numa transação só: entre apagar e reinserir, a pessoa ficaria sem acesso
 // nenhum, e uma falha no meio a deixaria assim.
 export async function definirAcessos(login, lista, quem) {
+  const acessos = validarAcessos(lista);
   // Lido ANTES de apagar: é a única chance de registrar o que a pessoa tinha.
   const antes = await permissaoAtual(login);
 
   await transaction(async ({ query: q }) => {
     await q("DELETE FROM dbo.KING_PORTAL_ORC_ACESSO WHERE LOGIN = @login", { login });
-    for (const acesso of lista ?? []) {
+    for (const acesso of acessos) {
       await gravarConcessao(q, login, acesso, quem);
     }
   });
@@ -245,12 +248,12 @@ export async function definirAcessos(login, lista, quem) {
   await anotarPermissao(
     login,
     quem,
-    `de [${resumirParaAuditoria(antes)}] para [${resumirParaAuditoria(lista)}]`
+    `de [${resumirParaAuditoria(antes)}] para [${resumirParaAuditoria(acessos)}]`
   );
 }
 
 function gravarConcessao(executar, login, { modulo, filial, centro, podeEditar }, quem) {
-  const vazio = (valor) => (valor === "" || valor === undefined ? null : valor);
+  const vazio = (valor) => (valor === "" ? null : valor);
 
   return executar(
     `IF NOT EXISTS (

@@ -23,7 +23,12 @@ import TelaTrocarSenha from "./telas/TelaTrocarSenha.jsx";
 import TelaUsuarios from "./telas/TelaUsuarios.jsx";
 
 import { EMPRESA, MESES } from "./dados/seeds.js";
-import { comFuncionarios, ehModulo, modulo as definicaoDoModulo } from "./dados/modulos.js";
+import {
+  comFuncionarios,
+  ehModulo,
+  MODULO_BASE_DO_PERCENTUAL,
+  modulo as definicaoDoModulo,
+} from "./dados/modulos.js";
 import {
   baseDoPercentual,
   chaveFuncionario,
@@ -78,6 +83,8 @@ const FILTROS_PADRAO = {
   receita: TODAS_AS_CONTAS,
 };
 const TELAS_ERP = new Set(["filiais", "centros"]);
+const INTERVALO_ATUALIZACAO = 5 * 60_000;
+const IDADE_MINIMA_PARA_ATUALIZAR = 60_000;
 
 // O que a sincronização fez, em português.
 //
@@ -226,6 +233,7 @@ function PlanejamentoOrcamentario({ sessao, onSair, trocarSenha }) {
   // Guardas da atualização de fundo — ver o efeito mais abaixo.
   const gravacoesEmVoo = useRef(0);
   const editandoAgora = useRef(false);
+  const ultimaAtualizacao = useRef(0);
   // `editingCell` só cobre a célula de reais (Planejado). Nº de funcionários e
   // o editor de fórmula têm edição local dentro de TelaOrcamento/TabelaOrcamento
   // — sem isto a atualização de fundo não sabia que havia algo em aberto ali e
@@ -321,6 +329,7 @@ function PlanejamentoOrcamentario({ sessao, onSair, trocarSenha }) {
         setConfiguracao(dados.configuracao);
         setVisoes(dados.visoes);
         setPlanos(dados.planos);
+        ultimaAtualizacao.current = Date.now();
         // Banco vazio e algo no navegador: é a migração pendente.
         if (!dados.visoes.length && !dados.planos.length) setLegado(lerEstadoLegado());
       })
@@ -339,7 +348,8 @@ function PlanejamentoOrcamentario({ sessao, onSair, trocarSenha }) {
   // acabou de fazer — e, pior, gravava por cima achando que estava atualizado.
   //
   // Recarrega quando a aba volta ao foco, que é o caso comum (a pessoa foi ver
-  // outra coisa e voltou), e a cada minuto enquanto está visível.
+  // outra coisa e voltou), e mantém uma rede de segurança a cada cinco minutos.
+  // Eventos de foco/visibilidade que chegam juntos são deduplicados.
   //
   // NUNCA durante uma edição ou com gravação em voo: a tela é otimista, e uma
   // leitura que chegue entre o "aplica local" e o "gravou" traz o valor antigo
@@ -355,6 +365,7 @@ function PlanejamentoOrcamentario({ sessao, onSair, trocarSenha }) {
     async function atualizar() {
       if (!vivo || document.hidden) return;
       if (editandoAgora.current || edicaoAuxiliarEmAndamento.current || gravacoesEmVoo.current > 0) return;
+      if (Date.now() - ultimaAtualizacao.current < IDADE_MINIMA_PARA_ATUALIZAR) return;
 
       try {
         const [dados, lista] = await Promise.all([carregarEstado(), repo.grupos()]);
@@ -363,6 +374,11 @@ function PlanejamentoOrcamentario({ sessao, onSair, trocarSenha }) {
         setVisoes(dados.visoes);
         setPlanos(dados.planos);
         mesclarGrupos(lista);
+        // Estado do portal e realizado formam a mesma fotografia da tela. Sem
+        // invalidar este cache, voltar à aba atualizava o plano mas mantinha o
+        // realizado antigo até recarregar a página inteira.
+        realizado.recarregar();
+        ultimaAtualizacao.current = Date.now();
       } catch {
         // Silêncio de propósito: isto é atualização de fundo, e uma faixa
         // vermelha por causa de uma falha de rede que ninguém pediu assusta sem
@@ -376,7 +392,7 @@ function PlanejamentoOrcamentario({ sessao, onSair, trocarSenha }) {
 
     document.addEventListener("visibilitychange", aoMudarVisibilidade);
     window.addEventListener("focus", atualizar);
-    const relogio = setInterval(atualizar, 60_000);
+    const relogio = setInterval(atualizar, INTERVALO_ATUALIZACAO);
 
     return () => {
       vivo = false;
@@ -384,7 +400,7 @@ function PlanejamentoOrcamentario({ sessao, onSair, trocarSenha }) {
       window.removeEventListener("focus", atualizar);
       clearInterval(relogio);
     };
-  }, []);
+  }, [realizado.recarregar]);
 
   // A tela é otimista: aplica a mudança e grava em seguida. Quem digita doze
   // meses seguidos não pode esperar ida e volta a cada tecla — mas se a gravação
@@ -454,12 +470,21 @@ function PlanejamentoOrcamentario({ sessao, onSair, trocarSenha }) {
     if (!visaoDoPlano || !moduloDaTela?.percentual) return [];
     const codigos = new Set();
     filiaisDoFiltro.forEach((filial) => {
-      receitasDaBase(visaoDoPlano, filial.id).forEach((codigo) => codigos.add(codigo));
+      const daFilial =
+        filtros.centro === SEM_CENTRO
+          ? receitasDaBase(visaoDoPlano, filial.id)
+          : contasEfetivasDoModulo(
+              visaoDoPlano,
+              MODULO_BASE_DO_PERCENTUAL,
+              filial.id,
+              filtros.centro
+            );
+      daFilial.forEach((codigo) => codigos.add(codigo));
     });
     return [...codigos]
       .filter((codigo) => buscarConta(contas.catalogo, codigo)?.sintetica === false)
       .sort();
-  }, [visaoDoPlano, moduloDaTela, filiaisDoFiltro, contas.catalogo]);
+  }, [visaoDoPlano, moduloDaTela, filiaisDoFiltro, filtros.centro, contas.catalogo]);
 
   // Planejado do ano de cada conta de receita, para a lista da esquerda mostrar
   // sobre quanto o percentual incide sem precisar sair da tela.
@@ -641,9 +666,14 @@ function PlanejamentoOrcamentario({ sessao, onSair, trocarSenha }) {
     }
 
     const plano = criarPlano(id, novoPlano.nome.trim(), ano, novoPlano.visaoId);
-    setPlanos((atuais) => [...atuais, plano]);
-    gravar(repo.plano.salvar(plano));
-    limpar();
+    try {
+      await repo.plano.salvar(plano);
+      const dados = await carregarEstado();
+      setPlanos(dados.planos);
+      limpar();
+    } catch (erro) {
+      setErroPlano(`Não foi possível criar: ${erro.message}`);
+    }
     return undefined;
   }
 
@@ -1088,21 +1118,60 @@ function PlanejamentoOrcamentario({ sessao, onSair, trocarSenha }) {
   // `null` apaga a célula e por isso é gravado como está — trocar por 0 diria
   // "este centro não tem ninguém", que é outra afirmação.
   function gravarFuncionarios(celulas) {
-    const alteracoes = Object.fromEntries(
+    const alteracoes = new Map(
       celulas.map((celula) => [
         chaveFuncionario(celula.filial, celula.centro, celula.mes),
         celula.quantidade,
       ])
     );
+    const anteriores = new Map(
+      [...alteracoes.keys()].map((chave) => [
+        chave,
+        {
+          existe: Object.hasOwn(planoAtivo?.funcionarios ?? {}, chave),
+          valor: planoAtivo?.funcionarios?.[chave],
+        },
+      ])
+    );
 
     setPlanos((atuais) =>
       atuais.map((plano) =>
-        plano.id === planoAtivoId
-          ? { ...plano, funcionarios: { ...plano.funcionarios, ...alteracoes } }
-          : plano
+        plano.id !== planoAtivoId
+          ? plano
+          : {
+              ...plano,
+              funcionarios: (() => {
+                const proximos = { ...plano.funcionarios };
+                alteracoes.forEach((valor, chave) => {
+                  if (valor == null) delete proximos[chave];
+                  else proximos[chave] = valor;
+                });
+                return proximos;
+              })(),
+            }
       )
     );
-    gravar(repo.plano.funcionarios(planoAtivoId, celulas));
+    gravar(repo.plano.funcionarios(planoAtivoId, celulas), {
+      aoFalhar: () => {
+        setPlanos((atuais) =>
+          atuais.map((plano) => {
+            if (plano.id !== planoAtivoId) return plano;
+            const restaurados = { ...plano.funcionarios };
+            alteracoes.forEach((valorEnviado, chave) => {
+              const aindaEhEstaTentativa =
+                valorEnviado == null
+                  ? !Object.hasOwn(restaurados, chave)
+                  : restaurados[chave] === valorEnviado;
+              if (!aindaEhEstaTentativa) return;
+              const anterior = anteriores.get(chave);
+              if (anterior?.existe) restaurados[chave] = anterior.valor;
+              else delete restaurados[chave];
+            });
+            return { ...plano, funcionarios: restaurados };
+          })
+        );
+      },
+    });
   }
 
   // Receita planejada de cada mês, para converter valor digitado em reais no
@@ -1145,17 +1214,25 @@ function PlanejamentoOrcamentario({ sessao, onSair, trocarSenha }) {
       // conversão é por mês — replicar um valor em reais sobre bases diferentes
       // dá um percentual diferente em cada mês, que é o que se espera.
       const alteracoes = {};
-      meses.forEach((mes) => {
-        alteracoes[chaveDoFiltro(mes)] = valorParaGravar({
+      for (const mes of meses) {
+        const valor = valorParaGravar({
           digitado,
           emReais: editingCell.emReais,
           percentual: moduloDaTela.percentual,
           base: basePorMes.get(mes),
         });
-      });
+        if (valor == null) {
+          setAvisoPersistencia(
+            "Não é possível lançar em reais neste mês porque a receita planejada usada como base está zerada. Lance a receita primeiro ou edite o percentual."
+          );
+          return false;
+        }
+        alteracoes[chaveDoFiltro(mes)] = valor;
+      }
       if (replicar) ofertarDesfazer(alteracoes, meses.flatMap(celulasDoMes));
       gravarPlanejado(alteracoes, meses.flatMap(celulasDoMes));
       setEditingCell(null);
+      return true;
     },
 
     // Ctrl+D: copia o mês de cima, como no Excel.
@@ -1232,6 +1309,7 @@ function PlanejamentoOrcamentario({ sessao, onSair, trocarSenha }) {
           visoes={visoes}
           planos={planos}
           nomeContabil={nomeContabil}
+          podeEditar={ehAdmin(sessao)}
           onAbrir={abrirVisao}
           onNova={() => abrirModalVisao()}
           onExcluir={pedirExclusao("visao")}
@@ -1384,6 +1462,7 @@ function PlanejamentoOrcamentario({ sessao, onSair, trocarSenha }) {
         <TelaGrupo
           grupo={grupoAberto}
           centros={centrosDoErpVisiveis}
+          somenteLeitura={!ehAdmin(sessao)}
           carregando={erp.carregando}
           erro={erp.erro}
           onRecarregar={erp.recarregar}
@@ -1426,6 +1505,7 @@ function PlanejamentoOrcamentario({ sessao, onSair, trocarSenha }) {
           planos={planos}
           visoes={visoes}
           podePublicar={ehAdmin(sessao)}
+          podeGerenciar={ehAdmin(sessao)}
           mostrarInativos={mostrarInativos}
           onAbrir={abrirPlano}
           onNovo={() => setDrawerAberto(true)}
@@ -1454,17 +1534,21 @@ function PlanejamentoOrcamentario({ sessao, onSair, trocarSenha }) {
           carregandoRealizado={realizado.carregando || contas.carregando}
           escopo={escopo}
           podeSincronizar={ehAdmin(sessao)}
+          planoInativo={planoAtivo.situacao === "inativo"}
           sincronizando={publicando === planoAtivo.id}
           onSincronizar={() => publicarNoLinx(planoAtivo.id)}
-          podeLancar={podeLancar(sessao, {
-            modulo: moduloDaTela.id,
-            filial: filtros.filial,
-            centro: filtros.centro,
-            usaCentro: usaCentroDeCusto(visaoDoPlano, moduloDaTela.id),
-          })}
+          podeLancar={
+            planoAtivo.situacao !== "inativo" &&
+            podeLancar(sessao, {
+              modulo: moduloDaTela.id,
+              filial: filtros.filial,
+              centro: filtros.centro,
+              usaCentro: usaCentroDeCusto(visaoDoPlano, moduloDaTela.id),
+            })
+          }
           onGravarFuncionarios={comFuncionarios(moduloDaTela.id) ? gravarFuncionarios : undefined}
           onDefinirFormula={
-            comFuncionarios(moduloDaTela.id)
+            comFuncionarios(moduloDaTela.id) && ehAdmin(sessao)
               ? (codigo, expressao) => {
                   atualizarVisao(visaoDoPlano.id, (visao) =>
                     definirFormulaDaConta(visao, moduloDaTela.id, codigo, expressao)
@@ -1615,7 +1699,7 @@ function PlanejamentoOrcamentario({ sessao, onSair, trocarSenha }) {
         {renderizarTela()}
       </div>
 
-      {drawerAberto ? (
+      {drawerAberto && ehAdmin(sessao) ? (
         <DrawerNovoPlano
           valores={novoPlano}
           visoes={visoes}

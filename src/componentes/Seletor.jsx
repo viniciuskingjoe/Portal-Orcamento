@@ -108,7 +108,9 @@ export default function Seletor({
   }, [aberto]);
 
   useEffect(() => {
-    if (aberto && comBusca) campo.current?.focus();
+    if (!aberto) return;
+    if (comBusca) campo.current?.focus();
+    else lista.current?.focus();
   }, [aberto, comBusca]);
 
   // Mantém o item destacado visível: navegar por teclado até o fim de uma lista
@@ -123,14 +125,19 @@ export default function Seletor({
   function abrir() {
     if (desabilitado) return;
     setTermo("");
-    setDestacado(Math.max(0, filtradas.findIndex(estaMarcada)));
+    setDestacado(Math.max(0, opcoes.findIndex(estaMarcada)));
     setAberto(true);
+  }
+
+  function fechar() {
+    setAberto(false);
+    queueMicrotask(() => botao.current?.focus());
   }
 
   function escolher(opcao) {
     if (!multiplo) {
       aoEscolher(opcao.valor);
-      setAberto(false);
+      fechar();
       setTermo("");
       return;
     }
@@ -151,7 +158,7 @@ export default function Seletor({
       if (!aberto) return;
       evento.preventDefault();
       evento.stopPropagation();
-      setAberto(false);
+      fechar();
       return;
     }
     if (evento.key === "Enter") {
@@ -184,10 +191,7 @@ export default function Seletor({
         aria-haspopup="listbox"
         aria-expanded={aberto}
         aria-controls={aberto ? `${idBase}-lista` : undefined}
-        aria-activedescendant={
-          aberto && filtradas.length ? `${idBase}-${destacado}` : undefined
-        }
-        onClick={() => (aberto ? setAberto(false) : abrir())}
+        onClick={() => (aberto ? fechar() : abrir())}
         onKeyDown={teclado}
       >
         <span className={escolhida || marcados?.size ? "" : "seletor__vazio"}>{rotuloDoCampo()}</span>
@@ -243,36 +247,39 @@ export default function Seletor({
                 role="listbox"
                 id={`${idBase}-lista`}
                 aria-multiselectable={multiplo}
+                aria-label="Opções"
+                aria-activedescendant={filtradas.length ? `${idBase}-${destacado}` : undefined}
+                tabIndex={comBusca ? -1 : 0}
+                onKeyDown={teclado}
                 ref={lista}
               >
                 {filtradas.map((opcao, indice) => (
-                  <li key={opcao.valor}>
-                    <button
-                      type="button"
-                      id={`${idBase}-${indice}`}
-                      data-indice={indice}
-                      role="option"
-                      aria-selected={estaMarcada(opcao)}
-                      className={[
-                        "seletor__opcao",
-                        multiplo ? "seletor__opcao--multipla" : "",
-                        estaMarcada(opcao) ? "is-escolhida" : "",
-                        indice === destacado ? "is-destacada" : "",
-                      ]
-                        .filter(Boolean)
-                        .join(" ")}
-                      onMouseEnter={() => setDestacado(indice)}
-                      onClick={() => escolher(opcao)}
-                    >
-                      {multiplo ? (
-                        <span className="checkbox-visual" aria-hidden="true">
-                          {estaMarcada(opcao) ? <Icone nome="check" tamanho={13} /> : null}
-                        </span>
-                      ) : null}
-                      {opcao.detalhe ? <code>{opcao.detalhe}</code> : null}
-                      <span>{opcao.rotulo}</span>
-                      {!multiplo && estaMarcada(opcao) ? <Icone nome="check" tamanho={14} /> : null}
-                    </button>
+                  <li
+                    key={opcao.valor}
+                    id={`${idBase}-${indice}`}
+                    data-indice={indice}
+                    role="option"
+                    aria-selected={estaMarcada(opcao)}
+                    className={[
+                      "seletor__opcao",
+                      multiplo ? "seletor__opcao--multipla" : "",
+                      estaMarcada(opcao) ? "is-escolhida" : "",
+                      indice === destacado ? "is-destacada" : "",
+                    ]
+                      .filter(Boolean)
+                      .join(" ")}
+                    onMouseEnter={() => setDestacado(indice)}
+                    onMouseDown={(evento) => evento.preventDefault()}
+                    onClick={() => escolher(opcao)}
+                  >
+                    {multiplo ? (
+                      <span className="checkbox-visual" aria-hidden="true">
+                        {estaMarcada(opcao) ? <Icone nome="check" tamanho={13} /> : null}
+                      </span>
+                    ) : null}
+                    {opcao.detalhe ? <code>{opcao.detalhe}</code> : null}
+                    <span>{opcao.rotulo}</span>
+                    {!multiplo && estaMarcada(opcao) ? <Icone nome="check" tamanho={14} /> : null}
                   </li>
                 ))}
 

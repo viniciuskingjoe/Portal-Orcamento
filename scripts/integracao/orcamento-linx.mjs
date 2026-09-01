@@ -23,8 +23,7 @@ if (/^KINGEJOE$/i.test(banco)) {
 }
 
 const { publicar } = await import("../../server/orcamentoLinx.js");
-const { criarPlano, chavePlanejado } = await import("../../src/dados/plano.js");
-const { criarVisao, definirContasDoCentro } = await import("../../src/dados/visao.js");
+const { gravarPlanejado, salvarModulo } = await import("../../server/repositorio.js");
 
 const PLANO = "__t-linx-plano";
 const VISAO = "__t-linx-visao";
@@ -76,18 +75,23 @@ try {
     { p: PLANO, a: ANO, v: VISAO }
   );
 
-  const visao = definirContasDoCentro(criarVisao(VISAO, "Teste Linx", "25"), "receita-vendas", FILIAL, CENTRO, [CONTA]);
-  const plano = {
-    ...criarPlano(PLANO, "Teste Linx", ANO, VISAO),
-    planejado: {
-      [chavePlanejado("receita-vendas", FILIAL, CENTRO, CONTA, 1)]: 1000.5,
-      [chavePlanejado("receita-vendas", FILIAL, CENTRO, CONTA, 7)]: 2000,
-    },
-  };
-  const estado = { planos: [plano], visoes: [visao] };
+  await salvarModulo(
+    VISAO,
+    "receita-vendas",
+    { filial: FILIAL, centro: CENTRO, usoDoCentro: true, contas: [CONTA] },
+    LOGIN
+  );
+  await gravarPlanejado(
+    PLANO,
+    [
+      { modulo: "receita-vendas", filial: FILIAL, centro: CENTRO, conta: CONTA, receita: "", mes: 1, valor: 1000.5 },
+      { modulo: "receita-vendas", filial: FILIAL, centro: CENTRO, conta: CONTA, receita: "", mes: 7, valor: 2000 },
+    ],
+    LOGIN
+  );
 
   // --- primeira publicação -------------------------------------------------
-  const primeira = await publicar(PLANO, estado, LOGIN);
+  const primeira = await publicar(PLANO, LOGIN);
   ok(primeira.linhas === 2, `publicou 2 linhas (veio ${primeira.linhas})`);
   ok(Number.isInteger(primeira.idOrcamento), "criou o orçamento no ERP");
 
@@ -114,8 +118,12 @@ try {
   ok(linhas[0].USUARIO.trim() === LOGIN, "guarda quem publicou");
 
   // --- republicar substitui, não duplica ------------------------------------
-  plano.planejado[chavePlanejado("receita-vendas", FILIAL, CENTRO, CONTA, 1)] = 4321;
-  const segunda = await publicar(PLANO, estado, LOGIN);
+  await gravarPlanejado(
+    PLANO,
+    [{ modulo: "receita-vendas", filial: FILIAL, centro: CENTRO, conta: CONTA, receita: "", mes: 1, valor: 4321 }],
+    LOGIN
+  );
+  const segunda = await publicar(PLANO, LOGIN);
   ok(segunda.idOrcamento === primeira.idOrcamento, "republicar reusa o mesmo orçamento");
 
   const depois = await query(
@@ -134,7 +142,7 @@ try {
 
   let recusou = false;
   try {
-    await publicar(PLANO, estado, LOGIN);
+    await publicar(PLANO, LOGIN);
   } catch (erro) {
     recusou = erro.status === 409 && /ATIVO/.test(erro.message);
   }

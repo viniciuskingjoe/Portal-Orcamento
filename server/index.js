@@ -24,13 +24,10 @@ import {
 } from "./identidade.js";
 import {
   carregarEstado,
-  definirContas,
-  definirFormula,
-  definirSinal,
-  definirUsoDoCentro,
   bancoVazio,
   definirSituacaoDoPlano,
   duplicarPlano,
+  listarVinculosDoRealizado,
   listarGrupos,
   salvarGrupo,
   excluirGrupo,
@@ -43,12 +40,13 @@ import {
   reordenarLinhasDre,
   salvarConfiguracao,
   salvarLinhaDre,
+  salvarModulo,
   salvarPlano,
   salvarVisao,
+  visaoContabilDaVisao,
 } from "./repositorio.js";
 import {
   alterarUsuario,
-  concederAcesso,
   concederAcessos,
   definirAcessos,
   darAcesso,
@@ -59,7 +57,24 @@ import {
 } from "./usuarios.js";
 import { publicar } from "./orcamentoLinx.js";
 import { buscarUsuarios } from "./ldap.js";
-import { podeEditar } from "../src/dados/permissoes.js";
+import {
+  ehAdmin,
+  podeEditar,
+  podeVer,
+} from "../src/dados/permissoes.js";
+import { filtrarGruposPorSessao, filtrarRealizadoPorSessao } from "./escopo.js";
+import { trustProxyDaEnv } from "./proxy.js";
+import {
+  validarAcessos,
+  validarAlteracaoModulo,
+  validarAlteracaoUsuario,
+  validarFiliaisAtivas,
+  validarGrupo,
+  validarLinhaDre,
+  validarNovoUsuario,
+  validarOrdemDre,
+  validarVisao,
+} from "./validacao.js";
 
 // Quem não pode editar nada não passa nas rotas de escrita. A checagem fina,
 // célula a célula, é feita dentro da rota do planejado.
@@ -68,6 +83,17 @@ function exigirEdicao(req, _res, next) {
   const erro = new Error("Você não tem permissão para alterar o orçamento.");
   erro.status = 403;
   next(erro);
+}
+
+function vinculosVisiveis(sessao, vinculos) {
+  if (ehAdmin(sessao)) return vinculos ?? [];
+  return (vinculos ?? []).filter((item) =>
+    podeVer(sessao, {
+      modulo: item.modulo,
+      filial: item.filial,
+      centro: item.centro ?? "",
+    })
+  );
 }
 
 // ============================================================================
@@ -82,6 +108,23 @@ function exigirEdicao(req, _res, next) {
 const app = express();
 app.disable("x-powered-by");
 
+app.use((_req, res, next) => {
+  res.set({
+    "Content-Security-Policy":
+      "default-src 'self'; base-uri 'self'; connect-src 'self'; font-src 'self'; " +
+      "frame-ancestors 'none'; form-action 'self'; img-src 'self' data:; " +
+      "object-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'",
+    "Cross-Origin-Opener-Policy": "same-origin",
+    "Referrer-Policy": "no-referrer",
+    "X-Content-Type-Options": "nosniff",
+    "X-Frame-Options": "DENY",
+  });
+  if (process.env.NODE_ENV === "production") {
+    res.set("Strict-Transport-Security", "max-age=31536000; includeSubDomains");
+  }
+  next();
+});
+
 // Em produção quem fala com o Express é o `cloudflared`, no mesmo host, e o IP
 // real do visitante vem no `X-Forwarded-For`. Sem isto toda requisição chega
 // como 127.0.0.1 e o limite por origem passa a ver a empresa inteira como uma
@@ -90,20 +133,21 @@ app.disable("x-powered-by");
 // `loopback` e não `1`: assim o cabeçalho só é aceito quando quem conecta é o
 // próprio host. Confiando em qualquer peer, bastaria alcançar a porta na rede e
 // mandar um `X-Forwarded-For` inventado para escapar do limite a cada tentativa.
-app.set("trust proxy", process.env.TRUST_PROXY ?? "loopback");
+app.set("trust proxy", trustProxyDaEnv(process.env.TRUST_PROXY));
 app.use(express.json({ limit: "1mb" }));
 
 // Envolve handler async para que rejeição vire resposta de erro, não crash.
 const rota = (handler) => (req, res, next) => Promise.resolve(handler(req, res)).catch(next);
 
-// Resolve a sessão antes de tudo. Só popula `req.sessao`; quem exige é a rota.
-app.use(comSessao());
+// Só a API usa identidade. Assets com hash não precisam consultar nem renovar
+// sessão no SQL Server a cada carregamento.
+app.use("/api", comSessao());
 
 app.get(
   "/api/health",
   rota(async (_req, res) => {
-    const linha = await queryOne("SELECT DB_NAME() AS banco, SYSUTCDATETIME() AS agora");
-    res.json({ ok: true, banco: linha?.banco ?? null, agora: linha?.agora ?? null });
+    await queryOne("SELECT 1 AS ok");
+    res.json({ ok: true });
   })
 );
 
@@ -168,22 +212,72 @@ app.use("/api", exigirSessao);
 
 app.get(
   "/api/visoes-contabeis",
-  rota(async (_req, res) => res.json(await listarVisoesContabeis()))
+  rota(async (req, res) => {
+    const visoes = await listarVisoesContabeis();
+    if (ehAdmin(req.sessao)) return res.json(visoes);
+
+    const permitidas = new Set(
+      vinculosVisiveis(req.sessao, await listarVinculosDoRealizado()).map(
+        (item) => item.visaoContabil
+      )
+    );
+    res.json(visoes.filter((visao) => permitidas.has(visao.id)));
+  })
 );
 
 app.get(
   "/api/contas",
-  rota(async (req, res) => res.json(await listarContas({ visao: req.query.visao })))
+  rota(async (req, res) => {
+    const visao = String(req.query.visao ?? process.env.DB_VISAO_CONTABIL ?? "").trim();
+    const contas = await listarContas({ visao });
+    if (ehAdmin(req.sessao)) return res.json(contas);
+
+    const vinculos = vinculosVisiveis(req.sessao, await listarVinculosDoRealizado(visao));
+    const permitidas = new Set(vinculos.map((item) => item.classificacao));
+    // Pais mantêm a hierarquia legível quando o catálogo é mostrado em árvore.
+    for (const codigo of [...permitidas]) {
+      const partes = codigo.split(".");
+      while (partes.length > 1) {
+        partes.pop();
+        permitidas.add(partes.join("."));
+      }
+    }
+    res.json(contas.filter((conta) => permitidas.has(conta.codigo)));
+  })
 );
 
 app.get(
   "/api/filiais",
-  rota(async (_req, res) => res.json(await listarFiliais()))
+  rota(async (req, res) => {
+    const [filiais, vinculos] = await Promise.all([
+      listarFiliais(),
+      ehAdmin(req.sessao) ? Promise.resolve([]) : listarVinculosDoRealizado(),
+    ]);
+    if (ehAdmin(req.sessao)) return res.json(filiais);
+
+    const permitidas = new Set(
+      vinculosVisiveis(req.sessao, vinculos).map((item) => item.filial)
+    );
+    res.json(filiais.filter((filial) => permitidas.has(filial.id)));
+  })
 );
 
 app.get(
   "/api/centros-de-custo",
-  rota(async (_req, res) => res.json(await listarCentrosDeCusto()))
+  rota(async (req, res) => {
+    const [centros, vinculos] = await Promise.all([
+      listarCentrosDeCusto(),
+      ehAdmin(req.sessao) ? Promise.resolve([]) : listarVinculosDoRealizado(),
+    ]);
+    if (ehAdmin(req.sessao)) return res.json(centros);
+
+    const permitidos = new Set(
+      vinculosVisiveis(req.sessao, vinculos)
+        .map((item) => item.centro)
+        .filter(Boolean)
+    );
+    res.json(centros.filter((centro) => permitidos.has(centro.id)));
+  })
 );
 
 app.get(
@@ -194,7 +288,20 @@ app.get(
       return res.status(400).json({ erro: "Parâmetro `ano` inválido." });
     }
     const filialId = req.query.filial ? String(req.query.filial) : null;
-    res.json(await listarRealizado({ ano, filialId, visao: req.query.visao }));
+    const visao = String(req.query.visao ?? process.env.DB_VISAO_CONTABIL ?? "").trim();
+    const [linhas, vinculos] = await Promise.all([
+      listarRealizado({ ano, filialId, visao }),
+      listarVinculosDoRealizado(visao),
+    ]);
+    if (
+      filialId &&
+      !vinculosVisiveis(req.sessao, vinculos).some((item) => item.filial === filialId)
+    ) {
+      const erro = new Error("Você não tem acesso a esta filial.");
+      erro.status = 403;
+      throw erro;
+    }
+    res.json(filtrarRealizadoPorSessao(linhas, vinculos, req.sessao));
   })
 );
 
@@ -210,7 +317,7 @@ app.get(
 
 app.get(
   "/api/estado",
-  rota(async (_req, res) => res.json(await carregarEstado()))
+  rota(async (req, res) => res.json(await carregarEstado(req.sessao)))
 );
 
 // Diz se o portal ainda não tem nada — é o que decide se vale oferecer a
@@ -230,7 +337,13 @@ app.put(
   "/api/configuracao/:chave",
   exigirAdmin,
   rota(async (req, res) => {
-    await salvarConfiguracao(req.params.chave, req.body?.valor, req.sessao.login);
+    if (req.params.chave !== "filiaisAtivas") {
+      const erro = new Error("Configuração desconhecida.");
+      erro.status = 404;
+      throw erro;
+    }
+    const valor = validarFiliaisAtivas(req.body?.valor, await listarFiliais());
+    await salvarConfiguracao(req.params.chave, valor, req.sessao.login);
     res.json({ ok: true });
   })
 );
@@ -238,14 +351,20 @@ app.put(
 // Grupos de centro de custo — configuração global, como as filiais em uso.
 app.get(
   "/api/grupos",
-  rota(async (_req, res) => res.json(await listarGrupos()))
+  rota(async (req, res) => {
+    res.json(filtrarGruposPorSessao(await listarGrupos(), req.sessao));
+  })
 );
 
 app.put(
   "/api/grupos/:id",
   exigirAdmin,
   rota(async (req, res) => {
-    await salvarGrupo({ id: req.params.id, ...req.body }, req.sessao.login);
+    const grupo = validarGrupo(
+      { id: req.params.id, ...req.body },
+      await listarCentrosDeCusto()
+    );
+    await salvarGrupo(grupo, req.sessao.login);
     res.json({ ok: true });
   })
 );
@@ -263,7 +382,14 @@ app.put(
   "/api/visoes/:id",
   exigirAdmin,
   rota(async (req, res) => {
-    await salvarVisao({ id: req.params.id, ...req.body }, req.sessao.login);
+    const visao = validarVisao({ id: req.params.id, ...req.body });
+    const disponiveis = await listarVisoesContabeis();
+    if (!disponiveis.some((item) => String(item.id) === visao.visaoContabil)) {
+      const erro = new Error("A visão contábil informada não existe no ERP.");
+      erro.status = 409;
+      throw erro;
+    }
+    await salvarVisao(visao, req.sessao.login);
     res.json({ ok: true });
   })
 );
@@ -281,30 +407,18 @@ app.put(
   "/api/visoes/:id/modulos/:modulo",
   exigirAdmin,
   rota(async (req, res) => {
-    const { filial, centro, contas, lotes, usoDoCentro, sinal, formula } = req.body ?? {};
-    // Lote existe para o mapeamento padrão, que aplica as mesmas contas em todas
-    // as filiais de uma vez — sem ele seriam 25 requisições por módulo.
-    for (const lote of lotes ?? []) {
-      await definirContas(req.params.id, req.params.modulo, lote.filial, lote.centro, lote.contas);
-    }
-    if (usoDoCentro !== undefined) {
-      await definirUsoDoCentro(req.params.id, req.params.modulo, filial, centro, usoDoCentro);
-    }
-    if (contas !== undefined) {
-      await definirContas(req.params.id, req.params.modulo, filial, centro, contas);
-    }
-    if (sinal !== undefined) {
-      await definirSinal(req.params.id, req.params.modulo, sinal.conta, sinal.tipo);
-    }
-    if (formula !== undefined) {
-      await definirFormula(
-        req.params.id,
-        req.params.modulo,
-        formula.conta,
-        formula.expressao,
-        req.sessao.login
-      );
-    }
+    const visaoContabil = await visaoContabilDaVisao(req.params.id);
+    const [filiais, centros, contas] = await Promise.all([
+      listarFiliais(),
+      listarCentrosDeCusto(),
+      listarContas({ visao: visaoContabil }),
+    ]);
+    const mudanca = validarAlteracaoModulo(req.params.modulo, req.body ?? {}, {
+      filiais,
+      centros,
+      contas,
+    });
+    await salvarModulo(req.params.id, req.params.modulo, mudanca, req.sessao.login);
     res.json({ ok: true });
   })
 );
@@ -316,7 +430,22 @@ app.put(
   "/api/visoes/:id/dre/linhas/:linhaId",
   exigirAdmin,
   rota(async (req, res) => {
-    await salvarLinhaDre(req.params.id, { id: req.params.linhaId, ...req.body }, req.sessao.login);
+    const [estado, visaoContabil] = await Promise.all([
+      carregarEstado({ admin: true, login: req.sessao.login, acessos: [] }),
+      visaoContabilDaVisao(req.params.id),
+    ]);
+    const visao = estado.visoes.find((item) => item.id === req.params.id);
+    if (!visao) {
+      const erro = new Error("Visão não encontrada.");
+      erro.status = 404;
+      throw erro;
+    }
+    const contas = await listarContas({ visao: visaoContabil });
+    const linha = validarLinhaDre(
+      { id: req.params.linhaId, ...req.body },
+      { contas, linhas: visao.dreLinhas ?? [] }
+    );
+    await salvarLinhaDre(req.params.id, linha, req.sessao.login);
     res.json({ ok: true });
   })
 );
@@ -334,7 +463,7 @@ app.put(
   "/api/visoes/:id/dre/ordem",
   exigirAdmin,
   rota(async (req, res) => {
-    const ordem = Array.isArray(req.body?.ordem) ? req.body.ordem : [];
+    const ordem = validarOrdemDre(req.body?.ordem);
     await reordenarLinhasDre(req.params.id, ordem);
     res.json({ ok: true });
   })
@@ -342,7 +471,7 @@ app.put(
 
 app.put(
   "/api/planos/:id",
-  exigirEdicao,
+  exigirAdmin,
   rota(async (req, res) => {
     await salvarPlano({ id: req.params.id, ...req.body }, req.sessao.login);
     res.json({ ok: true });
@@ -362,7 +491,7 @@ app.delete(
 // a primeira sincronização dela cria um orçamento novo lá.
 app.post(
   "/api/planos/:id/duplicar",
-  exigirEdicao,
+  exigirAdmin,
   rota(async (req, res) => {
     const { novoId, nome, ano } = req.body ?? {};
     res.json(await duplicarPlano({ id: req.params.id, novoId, nome, ano }, req.sessao.login));
@@ -387,11 +516,10 @@ app.post(
   "/api/planos/:id/publicar",
   exigirAdmin,
   rota(async (req, res) => {
-    // Lê o estado do banco, não do corpo da requisição: publicar o que o
-    // navegador mandou deixaria o ERP refletir a tela de alguém em vez do que
-    // está gravado.
-    const estado = await carregarEstado();
-    res.json(await publicar(req.params.id, estado, req.sessao.login));
+    // A publicação lê e bloqueia o estado dentro da própria transação. Receber
+    // valores do navegador ou ler antes do lock permitiria carimbar como atual
+    // um snapshot que outra pessoa acabou de alterar.
+    res.json(await publicar(req.params.id, req.sessao.login));
   })
 );
 
@@ -401,14 +529,14 @@ app.put(
   "/api/planos/:id/planejado",
   exigirEdicao,
   rota(async (req, res) => {
-    const celulas = Array.isArray(req.body?.celulas) ? req.body.celulas : [];
+    const celulas = req.body?.celulas;
 
-    const negada = celulas.find(
+    const negada = (Array.isArray(celulas) ? celulas : []).find(
       (celula) =>
         !podeEditar(req.sessao, {
-          modulo: celula.modulo,
-          filial: celula.filial,
-          centro: celula.centro ?? "",
+          modulo: celula?.modulo,
+          filial: celula?.filial,
+          centro: celula?.centro ?? "",
         })
     );
     if (negada) {
@@ -429,14 +557,14 @@ app.put(
   "/api/planos/:id/funcionarios",
   exigirEdicao,
   rota(async (req, res) => {
-    const celulas = Array.isArray(req.body?.celulas) ? req.body.celulas : [];
+    const celulas = req.body?.celulas;
 
-    const negada = celulas.find(
+    const negada = (Array.isArray(celulas) ? celulas : []).find(
       (celula) =>
         !podeEditar(req.sessao, {
           modulo: "despesas-pessoal",
-          filial: celula.filial,
-          centro: celula.centro ?? "",
+          filial: celula?.filial,
+          centro: celula?.centro ?? "",
         })
     );
     if (negada) {
@@ -474,7 +602,7 @@ app.post(
   "/api/usuarios",
   exigirAdmin,
   rota(async (req, res) => {
-    const { login } = await darAcesso(req.body ?? {}, req.sessao.login);
+    const { login } = await darAcesso(validarNovoUsuario(req.body), req.sessao.login);
     res.json({ ok: true, login });
   })
 );
@@ -495,7 +623,11 @@ app.put(
   "/api/usuarios/:login",
   exigirAdmin,
   rota(async (req, res) => {
-    await alterarUsuario(req.params.login, req.body ?? {}, req.sessao.login);
+    await alterarUsuario(
+      req.params.login,
+      validarAlteracaoUsuario(req.body),
+      req.sessao.login
+    );
     res.json({ ok: true });
   })
 );
@@ -521,7 +653,9 @@ app.post(
   rota(async (req, res) => {
     // Aceita uma concessão ou um lote. O lote existe porque a tela deixa marcar
     // vários centros de uma vez, e meia concessão gravada é pior que nenhuma.
-    const lista = Array.isArray(req.body?.acessos) ? req.body.acessos : [req.body ?? {}];
+    const lista = validarAcessos(
+      Array.isArray(req.body?.acessos) ? req.body.acessos : [req.body]
+    );
     await concederAcessos(req.params.login, lista, req.sessao.login);
     res.json({ ok: true, concedidas: lista.length });
   })
@@ -533,7 +667,12 @@ app.put(
   "/api/usuarios/:login/acessos",
   exigirAdmin,
   rota(async (req, res) => {
-    const lista = Array.isArray(req.body?.acessos) ? req.body.acessos : [];
+    if (!Object.hasOwn(req.body ?? {}, "acessos")) {
+      const erro = new Error("Campo `acessos` é obrigatório; envie [] para revogar todos.");
+      erro.status = 400;
+      throw erro;
+    }
+    const lista = validarAcessos(req.body.acessos);
     await definirAcessos(req.params.login, lista, req.sessao.login);
     res.json({ ok: true, concedidas: lista.length });
   })
@@ -590,7 +729,9 @@ app.use((erro, _req, res, _next) => {
   const status = erro.status ?? 500;
   if (status >= 500) console.error("[api]", erro);
   if (erro.retryApos) res.set("Retry-After", String(erro.retryApos));
-  res.status(status).json({ erro: erro.message ?? "Erro interno." });
+  res.status(status).json({
+    erro: status >= 500 ? "Erro interno. Tente novamente em instantes." : (erro.message ?? "Erro."),
+  });
 });
 
 // `??` não serve aqui: uma chave presente e vazia no .env (`API_PORT=`) chega

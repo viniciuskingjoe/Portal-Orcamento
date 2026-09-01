@@ -17,6 +17,7 @@ npm install
 npm run dev        # sobe a API e o front juntos — é o comando do dia a dia
 npm test           # testes da camada de dados (sem banco, sem rede)
 npm run build      # build de produção em dist/
+npm run schema:check # confere, sem alterar, se o banco tem as migrations 001–013
 
 # separados, se precisar:
 npm run api        # só a API, em http://localhost:3000 (precisa de .env)
@@ -240,11 +241,12 @@ dezembro em vez de cancelar o gesto.
 | Estado | Como entra |
 |---|---|
 | Nunca definiu senha | senha da **rede** (bind no AD) e define a do portal na hora |
-| Já definiu | senha do **portal**; o AD não é mais consultado para essa conta |
+| Já definiu | senha do **portal**; para contas de origem AD, o diretório ainda confirma se ela segue ativa |
 
 Isso resolve o primeiro acesso sem ninguém precisar inventar, entregar ou cobrar
 senha inicial — e sem uma senha padrão conhecida, que ficaria valendo para toda
-conta ainda não usada. A senha da rede é digitada uma única vez na vida.
+conta ainda não usada. A senha da rede é digitada só no primeiro acesso; a
+checagem posterior de situação usa a conta de serviço, sem conhecer essa senha.
 
 O que se guarda é **scrypt com sal por senha** ([server/senha.js](server/senha.js)),
 nunca a senha. Comparação em tempo constante, e o hash carrega versão e
@@ -265,7 +267,7 @@ senha do portal é apagada e a conta volta a entrar pela rede — nada é gerado
 anotado ou dito por telefone. É também o que fazer quando se desconfia que uma
 senha vazou; as sessões abertas caem junto.
 
-**Força**: mínimo 6 caracteres, com alguma variedade (não pode repetir quase
+**Força**: mínimo 12 caracteres, com alguma variedade (não pode repetir quase
 tudo), e barra o óbvio (`senha123`, `portal@2026`), o próprio login e o
 próprio nome. Não exige maiúscula-número-símbolo — isso produz `Senha@123` e
 um papel colado no monitor.
@@ -283,11 +285,12 @@ node --env-file=.env scripts/definir-senha.mjs <login>
 ```
 
 Isso NÃO é o caminho normal — no dia a dia ninguém precisa dele, porque o
-primeiro acesso passa pelo AD. Serve para quando o AD não está disponível e o
-portal ficaria inacessível até o diretório voltar.
+primeiro acesso passa pelo AD. É uma ferramenta de suporte/migração; contas de
+origem AD continuam dependendo da consulta de situação do diretório.
 
-**A sessão** dura 8 horas e renova a cada uso. O cookie é `httpOnly` +
-`SameSite=Lax`; no banco fica o **SHA-256** do id, nunca o valor do cookie, para
+**A sessão** dura 8 horas e renova a cada uso. Contas de origem AD são
+revalidadas a cada renovação (no máximo 15 minutos para um desligamento derrubar
+as sessões). O cookie é `httpOnly` + `SameSite=Lax` + `Secure` em produção; no banco fica o **SHA-256** do id, nunca o valor do cookie, para
 que um dump ou uma consulta de suporte não entreguem sessão viva. Revogar acesso
 apaga as sessões abertas na hora — revogação que só vale depois de expirar não é
 revogação.
@@ -348,7 +351,10 @@ server/
 ├── sqlserver.js             pool mssql, query/queryOne/transaction
 ├── consultas.js             SELECTs do ERP (views confirmadas)
 ├── repositorio.js           leitura e gravação do estado do portal
-├── ldap.js                  bind do primeiro acesso e busca de usuários no AD
+├── validacao.js             schemas e invariantes dos corpos recebidos
+├── escopo.js                recorte de estado/realizado por permissão
+├── proxy.js                 política segura de trust proxy
+├── ldap.js                  primeiro acesso, busca e situação de usuários no AD
 ├── senha.js                 hash scrypt, força e sorteio da primeira senha
 ├── identidade.js            sessão, middleware, quem-pode-o-quê
 ├── limite.js                limite de tentativas de login
@@ -395,7 +401,8 @@ src/
 | Planos e valores planejados | portal, `KING_PORTAL_ORC_PLANO`/`_PLANEJADO` |
 | Usuários e permissões | `KING_IDENTIDADE_*` + `KING_PORTAL_ORC_ACESSO` |
 
-`plano.planejado` tem chave `modulo|filial|ano|mes`. **Célula sem valor digitado é
+`plano.planejado` tem chave `modulo|filial|centro|conta|mes` e, nos módulos
+percentuais, acrescenta `|receita`. **Célula sem valor digitado é
 zero**, não um número gerado — não existe planejamento que ninguém fez.
 
 Cada módulo só aceita contas do seu `LX_GRUPO_CONTABIL`:
@@ -462,6 +469,12 @@ a aplicação nunca executa DDL:
 | `001-identidade.sql` | `KING_IDENTIDADE_*`, compartilhado entre os portais AKR |
 | `002-orcamento-acesso.sql` | `KING_PORTAL_ORC_ACESSO`, permissão deste portal |
 | `003-orcamento-dados.sql` | visões, planos e planejado |
+| `004-orcamento-linx.sql` | vínculo e auditoria de publicação no orçamento do Linx |
+| `005-plano-situacao.sql` | ativação/desativação preservando histórico |
+| `006-grupo-centro-custo.sql` | grupos usados como filtro do DRE |
+| `007`–`009` | quantidade de funcionários no ERP e no portal |
+| `010-formula-conta.sql` | contas calculadas por fórmula |
+| `011`–`013` | DRE configurável, unidade e sinal por conta da linha |
 
 São idempotentes (`IF OBJECT_ID … IS NULL`): rodar de novo não apaga nada.
 
@@ -473,7 +486,7 @@ Verificar:
 
 ```bash
 npm run api
-curl http://localhost:3000/api/health            # { ok: true, banco: "KINGEJOE" }
+curl http://localhost:3000/api/health            # { ok: true }
 ```
 
 `/api/health` é a única rota aberta. Todas as outras exigem sessão — os dados do
@@ -604,7 +617,7 @@ Tailwind.
 
 ## Testes
 
-`npm test` roda a camada de dados com o runner nativo do Node (`node --test`),
+`npm test` roda a camada de dados e as regras puras do servidor com o runner nativo do Node (`node --test`),
 sem dependência extra. A cobertura foca nos pontos onde um erro vira número
 errado na tela: leitura de número pt-BR, corte temporal do realizado, módulo sem
 contas, isolamento da edição por módulo/filial/ano, denominador das médias,

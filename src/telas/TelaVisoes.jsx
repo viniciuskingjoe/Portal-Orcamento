@@ -4,7 +4,15 @@ import EstadoVazio from "../componentes/EstadoVazio.jsx";
 import Icone from "../componentes/Icone.jsx";
 import { resumoDaVisao } from "../dados/visao.js";
 
-export default function TelaVisoes({ visoes, planos, nomeContabil, onAbrir, onNova, onExcluir }) {
+export default function TelaVisoes({
+  visoes,
+  planos,
+  nomeContabil,
+  podeEditar = false,
+  onAbrir,
+  onNova,
+  onExcluir,
+}) {
   const planosQueUsam = (visaoId) => planos.filter((plano) => plano.visaoId === visaoId).length;
 
   return (
@@ -13,10 +21,12 @@ export default function TelaVisoes({ visoes, planos, nomeContabil, onAbrir, onNo
         titulo="Visões"
         subtitulo="Uma visão define quais contas compõem cada módulo do orçamento. Os planos escolhem uma visão na criação."
         acao={
-          <Botao onClick={onNova}>
-            <Icone nome="plus" tamanho={18} />
-            Criar visão
-          </Botao>
+          podeEditar ? (
+            <Botao onClick={onNova}>
+              <Icone nome="plus" tamanho={18} />
+              Criar visão
+            </Botao>
+          ) : null
         }
       />
 
@@ -60,7 +70,7 @@ export default function TelaVisoes({ visoes, planos, nomeContabil, onAbrir, onNo
                 {/* Mesma faixa do cartão de plano: rótulo, alvo grande e
                     separada da área que abre. Excluir visão em uso levaria os
                     módulos dos planos junto, então o botão diz quando não dá. */}
-                <div className="card-plano__acoes">
+                {podeEditar ? <div className="card-plano__acoes">
                   <button
                     type="button"
                     className="card-plano__acao card-plano__acao--perigo"
@@ -75,13 +85,20 @@ export default function TelaVisoes({ visoes, planos, nomeContabil, onAbrir, onNo
                     <Icone nome="trash" tamanho={15} />
                     Excluir
                   </button>
-                </div>
+                </div> : null}
               </article>
             );
           })}
         </div>
       ) : (
-        <EstadoVazio texto="Crie uma visão para poder criar planos orçamentários." icone="eye" />
+        <EstadoVazio
+          texto={
+            podeEditar
+              ? "Crie uma visão para poder criar planos orçamentários."
+              : "Nenhuma visão está disponível para consulta."
+          }
+          icone="eye"
+        />
       )}
     </main>
   );

@@ -7,6 +7,7 @@
 const RODAR_API = import.meta.env?.DEV
   ? "A API não está respondendo. Pare o servidor e rode `npm run dev`, que sobe a API junto com o front."
   : "Não foi possível conectar ao servidor. Verifique sua conexão e tente novamente em instantes.";
+export const TEMPO_LIMITE_DA_API = 30_000;
 
 class ErroDaApi extends Error {
   constructor(mensagem, status) {
@@ -35,6 +36,8 @@ async function buscar(caminho, parametros, opcoes = {}) {
   // DELETE não leva corpo, mas precisa do método explícito.
   const corpoEnviado = opcoes.corpo;
   let resposta;
+  const controlador = new AbortController();
+  const limite = setTimeout(() => controlador.abort(), TEMPO_LIMITE_DA_API);
   try {
     resposta = await fetch(url, {
       method: opcoes.metodo ?? (corpoEnviado ? "POST" : "GET"),
@@ -46,11 +49,17 @@ async function buscar(caminho, parametros, opcoes = {}) {
         ...(corpoEnviado ? { "Content-Type": "application/json" } : {}),
       },
       body: corpoEnviado ? JSON.stringify(corpoEnviado) : undefined,
+      signal: controlador.signal,
     });
   } catch (erro) {
     // O texto bruto do fetch ("Failed to fetch" etc.) só ajuda em dev —
     // em produção é ruído técnico sem ação nenhuma pra quem lê.
+    if (erro?.name === "AbortError") {
+      throw new ErroDaApi("O servidor demorou mais de 30 segundos para responder. Tente novamente.", 0);
+    }
     throw new ErroDaApi(import.meta.env?.DEV ? `${RODAR_API} (${erro.message})` : RODAR_API, 0);
+  } finally {
+    clearTimeout(limite);
   }
 
   // Lê como texto para poder distinguir "a API respondeu um erro" de "quem

@@ -24,6 +24,7 @@ export default function TelaPlanos({
   planos,
   visoes,
   podePublicar = false,
+  podeGerenciar = false,
   mostrarInativos = false,
   onAbrir,
   onNovo,
@@ -47,10 +48,12 @@ export default function TelaPlanos({
         titulo="Planos Orçamentários"
         subtitulo="Crie versões independentes e acompanhe diferentes cenários do orçamento."
         acao={
-          <Botao onClick={onNovo}>
-            <Icone nome="plus" tamanho={18} />
-            Novo plano
-          </Botao>
+          podeGerenciar ? (
+            <Botao onClick={onNovo}>
+              <Icone nome="plus" tamanho={18} />
+              Novo plano
+            </Botao>
+          ) : null
         }
       />
       <div className="planos-meta">
@@ -112,7 +115,7 @@ export default function TelaPlanos({
                   Antes eram dois ícones sem nome no canto, colados na seta de
                   abrir: alvo pequeno, três destinos disputando o mesmo pedaço
                   do cartão e nenhum dizendo o que fazia. */}
-              <div className="card-plano__acoes">
+              {podeGerenciar ? <div className="card-plano__acoes">
                 {/* Copiar só em plano ativo: duplicar o que foi aposentado é
                     quase sempre engano. */}
                 {!inativo ? (
@@ -140,13 +143,20 @@ export default function TelaPlanos({
                   <Icone nome={inativo ? "check" : "archive"} tamanho={15} />
                   {inativo ? "Reativar" : "Desativar"}
                 </button>
-              </div>
+              </div> : null}
             </article>
             );
           })}
         </div>
       ) : (
-        <EstadoVazio texto="Adicione um plano para começar seu planejamento." icone="folder" />
+        <EstadoVazio
+          texto={
+            podeGerenciar
+              ? "Adicione um plano para começar seu planejamento."
+              : "Nenhum plano está disponível para consulta."
+          }
+          icone="folder"
+        />
       )}
     </main>
   );

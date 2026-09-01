@@ -62,22 +62,30 @@ export default function CelulaQuantidade({
       ]
         .filter(Boolean)
         .join(" ")}
-      tabIndex={podeEditar ? 0 : undefined}
-      role={podeEditar ? "button" : undefined}
-      onClick={podeEditar ? () => onIniciar(String(valor ?? "")) : undefined}
-      onKeyDown={
-        podeEditar
-          ? (evento) => {
-              if (evento.key === "Enter") onIniciar(String(valor ?? ""));
-              // Digitar direto começa a edição, como no Excel — sem isto seria
-              // preciso clicar antes de cada um dos 384 números.
-              else if (ABRE_EDICAO.test(evento.key)) onIniciar(evento.key);
-              else if (evento.key === "Delete" || evento.key === "Backspace") onIniciar("");
-            }
-          : undefined
-      }
     >
-      {valor == null ? "—" : valor}
+      {podeEditar ? (
+        <button
+          type="button"
+          className="celula-qtde__controle"
+          aria-label="Editar quantidade de funcionários"
+          onClick={() => onIniciar(String(valor ?? ""))}
+          onKeyDown={(evento) => {
+            // Digitar direto começa a edição, como no Excel — sem isto seria
+            // preciso clicar antes de cada um dos 384 números.
+            if (ABRE_EDICAO.test(evento.key)) {
+              evento.preventDefault();
+              onIniciar(evento.key);
+            } else if (evento.key === "Delete" || evento.key === "Backspace") {
+              evento.preventDefault();
+              onIniciar("");
+            }
+          }}
+        >
+          {valor == null ? "—" : valor}
+        </button>
+      ) : (
+        valor == null ? "—" : valor
+      )}
       {podeEditar && onComecarArrasto ? (
         <button
           type="button"

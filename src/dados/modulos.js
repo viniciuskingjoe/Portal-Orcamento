@@ -81,8 +81,8 @@ export const MODULOS = [
   },
   // Único módulo com a dimensão "Nº de funcionários" por centro/mês, ao lado
   // do R$: além do valor de cada conta (fixo, digitado, ou calculado por
-  // fórmula), guarda quantas pessoas o centro tem — é o que multiplica o
-  // planejado na aba Total. As mesmas contas não podem estar também em
+  // fórmula), guarda quantas pessoas o centro tem como indicador operacional.
+  // A quantidade não multiplica o valor planejado. As mesmas contas não podem estar também em
   // Despesas operacionais para o mesmo centro, senão o valor dobra no DRE e na
   // publicação para o Linx; `dados/visao.js` garante essa exclusividade.
   {
@@ -121,7 +121,7 @@ export function ehPercentual(id) {
 }
 
 // Módulo que, além do R$ de cada conta, guarda Nº de funcionários por
-// centro/mês — dimensão à parte, que multiplica o planejado na aba Total.
+// centro/mês como dimensão informativa, sem alterar o planejado.
 // Hoje só Despesas com pessoal.
 export function comFuncionarios(id) {
   return POR_ID.get(id)?.comFuncionarios === true;

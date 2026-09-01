@@ -1128,6 +1128,21 @@ button {
   transform: scale(1.05);
 }
 
+.card-visao.is-somente-leitura {
+  cursor: default;
+}
+
+.card-visao.is-somente-leitura:hover {
+  border-color: var(--border);
+  background: var(--surface);
+  box-shadow: var(--shadow-sm);
+  transform: none;
+}
+
+.card-visao.is-somente-leitura:hover .card-visao__icone {
+  transform: none;
+}
+
 .card-visao__icone {
   width: 38px;
   height: 38px;
@@ -1866,9 +1881,22 @@ td.sem-contas {
 
 .celula-editavel {
   position: relative;
-  cursor: pointer;
+  padding: 0 !important;
   box-shadow: inset 0 0 0 1px transparent;
   transition: 0.14s ease;
+}
+
+.celula-editavel__controle {
+  width: 100%;
+  min-width: 90px;
+  padding: 10px 14px;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-variant-numeric: inherit;
+  text-align: right;
+  cursor: pointer;
 }
 
 /* Alça de preenchimento: o quadradinho do canto inferior direito, como no
@@ -1879,12 +1907,11 @@ td.sem-contas {
   right: -4px;
   bottom: -4px;
   z-index: 1;
-  width: 9px;
-  height: 9px;
+  width: 24px;
+  height: 24px;
   padding: 0;
-  border: 1px solid var(--surface);
-  border-radius: 2px;
-  background: var(--accent);
+  border: 0;
+  background: transparent;
   opacity: 0;
   cursor: crosshair;
   transition: opacity 0.14s ease;
@@ -1892,8 +1919,20 @@ td.sem-contas {
   touch-action: none;
 }
 
+.alca-preenchimento::after {
+  content: "";
+  position: absolute;
+  right: 4px;
+  bottom: 4px;
+  width: 9px;
+  height: 9px;
+  border: 1px solid var(--surface);
+  border-radius: 2px;
+  background: var(--accent);
+}
+
 .celula-editavel:hover .alca-preenchimento,
-.celula-editavel:focus-visible .alca-preenchimento,
+.celula-editavel:focus-within .alca-preenchimento,
 .alca-preenchimento:focus-visible {
   opacity: 1;
 }
@@ -1922,7 +1961,7 @@ td.sem-contas {
 /* A célula é focável por teclado (Enter abre, Ctrl+D copia de cima), então o
    foco precisa ser tão visível quanto o hover — senão navegar por Tab deixa o
    usuário sem saber onde está. */
-.celula-editavel:focus-visible {
+.celula-editavel:has(.celula-editavel__controle:focus-visible) {
   outline: none;
   background: var(--accent-soft) !important;
   box-shadow: inset 0 0 0 2px var(--accent);
@@ -1937,7 +1976,7 @@ td.sem-contas {
 }
 
 .celula-editavel--falhou:hover,
-.celula-editavel--falhou:focus-visible {
+.celula-editavel--falhou:focus-within {
   box-shadow: inset 0 0 0 2px var(--danger);
 }
 
@@ -1952,6 +1991,15 @@ td.sem-contas {
   color: var(--text);
   font-size: 13px;
   text-align: right;
+}
+
+.celula-editavel .input-inline {
+  min-height: 37px;
+  padding: 9px 14px;
+  border: 0;
+  border-radius: 0;
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
 }
 
 /* Coluna calculada que não recebe digitação — o tom mais fraco evita que alguém
@@ -3511,11 +3559,29 @@ dialog::backdrop {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  *,
-  *::before,
-  *::after {
-    animation-duration: 0.01ms !important;
-    transition-duration: 0.01ms !important;
+  html:focus-within {
+    scroll-behavior: auto;
+  }
+
+  .conteudo,
+  .aviso-fixo,
+  .toast-desfazer,
+  .grid-planos .card-plano,
+  .grid-modulos .card-modulo,
+  .spinner,
+  .senha-gerada,
+  .senha-gerada__valor {
+    animation: none !important;
+  }
+
+  button,
+  a,
+  input,
+  select,
+  textarea,
+  .sidebar,
+  .seletor__campo svg {
+    transition: none !important;
   }
 }
 
@@ -3526,8 +3592,8 @@ dialog::backdrop {
    continua igual, porque o mouse não perde precisão em telas largas. */
 @media (pointer: coarse) {
   .botao-icone {
-    width: 40px;
-    height: 40px;
+    width: 44px;
+    height: 44px;
   }
 
   /* As duas setas de reordenar linha do DRE eram 26px com 2px de vão — par
@@ -3537,8 +3603,8 @@ dialog::backdrop {
   }
 
   .dre-linha__mover .botao-icone {
-    width: 34px;
-    height: 34px;
+    width: 44px;
+    height: 44px;
   }
 
   .dre-linha__acoes {
@@ -3546,18 +3612,39 @@ dialog::backdrop {
   }
 
   .dre-linha__acoes .botao-icone {
-    width: 38px;
-    height: 38px;
+    width: 44px;
+    height: 44px;
   }
 
   /* A única interação de arrastar do sistema — e a única pequena que a
      passada de toque acima tinha deixado passar. 9px é inatingível debaixo
      do dedo. */
   .alca-preenchimento {
-    width: 16px;
-    height: 16px;
-    right: -7px;
-    bottom: -7px;
+    width: 44px;
+    height: 44px;
+    right: -16px;
+    bottom: -16px;
+  }
+
+  .alca-preenchimento::after {
+    width: 12px;
+    height: 12px;
+  }
+
+  .seletor__campo,
+  .seletor__busca,
+  .seletor__opcao,
+  .seletor__limpar,
+  .card-plano__acao,
+  .botao-sair,
+  .campo-senha__olho {
+    min-height: 44px;
+  }
+
+  .botao-sair,
+  .campo-senha__olho {
+    width: 44px;
+    height: 44px;
   }
 }
 
@@ -4781,11 +4868,11 @@ dialog::backdrop {
 
 .celula-qtde.is-editavel {
   position: relative;
-  cursor: text;
+  padding: 0;
 }
 
 .celula-qtde.is-editavel:hover,
-.celula-qtde.is-editavel:focus-visible {
+.celula-qtde.is-editavel:focus-within {
   outline: 2px solid var(--accent);
   outline-offset: -2px;
   border-radius: var(--radius-sm);
@@ -4796,7 +4883,7 @@ dialog::backdrop {
    dinheiro), então precisa das mesmas regras de visibilidade e da faixa de
    arrasto, senão o botão existe no DOM mas fica com opacity:0 pra sempre. */
 .celula-qtde.is-editavel:hover .alca-preenchimento,
-.celula-qtde.is-editavel:focus-visible .alca-preenchimento {
+.celula-qtde.is-editavel:focus-within .alca-preenchimento {
   opacity: 1;
 }
 
@@ -4807,6 +4894,22 @@ dialog::backdrop {
 
 .celula-qtde.is-editando {
   padding: 0;
+}
+
+.celula-qtde__controle {
+  width: 100%;
+  padding: 9px 12px;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-variant-numeric: inherit;
+  text-align: right;
+  cursor: text;
+}
+
+.celula-qtde__controle:focus-visible {
+  outline: none;
 }
 
 .celula-qtde input {

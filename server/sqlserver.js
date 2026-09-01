@@ -151,13 +151,28 @@ export async function transaction(executar) {
   const transacao = new sql.Transaction(conexao);
   await transacao.begin();
   try {
-    const resultado = await executar({
-      query: async (texto, parametros = {}) => {
+    // Uma transação do `mssql` ocupa uma única conexão. Alguns consumidores
+    // montam leituras independentes com Promise.all; dispará-las fisicamente ao
+    // mesmo tempo nessa conexão causa "request in progress" em vez de ganho de
+    // paralelismo. A fila preserva a API assíncrona e executa na ordem dentro
+    // da transação; consultas fora dela continuam paralelas pelo pool.
+    let fila = Promise.resolve();
+    const consultaTransacional = (texto, parametros = {}) => {
+      const rodar = async () => {
         const request = new sql.Request(transacao);
         aplicarParametros(request, parametros);
         const saida = await request.query(texto);
         return saida.recordset ?? [];
-      },
+      };
+      const resultado = fila.then(rodar);
+      fila = resultado.then(
+        () => undefined,
+        () => undefined
+      );
+      return resultado;
+    };
+    const resultado = await executar({
+      query: consultaTransacional,
     });
     await transacao.commit();
     return resultado;

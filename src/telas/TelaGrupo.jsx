@@ -20,6 +20,7 @@ import { AvisoErro, Carregando } from "../componentes/Estados.jsx";
 export default function TelaGrupo({
   grupo,
   centros,
+  somenteLeitura = false,
   carregando,
   erro,
   onRecarregar,
@@ -71,12 +72,18 @@ export default function TelaGrupo({
     <main className="conteudo">
       <Cabecalho
         titulo={grupo.nome || "Novo grupo"}
-        subtitulo="Escolha os centros de custo que este recorte reúne para ler o DRE."
+        subtitulo={
+          somenteLeitura
+            ? "Centros de custo reunidos neste recorte do DRE."
+            : "Escolha os centros de custo que este recorte reúne para ler o DRE."
+        }
         onVoltar={onVoltar}
         acao={
-          <Botao onClick={salvar} disabled={salvando}>
-            {salvando ? "Salvando…" : "Salvar grupo"}
-          </Botao>
+          somenteLeitura ? null : (
+            <Botao onClick={salvar} disabled={salvando}>
+              {salvando ? "Salvando…" : "Salvar grupo"}
+            </Botao>
+          )
         }
       />
 
@@ -88,7 +95,8 @@ export default function TelaGrupo({
             value={nome}
             onChange={(evento) => setNome(evento.target.value)}
             placeholder="Ex.: Fábrica"
-            autoFocus
+            disabled={somenteLeitura}
+            autoFocus={!somenteLeitura}
           />
         </label>
       </div>
@@ -118,14 +126,16 @@ export default function TelaGrupo({
                 {escolhidos.length} de {centros.length}{" "}
                 {escolhidos.length === 1 ? "marcado" : "marcados"}
               </small>
-              <button
-                type="button"
-                className="botao-texto"
-                onClick={() => setEscolhidos([])}
-                disabled={!escolhidos.length}
-              >
-                Limpar
-              </button>
+              {!somenteLeitura ? (
+                <button
+                  type="button"
+                  className="botao-texto"
+                  onClick={() => setEscolhidos([])}
+                  disabled={!escolhidos.length}
+                >
+                  Limpar
+                </button>
+              ) : null}
             </span>
           </div>
 
@@ -144,6 +154,7 @@ export default function TelaGrupo({
                     type="checkbox"
                     checked={escolhidos.includes(centro.id)}
                     onChange={() => alternarCentro(centro.id)}
+                    disabled={somenteLeitura}
                   />
                   <span className="checkbox-visual">
                     <Icone nome="check" tamanho={13} />

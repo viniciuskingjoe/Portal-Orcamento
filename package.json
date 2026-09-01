@@ -11,8 +11,10 @@
     "dev:web": "vite",
     "api": "node --env-file=.env server/index.js",
     "build": "vite build",
+    "check": "node scripts/verificar-codigo.mjs",
     "preview": "vite preview",
     "test": "node --test",
+    "schema:check": "node --env-file=.env scripts/verificar-schema.mjs",
     "integracao": "node --env-file=.env scripts/integracao/sessao.mjs && node --env-file=.env scripts/integracao/senha.mjs && node --env-file=.env scripts/integracao/estado.mjs && node --env-file=.env scripts/integracao/importacao.mjs && node --env-file=.env scripts/integracao/usuarios.mjs"
   },
   "dependencies": {

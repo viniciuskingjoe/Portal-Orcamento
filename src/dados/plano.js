@@ -14,7 +14,7 @@ import {
   sinaisDoModulo,
   usaCentroDeCusto,
 } from "./visao.js";
-import { avaliarFormula } from "./formula.js";
+import { avaliarFormula, referenciasDaFormula } from "./formula.js";
 import { somarRealizado } from "./realizado.js";
 import { mesTemRealizado } from "./calendario.js";
 import { CATALOGO_VAZIO } from "./contas.js";
@@ -62,7 +62,11 @@ export function gerarId(prefixo) {
 // nome da coluna.
 export function valorParaGravar({ digitado, emReais, percentual, base }) {
   if (!percentual || !emReais) return digitado;
-  return base ? (digitado / base) * 100 : 0;
+  if (digitado === 0) return 0;
+  // `null` é uma recusa explícita, não um valor gravável. Transformar R$ em
+  // percentual sem base antes devolvia 0; no servidor, 0 apaga a linha, então
+  // uma edição aparentemente válida podia apagar o orçamento anterior.
+  return base ? (digitado / base) * 100 : null;
 }
 
 // `receita` só existe nos módulos percentuais. Vai no fim para não mexer na
@@ -142,15 +146,56 @@ function valorDaConta(plano, visao, moduloId, filialId, centroId, conta, mes, em
 }
 
 // Fórmula quebrada (referência circular, conta que saiu da visão) não pode
-// derrubar a tela inteira nem travar a publicação de todas as outras contas —
-// vira 0 com o erro visível só para quem edita aquela fórmula, na tela do
-// editor.
+// derrubar a tela inteira: na leitura interativa vira 0. A publicação usa a
+// variante estrita abaixo e recusa o snapshot inteiro antes de tocar no ERP.
 export function valorPlanejadoDaConta(plano, visao, moduloId, filialId, centroId, conta, mes) {
   try {
     return valorDaConta(plano, visao, moduloId, filialId, centroId, conta, mes, new Set());
   } catch {
     return 0;
   }
+}
+
+// A tela precisa continuar de pé quando uma fórmula antiga está quebrada, mas a
+// publicação não pode transformar o erro em zero e apagar um valor correto do
+// Linx. Esta variante propaga a causa para o preflight transacional do servidor.
+export function valorPlanejadoDaContaEstrito(
+  plano,
+  visao,
+  moduloId,
+  filialId,
+  centroId,
+  conta,
+  mes
+) {
+  return valorDaConta(plano, visao, moduloId, filialId, centroId, conta, mes, new Set());
+}
+
+function validarReferenciasDaConta(visao, moduloId, filialId, centroId, conta) {
+  const formula = formulaDaConta(visao, moduloId, conta);
+  if (!formula) return;
+
+  const disponiveis = new Set(contasDoCentro(visao, moduloId, filialId, centroId));
+  for (const referencia of referenciasDaFormula(formula.expressao)) {
+    if (referencia.prefixo !== "V") {
+      throw new Error(`A fórmula de conta só aceita V[]; recebeu ${referencia.prefixo}[${referencia.codigo}].`);
+    }
+    if (referencia.codigo !== FUNCIONARIOS_TOKEN && !disponiveis.has(referencia.codigo)) {
+      throw new Error(
+        `A fórmula referencia ${referencia.codigo}, que não pertence ao mesmo módulo, filial e centro.`
+      );
+    }
+  }
+}
+
+function erroDeFormulaNaPublicacao({ conta, filialId, centroId, mes = null }, causa) {
+  const onde = `${conta} · filial ${filialId} · centro ${centroId || "sem centro"}`;
+  const erro = new Error(
+    `Não foi possível calcular a fórmula de ${onde}${mes ? ` · mês ${mes}` : ""}: ${causa.message}`
+  );
+  erro.status = 409;
+  erro.cause = causa;
+  return erro;
 }
 
 function digitadoDoMes(plano, visao, moduloId, filialId, centroId, contas, mes) {
@@ -578,7 +623,7 @@ export function totalPlanejadoNoAno(argumentos) {
 // a tela não mostra mais faria o Power BI divergir do portal.
 // --------------------------------------------------------------------------
 
-export function linhasParaOrcamento({ plano, visao }) {
+export function linhasParaOrcamento({ plano, visao, estrito = false }) {
   if (!plano || !visao) return [];
 
   const somado = new Map();
@@ -626,8 +671,39 @@ export function linhasParaOrcamento({ plano, visao }) {
       contasDoCentro(visao, MODULO_PESSOAL, filialId, centroId).forEach((conta) => {
         if (!contaEhCalculada(visao, MODULO_PESSOAL, conta)) return;
 
+        if (estrito) {
+          try {
+            validarReferenciasDaConta(visao, MODULO_PESSOAL, filialId, centroId, conta);
+          } catch (erro) {
+            throw erroDeFormulaNaPublicacao({ conta, filialId, centroId }, erro);
+          }
+        }
+
         for (let mes = 1; mes <= 12; mes += 1) {
-          const reais = valorPlanejadoDaConta(plano, visao, MODULO_PESSOAL, filialId, centroId, conta, mes);
+          let reais;
+          try {
+            reais = estrito
+              ? valorPlanejadoDaContaEstrito(
+                  plano,
+                  visao,
+                  MODULO_PESSOAL,
+                  filialId,
+                  centroId,
+                  conta,
+                  mes
+                )
+              : valorPlanejadoDaConta(
+                  plano,
+                  visao,
+                  MODULO_PESSOAL,
+                  filialId,
+                  centroId,
+                  conta,
+                  mes
+                );
+          } catch (erro) {
+            throw erroDeFormulaNaPublicacao({ conta, filialId, centroId, mes }, erro);
+          }
           if (!reais) continue;
 
           const destino = `${filialId}|${centroId}|${conta}|${mes}`;
