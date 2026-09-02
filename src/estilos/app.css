@@ -4046,39 +4046,10 @@ dialog::backdrop {
   background: var(--surface);
 }
 
-.usuarios-topo {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  margin-top: 14px;
-  margin-bottom: 12px;
-}
-
-/* Mesma largura da coluna de usuários logo abaixo — a busca é o campo dela,
-   não deveria parecer mais estreita ou mais larga que a lista que filtra. */
-.usuarios-topo .campo-busca {
-  flex: 0 1 320px;
-}
-
 .usuarios-topo__contagem {
   color: var(--muted);
   font-size: 12px;
   font-variant-numeric: tabular-nums;
-}
-
-/* Mestre-detalhe: lista enxuta à esquerda, permissão completa de quem está
-   selecionado à direita. Ver "quem tem o quê" e editar "o que esta pessoa
-   tem" deixam de disputar o mesmo espaço vertical. */
-.usuarios-master-detalhe {
-  display: grid;
-  grid-template-columns: 320px minmax(0, 1fr);
-  align-items: start;
-  gap: 20px;
-}
-
-.usuarios-lista {
-  max-height: min(70vh, 640px);
-  overflow-y: auto;
 }
 
 .usuario-linha {
@@ -4443,20 +4414,12 @@ dialog::backdrop {
   color: var(--danger);
 }
 
-@media (max-width: 900px) {
-  .usuarios-master-detalhe {
-    grid-template-columns: 1fr;
-  }
-
-  .usuarios-lista {
-    max-height: none;
-  }
-}
-
 /* Refinamento da tela de usuários: uma superfície de configuração, módulos em
    lista e território mestre-detalhe. Estas regras substituem a árvore de plano
    de contas sem alterar os componentes compartilhados que ainda a utilizam. */
 .usuarios-master-detalhe {
+  display: grid;
+  align-items: start;
   grid-template-columns: clamp(300px, 23vw, 350px) minmax(0, 1fr);
   gap: 18px;
   margin-top: 18px;
@@ -4521,13 +4484,14 @@ dialog::backdrop {
   color: var(--muted);
 }
 
+/* Sem altura própria nem rolagem própria: a lista cresce com a página. Um
+   teto aqui rolava a lista por dentro ENQUANTO a página também rolava por
+   fora — duas barras de rolagem ao mesmo tempo, uma quase colada na outra. */
 .usuarios-lista {
   display: flex;
   flex-direction: column;
   gap: 2px;
-  max-height: min(calc(100vh - 270px), 680px);
   padding: 6px;
-  overflow-y: auto;
 }
 
 .usuario-linha {
@@ -5331,10 +5295,6 @@ dialog::backdrop {
 
   .usuarios-coluna {
     position: static;
-  }
-
-  .usuarios-lista {
-    max-height: 280px;
   }
 }
 
