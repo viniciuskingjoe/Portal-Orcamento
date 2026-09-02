@@ -43,12 +43,11 @@ function UsuarioDetalhe({
   usuario,
   euMesmo,
   catalogos,
-  onAlternarAdmin,
+  usuariosReferencia,
   onRedefinirSenha,
   onRemover,
-  onSalvarPermissao,
+  onSalvar,
   onAlteracao,
-  temAlteracoes,
 }) {
   return (
     <>
@@ -95,97 +94,15 @@ function UsuarioDetalhe({
         </span>
       </header>
 
-      <section className="usuarios-detalhe__secao usuarios-detalhe__perfil">
-        <span className="usuarios-detalhe__secao-texto">
-          <h3>Perfil de acesso</h3>
-          <p>
-            Administrador configura o portal inteiro; usuário recebe acesso por módulo.
-            {usuario.adminPorAmbiente
-              ? " Este login está fixado como administrador na configuração do servidor — não muda por aqui."
-              : ""}
-            {euMesmo ? " Você não pode alterar o seu próprio perfil — evita se autobloquear sem querer." : ""}
-          </p>
-        </span>
-        <span className="matriz-linha__estados matriz-linha__estados--largo" role="group" aria-label="Perfil de acesso">
-          <button
-            type="button"
-            className={`matriz-estado ${!usuario.admin ? "is-ativo" : ""}`}
-            aria-pressed={!usuario.admin}
-            disabled={euMesmo || temAlteracoes || usuario.adminPorAmbiente}
-            title={
-              euMesmo
-                ? "Você não pode alterar o seu próprio perfil de acesso"
-                : usuario.adminPorAmbiente
-                  ? "Definido na configuração do servidor — não muda por esta tela"
-                  : temAlteracoes
-                    ? "Salve ou descarte as alterações dos módulos antes de trocar o perfil"
-                    : undefined
-            }
-            onClick={() => usuario.admin && onAlternarAdmin()}
-          >
-            Usuário
-          </button>
-          <button
-            type="button"
-            className={`matriz-estado ${usuario.admin ? "is-ativo" : ""}`}
-            aria-pressed={usuario.admin}
-            disabled={euMesmo || temAlteracoes || usuario.adminPorAmbiente}
-            title={
-              euMesmo
-                ? "Você não pode alterar o seu próprio perfil de acesso"
-                : usuario.adminPorAmbiente
-                  ? "Definido na configuração do servidor — não muda por esta tela"
-                  : temAlteracoes
-                    ? "Salve ou descarte as alterações dos módulos antes de trocar o perfil"
-                    : undefined
-            }
-            onClick={() => !usuario.admin && onAlternarAdmin()}
-          >
-            Administrador
-          </button>
-        </span>
-      </section>
-
-      {usuario.admin ? (
-        <section className="usuarios-admin-total">
-          <span className="usuarios-admin-total__icone">
-            <Icone nome="check" tamanho={18} />
-          </span>
-          <span>
-            <strong>Acesso total</strong>
-            <p>
-              Administradores visualizam e editam todos os módulos, filiais e centros de custo.
-              As permissões granulares ficam guardadas, mas não são usadas enquanto este perfil
-              estiver ativo.
-              {usuario.adminPorAmbiente
-                ? " Definido na configuração do servidor — não pode ser removido por esta tela."
-                : ""}
-              {euMesmo && !usuario.adminPorAmbiente
-                ? " Este é o seu usuário — você não pode tirar o seu próprio acesso de administrador."
-                : ""}
-            </p>
-          </span>
-        </section>
-      ) : (
-        <section className="usuarios-detalhe__secao usuarios-detalhe__modulos">
-          <span className="usuarios-detalhe__secao-texto">
-            <h3>Acesso por módulo</h3>
-            <p>
-              {euMesmo
-                ? "Você pode conferir o seu próprio acesso aqui, mas não alterá-lo — evita se autobloquear sem querer."
-                : "Ative um módulo e abra a linha para definir locais e permissão."}
-            </p>
-          </span>
-          <EditorPermissao
-            key={usuario.login}
-            usuario={usuario}
-            catalogos={catalogos}
-            onSalvar={onSalvarPermissao}
-            onAlteracao={onAlteracao}
-            somenteLeitura={euMesmo}
-          />
-        </section>
-      )}
+      <EditorPermissao
+        key={usuario.login}
+        usuario={usuario}
+        usuariosReferencia={usuariosReferencia}
+        catalogos={catalogos}
+        onSalvar={onSalvar}
+        onAlteracao={onAlteracao}
+        somenteLeitura={euMesmo}
+      />
     </>
   );
 }
@@ -487,19 +404,16 @@ export default function TelaUsuarios({ filiais, centros, sessao, onVoltar, onAlt
                 usuario={usuarioSelecionado}
                 euMesmo={usuarioSelecionado.login === sessao?.login}
                 catalogos={catalogos}
-                onAlternarAdmin={() =>
-                  executar(
-                    api.alterarUsuario(usuarioSelecionado.login, { admin: !usuarioSelecionado.admin })
-                  )
-                }
+                usuariosReferencia={usuarios}
                 onRedefinirSenha={() => setARedefinir(usuarioSelecionado)}
                 onRemover={() => setARemover(usuarioSelecionado)}
-                onSalvarPermissao={(lista) => executar(api.definirAcessos(usuarioSelecionado.login, lista))}
+                onSalvar={({ admin, acessos }) =>
+                  executar(api.definirConfiguracaoUsuario(usuarioSelecionado.login, { admin, acessos }))
+                }
                 onAlteracao={(valor) => {
                   setRascunhoAlterado(valor);
                   onAlteracaoPendente?.(valor);
                 }}
-                temAlteracoes={rascunhoAlterado}
               />
             ) : null}
           </section>

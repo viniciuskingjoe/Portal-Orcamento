@@ -98,3 +98,34 @@ test("contas leva a visão contábil escolhida", async () => {
     assert.match(chamadas[0], /\/api\/contas\?visao=21$/);
   });
 });
+
+test("configuração de usuário envia perfil e acessos juntos por PUT", async () => {
+  const original = globalThis.fetch;
+  let chamada;
+  globalThis.fetch = async (url, opcoes) => {
+    chamada = { url: String(url), opcoes };
+    return resposta(200, JSON.stringify({ ok: true }));
+  };
+
+  const configuracao = {
+    admin: false,
+    acessos: [
+      {
+        modulo: "receita-vendas",
+        filial: "000001",
+        centro: "020",
+        podeEditar: true,
+      },
+    ],
+  };
+
+  try {
+    await api.definirConfiguracaoUsuario("joao/silva", configuracao);
+  } finally {
+    globalThis.fetch = original;
+  }
+
+  assert.match(chamada.url, /\/api\/usuarios\/joao%2Fsilva\/configuracao$/);
+  assert.equal(chamada.opcoes.method, "PUT");
+  assert.deepEqual(JSON.parse(chamada.opcoes.body), configuracao);
+});

@@ -50,6 +50,7 @@ import {
   alterarUsuario,
   concederAcessos,
   definirAcessos,
+  definirConfiguracaoUsuario,
   darAcesso,
   listarUsuarios,
   limparSenha,
@@ -681,6 +682,34 @@ app.put(
       req.sessao.login
     );
     res.json({ ok: true });
+  })
+);
+
+app.put(
+  "/api/usuarios/:login/configuracao",
+  exigirAdmin,
+  rota(async (req, res) => {
+    const corpo = req.body ?? {};
+    if (!Object.hasOwn(corpo, "admin") || !Object.hasOwn(corpo, "acessos")) {
+      const erro = new Error("Campos `admin` e `acessos` são obrigatórios.");
+      erro.status = 400;
+      throw erro;
+    }
+
+    const { admin } = validarAlteracaoUsuario({ admin: corpo.admin });
+    const acessos = validarAcessos(corpo.acessos);
+    if (req.params.login === req.sessao.login && admin === false) {
+      const erro = new Error("Você não pode retirar o seu próprio acesso administrativo.");
+      erro.status = 400;
+      throw erro;
+    }
+
+    await definirConfiguracaoUsuario(
+      req.params.login,
+      { admin, acessos },
+      req.sessao.login
+    );
+    res.json({ ok: true, concedidas: acessos.length });
   })
 );
 

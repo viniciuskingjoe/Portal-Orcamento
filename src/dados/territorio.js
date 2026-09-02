@@ -30,12 +30,16 @@ export const EDITA = "edita";
 
 export const TUDO = { filial: null, centro: null };
 
-// Há dois formatos históricos para o mesmo significado: a tela antiga usava
-// lista vazia e o banco devolve a linha explícita (null, null). Centralizar a
-// leitura impede que uma parte da tela mostre "nada" enquanto outra salva
-// "tudo" — em permissão, essa ambiguidade vira elevação de acesso.
+// Só a linha explícita (null, null) — vinda do banco ou de `[TUDO]` — conta
+// como irrestrito. Lista vazia já foi tratada como o mesmo "tudo" (formato
+// legado da tela antiga), mas isso trava a árvore: desmarcar o último local
+// de um módulo não pode virar "libera pra empresa inteira" só porque sobrou
+// um array vazio no meio da edição. Filial/centro mudam — a pessoa precisa
+// poder tirar um local sem que o módulo se desligue ou vire irrestrito
+// sozinho; vazio agora é "nenhum local ainda", ponto, e quem grava sabe: um
+// módulo ligado sem nenhum lugar não concede nada (nunca "tudo").
 export function territorioIrrestrito(territorio = []) {
-  return !territorio?.length || territorio.some((lugar) => lugar?.filial == null && lugar?.centro == null);
+  return territorio?.some((lugar) => lugar?.filial == null && lugar?.centro == null) ?? false;
 }
 
 const chaveDoTerritorio = ({ filial, centro }) => `${filial ?? ""}|${centro ?? ""}`;
@@ -235,6 +239,35 @@ export function gerarConcessoesDeModulos(config = {}) {
   return [...saida.values()];
 }
 
+/**
+ * Aplica um nível aos oito módulos sem apagar recortes territoriais já
+ * escolhidos. Um módulo que nunca teve escopo precisa de um padrão ao ser
+ * ligado; nesse único caso recebe acesso à empresa inteira.
+ */
+export function aplicarNivelAosModulos(config = {}, nivel) {
+  const novo = {};
+
+  for (const modulo of MODULOS) {
+    const atual = config[modulo.id] ?? {
+      ligado: false,
+      territorio: [],
+      nivel: VE,
+      acessosOriginais: [],
+    };
+
+    novo[modulo.id] = nivel
+      ? {
+          ...atual,
+          ligado: true,
+          territorio: atual.territorio?.length ? atual.territorio : [TUDO],
+          nivel,
+        }
+      : { ...atual, ligado: false };
+  }
+
+  return novo;
+}
+
 const nomeDe = (catalogo, id) => catalogo?.find((item) => item.id === id)?.nome ?? id;
 
 export function ondeDaArea(area, { filiais, centros } = {}) {
@@ -385,9 +418,10 @@ export function alternarFilialNaArvore(territorio, catalogos, filialId, estadoAt
   const base = materializarTerritorio(territorio, catalogos);
   const semEssaFilial = base.filter((lugar) => lugar.filial !== filialId);
   if (estadoAtual === "total") {
-    // Lista vazia é o formato legado de "tudo", nunca de "nada". O último
-    // território é removido desligando o módulo, não por esta árvore.
-    return semEssaFilial.length ? semEssaFilial : compactarSeTudo(base, catalogos);
+    // Pode esvaziar de verdade: vazio aqui é "nenhum local ainda", não
+    // "tudo" — filial/centro mudam, e desmarcar a última não pode reabrir
+    // acesso irrestrito nem desligar o módulo por baixo dos panos.
+    return semEssaFilial;
   }
   return compactarSeTudo([...semEssaFilial, { filial: filialId, centro: null }], catalogos);
 }
@@ -410,9 +444,8 @@ export function alternarCentroNaArvore(territorio, catalogos, filialId, centroId
   else centrosMarcados.add(centroId);
 
   if (!centrosMarcados.size) {
-    // Pelo mesmo motivo da filial acima, não deixa o último recorte virar `[]`
-    // e ser reinterpretado como acesso irrestrito na gravação.
-    return outrasFiliais.length ? outrasFiliais : compactarSeTudo(base, catalogos);
+    // Mesma lógica de `alternarFilialNaArvore`: pode esvaziar de verdade.
+    return outrasFiliais;
   }
   if (centrosMarcados.size === catalogos.centros.length) {
     return compactarSeTudo([...outrasFiliais, { filial: filialId, centro: null }], catalogos);

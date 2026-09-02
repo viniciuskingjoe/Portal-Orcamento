@@ -176,6 +176,11 @@ export const api = {
   darAcesso: (usuario) => buscar("/api/usuarios", null, { corpo: usuario }),
   alterarUsuario: (login, mudanca) =>
     buscar(`/api/usuarios/${encodeURIComponent(login)}`, null, { metodo: "PUT", corpo: mudanca }),
+  definirConfiguracaoUsuario: (login, { admin, acessos }) =>
+    buscar(`/api/usuarios/${encodeURIComponent(login)}/configuracao`, null, {
+      metodo: "PUT",
+      corpo: { admin, acessos },
+    }),
   redefinirSenha: (login) =>
     buscar(`/api/usuarios/${encodeURIComponent(login)}/senha`, null, { corpo: {} }),
   removerUsuario: (login) =>

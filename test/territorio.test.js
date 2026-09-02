@@ -7,6 +7,7 @@ import {
   NADA,
   TUDO,
   VE,
+  aplicarNivelAosModulos,
   alternarCentroNaArvore,
   alternarFilialNaArvore,
   descreverAreas,
@@ -253,10 +254,40 @@ test("lerModulos + gerarConcessoesDeModulos: acesso global usa a forma canônica
   const original = [{ modulo: RECEITA, filial: null, centro: null, podeEditar: false }];
   const modulos = lerModulos(original);
 
-  assert.equal(territorioIrrestrito([]), true, "aceita o legado vazio");
-  assert.equal(territorioIrrestrito([TUDO]), true, "aceita a linha explícita");
+  assert.equal(territorioIrrestrito([]), false, "vazio é 'nenhum local ainda', não 'tudo'");
+  assert.equal(territorioIrrestrito([TUDO]), true, "só a linha explícita conta como irrestrito");
   assert.deepEqual(modulos[RECEITA].territorio, [TUDO]);
   assert.deepEqual(gerarConcessoesDeModulos(modulos), original);
+});
+
+test("gerarConcessoesDeModulos: módulo ligado com território vazio não concede nada (não vira 'tudo')", () => {
+  const modulos = lerModulos([]);
+  modulos[RECEITA] = { ligado: true, territorio: [], nivel: EDITA, acessosOriginais: [] };
+  assert.deepEqual(gerarConcessoesDeModulos(modulos), []);
+});
+
+test("aplicarNivelAosModulos: preserva o recorte territorial já configurado", () => {
+  const modulos = lerModulos([
+    { modulo: RECEITA, filial: "000001", centro: "020", podeEditar: false },
+  ]);
+
+  const atualizados = aplicarNivelAosModulos(modulos, EDITA);
+
+  assert.deepEqual(atualizados[RECEITA].territorio, [
+    { filial: "000001", centro: "020" },
+  ]);
+  assert.equal(atualizados[RECEITA].nivel, EDITA);
+  assert.equal(atualizados[RECEITA].ligado, true);
+});
+
+test("aplicarNivelAosModulos: só usa toda a empresa quando o módulo nunca teve escopo", () => {
+  const atualizados = aplicarNivelAosModulos(lerModulos([]), VE);
+
+  assert.equal(MODULOS.every((modulo) => atualizados[modulo.id].ligado), true);
+  assert.equal(
+    MODULOS.every((modulo) => territorioIrrestrito(atualizados[modulo.id].territorio)),
+    true
+  );
 });
 
 test("lerModulos + gerarConcessoesDeModulos: nível misto não promove quem só vê", () => {
@@ -318,13 +349,14 @@ test("alternarFilialNaArvore: desmarcar tira a filial e preserva as outras", () 
   assert.deepEqual(territorio, [{ filial: "000025", centro: "020" }]);
 });
 
-// Vazio já vale "tudo" — desmarcar uma filial a partir daí não pode apagar as
-// outras junto, então a primeira mexida materializa todo mundo por extenso.
+// [TUDO] é "tudo" de verdade — desmarcar uma filial a partir daí não pode
+// apagar as outras junto, então a primeira mexida materializa todo mundo por
+// extenso. (`[]` não entra mais nesse teste: agora significa "nenhum local
+// ainda", não "tudo" — não faria sentido pedir pra desmarcar uma filial que a
+// própria árvore já mostraria como vazia.)
 test("alternarFilialNaArvore: desmarcar uma filial a partir de 'tudo' materializa as outras", () => {
-  for (const irrestrito of [[], [TUDO]]) {
-    const territorio = alternarFilialNaArvore(irrestrito, CATALOGOS_ARVORE, "000025", "total");
-    assert.deepEqual(territorio, [{ filial: "000001", centro: null }]);
-  }
+  const territorio = alternarFilialNaArvore([TUDO], CATALOGOS_ARVORE, "000025", "total");
+  assert.deepEqual(territorio, [{ filial: "000001", centro: null }]);
 });
 
 test("alternarFilialNaArvore: marcar de volta a última filial que faltava compacta em 'tudo'", () => {
@@ -352,7 +384,7 @@ test("alternarCentroNaArvore: marcar um centro numa filial vazia (excluída) adi
 });
 
 test("alternarCentroNaArvore: desmarcar um centro a partir de 'tudo' materializa as outras filiais", () => {
-  const territorio = alternarCentroNaArvore([], CATALOGOS_ARVORE, "000001", "020", true);
+  const territorio = alternarCentroNaArvore([TUDO], CATALOGOS_ARVORE, "000001", "020", true);
   assert.deepEqual(territorio, [
     { filial: "000025", centro: null },
     { filial: "000001", centro: "030" },
@@ -381,7 +413,10 @@ test("alternarCentroNaArvore: desmarcar um centro de filial inteira materializa 
   assert.deepEqual(territorio, [{ filial: "000001", centro: "030" }]);
 });
 
-test("alternarCentroNaArvore: o último centro não vira vazio, pois vazio significa tudo", () => {
+// Filial/centro mudam com o tempo — desmarcar o último não pode ficar preso
+// nem virar "libera pra empresa inteira" sozinho. Esvazia de verdade; quem
+// grava trata módulo ligado + território vazio como "não concede nada".
+test("alternarCentroNaArvore: desmarcar o último centro esvazia de verdade", () => {
   const territorio = alternarCentroNaArvore(
     [{ filial: "000001", centro: "020" }],
     CATALOGOS_ARVORE,
@@ -389,26 +424,39 @@ test("alternarCentroNaArvore: o último centro não vira vazio, pois vazio signi
     "020",
     true
   );
-  assert.deepEqual(territorio, [{ filial: "000001", centro: "020" }]);
+  assert.deepEqual(territorio, []);
+});
+
+test("alternarFilialNaArvore: desmarcar a última filial esvazia de verdade", () => {
+  const territorio = alternarFilialNaArvore(
+    [{ filial: "000001", centro: null }],
+    CATALOGOS_ARVORE,
+    "000001",
+    "total"
+  );
+  assert.deepEqual(territorio, []);
 });
 
 // Vazio é "tudo" pra quem grava — a árvore precisa mostrar isso como tudo
 // marcado, não como nada marcado (senão parece que ninguém tem acesso).
-test("nosDoTerritorio: vazio mostra as duas filiais já marcadas 'total'", () => {
+// Vazio agora é "nenhum local ainda" (não "tudo") — a árvore precisa mostrar
+// as duas filiais desmarcadas, senão dá a entender que foi concedido acesso
+// a alguma coisa quando não foi.
+test("nosDoTerritorio: vazio mostra as duas filiais desmarcadas", () => {
   const nos = nosDoTerritorio([], CATALOGOS_ARVORE, new Set());
   assert.equal(nos.length, 2);
   assert.equal(
-    nos.every((no) => no.nivel === 0 && no.estado === "total" && !no.aberto),
+    nos.every((no) => no.nivel === 0 && no.estado === "vazio" && !no.aberto),
     true
   );
 });
 
-test("nosDoTerritorio: vazio expandido mostra os centros também marcados", () => {
+test("nosDoTerritorio: vazio expandido mostra os centros também desmarcados", () => {
   const nos = nosDoTerritorio([], CATALOGOS_ARVORE, new Set(["000001"]));
   const centros = nos.filter((no) => no.nivel === 1);
   assert.equal(centros.length, 2);
   assert.equal(
-    centros.every((no) => no.estado === "total"),
+    centros.every((no) => no.estado === "vazio"),
     true
   );
 });

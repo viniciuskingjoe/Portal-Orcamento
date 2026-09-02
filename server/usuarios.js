@@ -32,6 +32,47 @@ export function retiraAdministracao({ adminAtual, situacaoAtual, admin, situacao
   return efetivoAgora && !efetivoDepois;
 }
 
+async function usuarioParaAlteracao(executar, login) {
+  const [alvo] = await executar(
+    `SELECT ADMIN, SITUACAO
+       FROM dbo.KING_IDENTIDADE_ACESSO WITH (UPDLOCK, HOLDLOCK)
+      WHERE LOGIN = @login AND APP = @app`,
+    { login, app: APP }
+  );
+  if (!alvo) {
+    const erro = new Error("Usuário não encontrado neste portal.");
+    erro.status = 404;
+    throw erro;
+  }
+  return alvo;
+}
+
+async function exigirAdministradorRestante(executar, login, alvo, { admin, situacao }) {
+  if (
+    !retiraAdministracao({
+      adminAtual: alvo.ADMIN === true,
+      situacaoAtual: alvo.SITUACAO,
+      admin,
+      situacao,
+    }) ||
+    [...adminsDoAmbiente()].some((item) => item !== login)
+  ) {
+    return;
+  }
+
+  const [restantes] = await executar(
+    `SELECT COUNT(*) AS TOTAL
+       FROM dbo.KING_IDENTIDADE_ACESSO WITH (UPDLOCK, HOLDLOCK)
+      WHERE APP = @app AND LOGIN <> @login AND ADMIN = 1 AND SITUACAO = 'ativo'`,
+    { login, app: APP }
+  );
+  if (Number(restantes?.TOTAL ?? 0) === 0) {
+    const erro = new Error("O portal precisa manter pelo menos um administrador ativo.");
+    erro.status = 409;
+    throw erro;
+  }
+}
+
 export async function listarUsuarios() {
   const adminsDoEnv = adminsDoAmbiente();
   const [usuarios, acessos] = await Promise.all([
@@ -149,39 +190,8 @@ export async function limparSenha(login, quem) {
 
 export async function alterarUsuario(login, { admin, situacao }, quem) {
   await transaction(async ({ query: q }) => {
-    const [alvo] = await q(
-      `SELECT ADMIN, SITUACAO
-         FROM dbo.KING_IDENTIDADE_ACESSO WITH (UPDLOCK, HOLDLOCK)
-        WHERE LOGIN = @login AND APP = @app`,
-      { login, app: APP }
-    );
-    if (!alvo) {
-      const erro = new Error("Usuário não encontrado neste portal.");
-      erro.status = 404;
-      throw erro;
-    }
-
-    if (
-      retiraAdministracao({
-        adminAtual: alvo.ADMIN === true,
-        situacaoAtual: alvo.SITUACAO,
-        admin,
-        situacao,
-      }) &&
-      ![...adminsDoAmbiente()].some((item) => item !== login)
-    ) {
-      const [restantes] = await q(
-        `SELECT COUNT(*) AS TOTAL
-           FROM dbo.KING_IDENTIDADE_ACESSO WITH (UPDLOCK, HOLDLOCK)
-          WHERE APP = @app AND LOGIN <> @login AND ADMIN = 1 AND SITUACAO = 'ativo'`,
-        { login, app: APP }
-      );
-      if (Number(restantes?.TOTAL ?? 0) === 0) {
-        const erro = new Error("O portal precisa manter pelo menos um administrador ativo.");
-        erro.status = 409;
-        throw erro;
-      }
-    }
+    const alvo = await usuarioParaAlteracao(q, login);
+    await exigirAdministradorRestante(q, login, alvo, { admin, situacao });
 
     await q(
       `UPDATE dbo.KING_IDENTIDADE_ACESSO
@@ -311,6 +321,65 @@ export async function definirAcessos(login, lista, quem) {
     }
   });
 
+  await anotarPermissao(
+    login,
+    quem,
+    `de [${resumirParaAuditoria(antes)}] para [${resumirParaAuditoria(acessos)}]`
+  );
+}
+
+// Perfil e permissões formam uma única configuração de autorização. A tela
+// salva os dois juntos para que uma falha entre as operações não deixe o
+// usuário com o perfil novo e o território antigo (ou o inverso).
+export async function definirConfiguracaoUsuario(login, { admin, acessos: lista }, quem) {
+  const acessos = validarAcessos(lista);
+  let antes = [];
+
+  await transaction(async ({ query: q }) => {
+    const alvo = await usuarioParaAlteracao(q, login);
+    await exigirAdministradorRestante(q, login, alvo, { admin });
+    const adminMudou = (alvo.ADMIN === true) !== admin;
+
+    // A leitura participa da mesma transação e mantém o retrato anterior
+    // estável até a substituição terminar; ele alimenta a trilha de permissões.
+    antes = await q(
+      `SELECT MODULO AS modulo, COD_FILIAL AS filial, CENTRO_CUSTO AS centro,
+              PODE_EDITAR AS podeEditar
+         FROM dbo.KING_PORTAL_ORC_ACESSO WITH (UPDLOCK, HOLDLOCK)
+        WHERE LOGIN = @login
+        ORDER BY ID`,
+      { login }
+    );
+
+    await q(
+      `UPDATE dbo.KING_IDENTIDADE_ACESSO
+          SET ADMIN = @admin
+        WHERE LOGIN = @login AND APP = @app`,
+      { login, app: APP, admin }
+    );
+
+    await q("DELETE FROM dbo.KING_PORTAL_ORC_ACESSO WHERE LOGIN = @login", { login });
+    for (const acesso of acessos) {
+      await gravarConcessao(q, login, acesso, quem);
+    }
+
+    // Perfil é auditado junto da mudança crítica. Regravar a mesma flag não
+    // produz um evento enganoso de `acesso-alterado`.
+    if (adminMudou) {
+      await q(
+        `INSERT INTO dbo.KING_IDENTIDADE_AUDITORIA (LOGIN, APP, EVENTO, DETALHE)
+         VALUES (@login, @app, 'acesso-alterado', @detalhe)`,
+        {
+          login,
+          app: APP,
+          detalhe: `por ${quem ?? "?"}: ${JSON.stringify({ admin })}`.slice(0, 400),
+        }
+      );
+    }
+  });
+
+  // Mantém o padrão de definirAcessos: a autorização já foi confirmada no
+  // banco, e uma indisponibilidade da trilha secundária não desfaz o trabalho.
   await anotarPermissao(
     login,
     quem,
