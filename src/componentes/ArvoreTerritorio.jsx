@@ -97,6 +97,15 @@ export default function ArvoreTerritorio({
       aplicar([{ filial: no.codigo, centro: null }]);
       return;
     }
+    // Desmarcar a única filial que sobrava esvaziaria o território — e vazio
+    // é lido como "tudo" no resto do modelo, então `alternarFilialNaArvore`
+    // se recusa a fazer isso (de propósito, é o comportamento testado). Sem
+    // este desvio o clique parecia simplesmente não fazer nada; o certo é
+    // desligar o módulo inteiro, que é o que "não sobrou nenhum lugar" significa.
+    if (no.estado === "total" && quantidadeFiliais <= 1) {
+      onSemEscopo?.();
+      return;
+    }
     aplicar(alternarFilialNaArvore(territorio, catalogos, no.codigo, no.estado));
   }
 
@@ -104,6 +113,16 @@ export default function ArvoreTerritorio({
     if (emBranco) {
       setEmBranco(false);
       aplicar([{ filial: filialAtiva.id, centro: no.centroId }]);
+      return;
+    }
+    const marcadosNestaFilial =
+      filialAtivaNo?.estado === "total"
+        ? catalogos.centros.length
+        : centros.filter((c) => c.estado === "total").length;
+    // Mesmo caso do desvio em `alternarFilial`, um nível abaixo: último centro
+    // da última filial. Ver o comentário lá.
+    if (no.estado === "total" && marcadosNestaFilial <= 1 && quantidadeFiliais <= 1) {
+      onSemEscopo?.();
       return;
     }
     aplicar(
@@ -150,6 +169,14 @@ export default function ArvoreTerritorio({
       (centro) => filialAtivaNo?.estado === "total" || porCentro.get(centro.id)?.estado === "total"
     );
     if (!algumMarcado) return;
+    // Sem filtro, "Limpar" esvazia a filial inteira — se ela for a única com
+    // algo marcado, mesmo desvio de `alternarCentro`: desliga o módulo em vez
+    // de deixar o último centro preso marcado (vazio = tudo no resto do
+    // modelo, então a árvore nunca chega a devolver vazio sozinha).
+    if (!filtroCentrosAtivo && quantidadeFiliais <= 1) {
+      onSemEscopo?.();
+      return;
+    }
     let atual = territorio;
     for (const centro of centrosAlvo) {
       atual = alternarCentroNaArvore(atual, catalogos, filialAtiva.id, centro.id, true);
