@@ -30,6 +30,27 @@ export const EDITA = "edita";
 
 export const TUDO = { filial: null, centro: null };
 
+// Há dois formatos históricos para o mesmo significado: a tela antiga usava
+// lista vazia e o banco devolve a linha explícita (null, null). Centralizar a
+// leitura impede que uma parte da tela mostre "nada" enquanto outra salva
+// "tudo" — em permissão, essa ambiguidade vira elevação de acesso.
+export function territorioIrrestrito(territorio = []) {
+  return !territorio?.length || territorio.some((lugar) => lugar?.filial == null && lugar?.centro == null);
+}
+
+const chaveDoTerritorio = ({ filial, centro }) => `${filial ?? ""}|${centro ?? ""}`;
+
+function territorioCanonico(territorio = []) {
+  if (territorioIrrestrito(territorio)) return [TUDO];
+
+  const unicos = new Map();
+  for (const lugar of territorio) {
+    const normalizado = { filial: lugar?.filial ?? null, centro: lugar?.centro ?? null };
+    unicos.set(chaveDoTerritorio(normalizado), normalizado);
+  }
+  return [...unicos.values()];
+}
+
 const chaveDoLugar = (filial, centro) => `${filial ?? ""}|${centro ?? ""}`;
 const assinaturaDa = (matriz) => MODULOS.map((modulo) => matriz[modulo.id] ?? NADA).join(",");
 
@@ -119,9 +140,104 @@ export function areaVazia() {
   return { territorio: [TUDO], matriz: matrizVazia() };
 }
 
+// ============================================================================
+// LEITURA POR MÓDULO
+//
+// Mesma concessão, eixo trocado: em vez de "onde eu atuo + o que faço lá"
+// (área), "este módulo + onde eu o uso". A tela pede módulo por módulo, então
+// é esta forma que ela precisa — sem mexer no que é gravado.
+//
+// Cada módulo tem um território. O nível só é único quando todas as concessões
+// concordam; quando há mistura, fica `null` e as linhas originais acompanham o
+// cartão até uma escolha explícita uniformizá-las.
+// ============================================================================
+
+export function lerModulos(acessos = []) {
+  const porModulo = new Map(
+    MODULOS.map((modulo) => [modulo.id, { territorio: [], acessosOriginais: [] }])
+  );
+
+  for (const acesso of acessos) {
+    for (const moduloId of modulosDe(acesso)) {
+      const item = porModulo.get(moduloId);
+      if (!item) continue;
+      const lugar = { filial: acesso.filial ?? null, centro: acesso.centro ?? null };
+      if (!item.territorio.some((l) => l.filial === lugar.filial && l.centro === lugar.centro)) {
+        item.territorio.push(lugar);
+      }
+      // `modulo: null` é expandido aqui de propósito. Assim cada cartão pode
+      // ser alterado sem uma concessão-curinga preservada por outro módulo
+      // reabrir silenciosamente o acesso que a pessoa acabou de restringir.
+      item.acessosOriginais.push({
+        modulo: moduloId,
+        filial: lugar.filial,
+        centro: lugar.centro,
+        podeEditar: acesso.podeEditar === true,
+      });
+    }
+  }
+
+  const saida = {};
+  for (const modulo of MODULOS) {
+    const { territorio, acessosOriginais } = porModulo.get(modulo.id);
+    const niveis = new Set(acessosOriginais.map((acesso) => (acesso.podeEditar ? EDITA : VE)));
+    saida[modulo.id] = {
+      ligado: acessosOriginais.length > 0,
+      territorio: acessosOriginais.length ? territorioCanonico(territorio) : [],
+      // Nível misto não escolhe o mais forte: até a pessoa decidir uniformizar
+      // explicitamente, `gerarConcessoesDeModulos` devolve o recorte original.
+      nivel: niveis.size > 1 ? null : [...niveis][0] ?? VE,
+      acessosOriginais,
+    };
+  }
+  return saida;
+}
+
+/** Configuração por módulo → concessões, no formato que o servidor grava. */
+export function gerarConcessoesDeModulos(config = {}) {
+  const saida = new Map();
+
+  function adicionar(acesso) {
+    const normalizado = {
+      modulo: acesso.modulo ?? null,
+      filial: acesso.filial ?? null,
+      centro: acesso.centro ?? null,
+      podeEditar: acesso.podeEditar === true,
+    };
+    const chave = `${normalizado.modulo ?? ""}|${chaveDoTerritorio(normalizado)}`;
+    const existente = saida.get(chave);
+    // Se vier uma combinação redundante, conserva a mais permissiva — é a
+    // mesma regra usada na leitura e evita depender da ordem do lote no banco.
+    if (!existente?.podeEditar || normalizado.podeEditar) saida.set(chave, normalizado);
+  }
+
+  for (const modulo of MODULOS) {
+    const item = config[modulo.id];
+    if (!item?.ligado) continue;
+
+    if (item.nivel === null) {
+      // A tela ainda não escolheu transformar uma permissão mista em uniforme.
+      // Regravar o que já existia é a única opção que não promove nem rebaixa.
+      for (const acesso of item.acessosOriginais ?? []) adicionar(acesso);
+      continue;
+    }
+
+    const lugares = territorioCanonico(item.territorio);
+    for (const lugar of lugares) {
+      adicionar({
+        modulo: modulo.id,
+        filial: lugar.filial ?? null,
+        centro: lugar.centro ?? null,
+        podeEditar: item.nivel === EDITA,
+      });
+    }
+  }
+  return [...saida.values()];
+}
+
 const nomeDe = (catalogo, id) => catalogo?.find((item) => item.id === id)?.nome ?? id;
 
-function ondeDaArea(area, { filiais, centros } = {}) {
+export function ondeDaArea(area, { filiais, centros } = {}) {
   const asFiliais = [...new Set(area.territorio.map((l) => l.filial).filter(Boolean))];
   const osCentros = [...new Set(area.territorio.map((l) => l.centro).filter(Boolean))];
 
@@ -158,4 +274,153 @@ export function descreverAreas(areas = [], catalogos = {}) {
       return `Em ${onde}: ${acoes.join("; ")}.`;
     })
     .filter(Boolean);
+}
+
+// ============================================================================
+// ÁRVORE DE FILIAL × CENTRO
+//
+// Mesmo território de sempre (`[{ filial, centro }]`) — só a edição vira
+// árvore de duas alturas em vez de dois seletores soltos: marca a filial
+// inteira, ou expande e marca só alguns centros dela. Filial e centro são
+// dimensões independentes no ERP (um centro não pertence a uma filial só, o
+// mesmo centro serve várias), mas quem concede permissão pensa "nesta filial,
+// estes centros" — a árvore segue esse jeito de pensar, não o schema.
+//
+// Vazio continua valendo por "todas as filiais, todos os centros", igual aos
+// dois seletores que ela substitui — marcar algo é que estreita.
+// ============================================================================
+
+/**
+ * Território → linhas prontas para `LinhaConta`, dado quais filiais estão
+ * abertas. `forcarVazio` é usado só na transição "toda a empresa" → "escolher
+ * locais": em vez de já entrar com tudo marcado (pra pessoa ter que desmarcar
+ * uma por uma), a árvore mostra tudo desmarcado até o primeiro clique real —
+ * sem isso alterar o território guardado, que só muda nesse primeiro clique.
+ */
+export function nosDoTerritorio(territorio, catalogos, abertos, { forcarVazio = false } = {}) {
+  // Só a leitura é materializada. Sem interação, o round-trip continua
+  // preservando tanto (null, null) quanto (null, centro); no primeiro toggle,
+  // as funções abaixo expandem os curingas para permitir tirar uma filial só.
+  const materializado = forcarVazio ? [] : materializarTerritorio(territorio, catalogos);
+  const nos = [];
+
+  for (const filial of catalogos.filiais) {
+    const lugaresDaFilial = materializado.filter((lugar) => lugar.filial === filial.id);
+    const filialInteira = lugaresDaFilial.some((lugar) => lugar.centro == null);
+    const centrosMarcados = new Set(lugaresDaFilial.map((lugar) => lugar.centro).filter(Boolean));
+    const algumMarcado = filialInteira || centrosMarcados.size > 0;
+    const estado = filialInteira ? "total" : algumMarcado ? "parcial" : "vazio";
+    const aberto = abertos.has(filial.id);
+
+    nos.push({
+      codigo: filial.id,
+      descricao: filial.nome,
+      nivel: 0,
+      temFilhos: catalogos.centros.length > 0,
+      sintetica: true,
+      selecionavel: true,
+      aberto,
+      estado,
+      marcadosAbaixo: filialInteira ? catalogos.centros.length : centrosMarcados.size,
+    });
+
+    if (!aberto) continue;
+
+    for (const centro of catalogos.centros) {
+      const marcado = filialInteira || centrosMarcados.has(centro.id);
+      nos.push({
+        codigo: centro.id,
+        descricao: centro.nome,
+        nivel: 1,
+        temFilhos: false,
+        sintetica: false,
+        selecionavel: true,
+        estado: marcado ? "total" : "vazio",
+        filialId: filial.id,
+        centroId: centro.id,
+      });
+    }
+  }
+
+  return nos;
+}
+
+// Vazio marcado por uma filial de cada vez, pra poder tirar só uma sem perder
+// as outras implícitas em "tudo".
+function materializarTudo(catalogos) {
+  return catalogos.filiais.map((filial) => ({ filial: filial.id, centro: null }));
+}
+
+// Expande somente para a interação. `(null, centro)` significa o mesmo centro
+// em todas as filiais; sem esta etapa, desmarcá-lo em uma filial manteria o
+// curinga global e o clique não reduziria acesso nenhum.
+function materializarTerritorio(territorio, catalogos) {
+  if (territorioIrrestrito(territorio)) return materializarTudo(catalogos);
+
+  const materializado = [];
+  for (const lugar of territorioCanonico(territorio)) {
+    if (lugar.filial == null) {
+      for (const filial of catalogos.filiais) {
+        materializado.push({ filial: filial.id, centro: lugar.centro });
+      }
+    } else {
+      materializado.push(lugar);
+    }
+  }
+  return territorioCanonico(materializado);
+}
+
+// O inverso: todo mundo marcado inteiro é só outro jeito de dizer "tudo" — uma
+// linha em vez de uma por filial, igual ao resto do modelo já faz por módulo.
+function compactarSeTudo(territorio, catalogos) {
+  if (!catalogos.filiais.length) return territorio;
+  const todasInteiras = catalogos.filiais.every((filial) =>
+    territorio.some((lugar) => lugar.filial === filial.id && lugar.centro == null)
+  );
+  return todasInteiras ? [TUDO] : territorio;
+}
+
+/** Marca ou desmarca uma filial inteira (todos os centros dela de uma vez). */
+export function alternarFilialNaArvore(territorio, catalogos, filialId, estadoAtual) {
+  const base = materializarTerritorio(territorio, catalogos);
+  const semEssaFilial = base.filter((lugar) => lugar.filial !== filialId);
+  if (estadoAtual === "total") {
+    // Lista vazia é o formato legado de "tudo", nunca de "nada". O último
+    // território é removido desligando o módulo, não por esta árvore.
+    return semEssaFilial.length ? semEssaFilial : compactarSeTudo(base, catalogos);
+  }
+  return compactarSeTudo([...semEssaFilial, { filial: filialId, centro: null }], catalogos);
+}
+
+/**
+ * Marca ou desmarca um centro dentro de uma filial. Todos marcados compacta de
+ * volta em "filial inteira"; nenhum marcado tira a filial da lista.
+ */
+export function alternarCentroNaArvore(territorio, catalogos, filialId, centroId, marcadoAgora) {
+  const base = materializarTerritorio(territorio, catalogos);
+  const outrasFiliais = base.filter((lugar) => lugar.filial !== filialId);
+  const lugaresDaFilial = base.filter((lugar) => lugar.filial === filialId);
+  const filialInteira = lugaresDaFilial.some((lugar) => lugar.centro == null);
+
+  const centrosMarcados = new Set(
+    filialInteira ? catalogos.centros.map((centro) => centro.id) : lugaresDaFilial.map((lugar) => lugar.centro)
+  );
+
+  if (marcadoAgora) centrosMarcados.delete(centroId);
+  else centrosMarcados.add(centroId);
+
+  if (!centrosMarcados.size) {
+    // Pelo mesmo motivo da filial acima, não deixa o último recorte virar `[]`
+    // e ser reinterpretado como acesso irrestrito na gravação.
+    return outrasFiliais.length ? outrasFiliais : compactarSeTudo(base, catalogos);
+  }
+  if (centrosMarcados.size === catalogos.centros.length) {
+    return compactarSeTudo([...outrasFiliais, { filial: filialId, centro: null }], catalogos);
+  }
+  return [
+    ...outrasFiliais,
+    ...catalogos.centros
+      .filter((centro) => centrosMarcados.has(centro.id))
+      .map((centro) => ({ filial: filialId, centro: centro.id })),
+  ];
 }

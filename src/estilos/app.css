@@ -1227,12 +1227,14 @@ button {
 }
 
 .chip {
+  flex: 0 0 auto;
   padding: 4px 11px;
   border-radius: 999px;
   font-size: 11.5px;
   font-weight: 700;
   letter-spacing: 0.05em;
   text-transform: uppercase;
+  white-space: nowrap;
 }
 
 .chip--receita {
@@ -4052,9 +4054,10 @@ dialog::backdrop {
   margin-bottom: 12px;
 }
 
+/* Mesma largura da coluna de usuários logo abaixo — a busca é o campo dela,
+   não deveria parecer mais estreita ou mais larga que a lista que filtra. */
 .usuarios-topo .campo-busca {
-  flex: 1;
-  max-width: 340px;
+  flex: 0 1 320px;
 }
 
 .usuarios-topo__contagem {
@@ -4063,82 +4066,135 @@ dialog::backdrop {
   font-variant-numeric: tabular-nums;
 }
 
-.lista-usuarios {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.cartao-usuario {
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
-  background: var(--surface);
-  box-shadow: var(--shadow-panel);
-}
-
-/* Sem permissão nenhuma o usuário entra e não vê nada. Isso é um problema de
-   configuração, não um estado neutro. */
-.cartao-usuario.is-travado {
-  border-color: var(--warning);
-}
-
-.cartao-usuario > header {
+/* Mestre-detalhe: lista enxuta à esquerda, permissão completa de quem está
+   selecionado à direita. Ver "quem tem o quê" e editar "o que esta pessoa
+   tem" deixam de disputar o mesmo espaço vertical. */
+.usuarios-master-detalhe {
   display: grid;
-  grid-template-columns: minmax(180px, 260px) minmax(0, 1fr) auto auto;
-  align-items: center;
-  gap: 14px;
-  padding: 12px 16px;
+  grid-template-columns: 320px minmax(0, 1fr);
+  align-items: start;
+  gap: 20px;
 }
 
-.cartao-usuario__nome {
+.usuarios-lista {
+  max-height: min(70vh, 640px);
+  overflow-y: auto;
+}
+
+.usuario-linha {
+  width: 100%;
+}
+
+.usuario-linha__quem {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.usuario-linha__texto {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 1px;
   min-width: 0;
 }
 
-.cartao-usuario__nome strong {
+.usuario-linha__texto strong,
+.usuario-linha__texto code {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.cartao-usuario__nome code {
+.usuario-linha__texto code {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.selecao-item.usuario-linha.is-active .usuario-linha__texto code {
+  color: inherit;
+}
+
+.avatar-usuario {
+  flex: 0 0 auto;
+  width: 28px;
+  height: 28px;
+  display: grid;
+  place-items: center;
+  border-radius: 999px;
+  background: var(--accent-soft);
+  color: var(--accent-contraste);
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.avatar-usuario--grande {
+  width: 42px;
+  height: 42px;
+  font-size: 15px;
+}
+
+/* Um único selo por linha — a lista é para varrer, não para ler frase. */
+.chip--alerta {
+  background: var(--warning-soft);
+  color: var(--warning);
+}
+
+.usuarios-detalhe {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-width: 0;
+}
+
+.usuarios-detalhe__secao {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.usuarios-detalhe__rotulo {
+  margin: 0;
   color: var(--muted);
   font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
 }
 
-/* O que a pessoa pode, em uma linha — é a informação principal do cartão
-   fechado, então tem espaço e não é a menor coisa da linha. */
-/* Limitado em largura de texto: numa tela larga a coluna sobraria e a frase
-   ficaria boiando no meio do cartão, longe do nome a que se refere. */
-.cartao-usuario__resumo {
+.usuarios-detalhe__credencial {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.usuarios-detalhe__texto {
+  display: flex;
+  flex-direction: column;
   min-width: 0;
-  max-width: 52ch;
-  color: var(--text-soft);
+}
+
+.usuarios-detalhe__texto strong {
+  font-size: 15px;
+}
+
+.usuarios-detalhe__texto code {
+  color: var(--muted);
   font-size: 12px;
-  line-height: 1.35;
 }
 
-.cartao-usuario.is-travado .cartao-usuario__resumo {
-  color: var(--danger);
-  font-weight: 600;
-}
-
-.cartao-usuario__marcas,
-.cartao-usuario__acoes {
+/* Mesma convenção de cor da lista antiga: neutro pra rotina, âmbar pra
+   sensível (senha), vermelho pra destrutivo (remover) — só mudou de casa. */
+.acoes-usuario {
   display: flex;
   align-items: center;
   gap: 6px;
   flex-wrap: wrap;
 }
 
-/* Ações do usuário viravam quatro links de texto colados um no outro —
-   difícil separar "Tornar admin" de "Apagar senha" de relance. Botão com
-   borda própria deixa cada ação um alvo de clique claro, e a cor já avisa
-   o peso: neutro pra rotina, âmbar pra sensível (senha), vermelho pra
-   destrutivo (remover). */
-.cartao-usuario__acoes .botao-texto {
+.acoes-usuario .botao-texto {
   display: inline-flex;
   align-items: center;
   gap: 5px;
@@ -4150,73 +4206,59 @@ dialog::backdrop {
   font-size: 12px;
 }
 
-.cartao-usuario__acoes .botao-texto:hover:not(:disabled) {
+.acoes-usuario .botao-texto:hover:not(:disabled) {
   border-color: var(--accent);
   color: var(--accent);
   background: var(--accent-soft);
   text-decoration: none;
 }
 
-.cartao-usuario__acoes .botao-texto:disabled {
+.acoes-usuario .botao-texto:disabled {
   border-color: var(--border);
   background: var(--surface-soft);
   opacity: 0.55;
 }
 
-/* Apagar senha não é rotina (derruba sessão, obriga trocar no próximo
-   acesso) nem destrutivo permanente (não perde acesso nem dado) — aviso no
-   meio do caminho entre o botão neutro e o "Remover" vermelho. */
-.cartao-usuario__acoes .botao-texto--aviso {
+.acoes-usuario .botao-texto--aviso {
   border-color: var(--warning-soft);
   color: var(--warning);
 }
 
-.cartao-usuario__acoes .botao-texto--aviso:hover:not(:disabled) {
+.acoes-usuario .botao-texto--aviso:hover:not(:disabled) {
   border-color: var(--warning);
   background: var(--warning-soft);
   color: var(--warning);
 }
 
-.cartao-usuario__acoes .botao-texto--perigo {
+.acoes-usuario .botao-texto--perigo {
   border-color: var(--danger-soft);
   color: var(--danger);
 }
 
-.cartao-usuario__acoes .botao-texto--perigo:hover:not(:disabled) {
+.acoes-usuario .botao-texto--perigo:hover:not(:disabled) {
   border-color: var(--danger);
   background: var(--danger-soft);
   color: var(--danger);
 }
 
-.cartao-usuario__permissoes {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  padding: 14px 16px;
-  border-top: 1px solid var(--border);
-  background: var(--surface-soft);
-}
-
-/* O conteúdo não acompanha a largura da tela: uma concessão que diz "tudo"
-   esticada por 1400px vira uma faixa vazia com duas palavras nas pontas. */
-.cartao-usuario__permissoes > * {
-  max-width: 760px;
-}
-
 /* --- permissão: onde atua + o que faz ----------------------------------- */
 
+/* Sem moldura própria: cada módulo abaixo já é um cartão — outra borda em
+   volta de todos juntos só duplicaria a linha sem separar nada de verdade. */
 .editor-permissao {
   display: flex;
   flex-direction: column;
   gap: 16px;
-  padding: 14px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
-  background: var(--surface-soft);
 }
 
-.editor-permissao h4 {
-  margin: 0 0 8px;
+.editor-permissao__atalhos {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 0 2px;
+}
+
+.editor-permissao__atalhos-rotulo {
   color: var(--muted);
   font-size: 11.5px;
   font-weight: 700;
@@ -4224,41 +4266,98 @@ dialog::backdrop {
   text-transform: uppercase;
 }
 
-.editor-permissao__campos {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-  gap: 12px;
-}
-
-/* Cada área é um bloco fechado: o que separa "edita na KING&JOE" de "só vê na
-   MEN HUB" é a borda, não a leitura atenta. */
-.area-permissao {
+/* Lista de módulos: desligado é só nome + interruptor, ligado abre a
+   configuração ali mesmo. Um bloco só (borda por fora, linha por dentro) em
+   vez de oito cartões — a maioria das linhas fica fechada a maior parte do
+   tempo, então oito bordas repetidas seriam ruído, não estrutura. */
+.modulos-permissao {
   display: flex;
   flex-direction: column;
   gap: 12px;
-  padding: 12px;
+}
+
+.modulo-permissao {
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
   background: var(--surface);
+  box-shadow: var(--shadow-sm);
+  overflow: hidden;
 }
 
-.area-permissao__topo {
+/* Fundo diferente enquanto ligado — sinaliza "isto está configurado" mesmo
+   antes de ler o resto da linha, e a borda acompanha pra destacar o cartão
+   inteiro em vez de só o cabeçalho. */
+.modulo-permissao.is-ligado {
+  border-color: var(--accent);
+  background: var(--surface-soft);
+}
+
+.modulo-permissao__cabecalho {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
+  min-height: 48px;
+  padding: 0 16px;
 }
 
-.area-permissao__topo h4 {
-  margin: 0;
+.modulo-permissao.is-ligado .modulo-permissao__cabecalho {
+  border-bottom: 1px solid var(--border);
 }
 
-.area-permissao__rotulo {
+.modulo-permissao__titulo {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  flex-wrap: wrap;
-  gap: 10px;
+  gap: 9px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.modulo-permissao:not(.is-ligado) .modulo-permissao__titulo {
+  color: var(--text-soft);
+}
+
+/* Mesma peça visual do checkbox usado no resto do sistema (DRE, grupos) — só
+   sem texto ao lado, porque aqui o nome do módulo já vem antes, à esquerda. */
+.modulo-permissao__interruptor {
+  position: relative;
+  display: inline-flex;
+  cursor: pointer;
+}
+
+.modulo-permissao__interruptor input {
+  position: absolute;
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.modulo-permissao__interruptor input:checked + .checkbox-visual {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--on-dark);
+}
+
+.modulo-permissao__interruptor input:focus-visible + .checkbox-visual {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.modulo-permissao__config {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 14px 16px 16px;
+}
+
+.modulo-permissao__nivel {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.modulo-permissao__nivel-rotulo {
+  display: inline-block;
   margin-bottom: 6px;
   color: var(--muted);
   font-size: 11.5px;
@@ -4267,58 +4366,11 @@ dialog::backdrop {
   text-transform: uppercase;
 }
 
-.area-permissao__atalhos {
-  display: flex;
-  gap: 12px;
-  letter-spacing: 0;
-  text-transform: none;
-  font-weight: 400;
-}
-
-.editor-permissao__nova {
-  align-self: flex-start;
-}
-
-.matriz-modulos {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.matriz-linha {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  min-height: 38px;
-  padding: 0 10px;
-  border-radius: var(--radius-sm);
-}
-
-.matriz-linha:hover {
-  background: var(--surface-hover);
-}
-
-/* A faixa à esquerda diz o estado sem depender de ler o botão aceso — quem
-   confere uma permissão passa o olho pela coluna, não linha a linha. */
-.matriz-linha--ve {
-  box-shadow: inset 3px 0 0 var(--accent);
-}
-
-.matriz-linha--edita {
-  box-shadow: inset 3px 0 0 var(--success);
-}
-
-.matriz-linha__nome {
-  display: flex;
-  align-items: center;
-  gap: 9px;
-  min-width: 0;
-  font-size: 13px;
-}
-
-.matriz-linha--nada .matriz-linha__nome {
-  color: var(--muted);
+.arvore-territorio {
+  max-height: 260px;
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
 }
 
 .matriz-linha__estados {
@@ -4358,13 +4410,8 @@ dialog::backdrop {
 
 /* Edita é o estado que dá poder: cor própria para não se confundir com "vê"
    numa conferência rápida. */
-.matriz-linha--edita .matriz-estado.is-ativo {
+.matriz-estado--edita.is-ativo {
   background: var(--success-contraste);
-}
-
-.matriz-linha--nada .matriz-estado.is-ativo {
-  background: var(--border-strong);
-  color: var(--text);
 }
 
 .editor-permissao__rodape {
@@ -4396,10 +4443,945 @@ dialog::backdrop {
   color: var(--danger);
 }
 
-@media (max-width: 1100px) {
-  .cartao-usuario > header {
+@media (max-width: 900px) {
+  .usuarios-master-detalhe {
     grid-template-columns: 1fr;
-    gap: 8px;
+  }
+
+  .usuarios-lista {
+    max-height: none;
+  }
+}
+
+/* Refinamento da tela de usuários: uma superfície de configuração, módulos em
+   lista e território mestre-detalhe. Estas regras substituem a árvore de plano
+   de contas sem alterar os componentes compartilhados que ainda a utilizam. */
+.usuarios-master-detalhe {
+  grid-template-columns: clamp(300px, 23vw, 350px) minmax(0, 1fr);
+  gap: 18px;
+  margin-top: 18px;
+}
+
+.usuarios-coluna {
+  position: sticky;
+  top: 18px;
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  box-shadow: var(--shadow-panel);
+}
+
+.usuarios-coluna__topo {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  padding: 10px;
+  border-bottom: 1px solid var(--border);
+}
+
+.usuarios-busca,
+.escopo-territorio__busca {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  min-height: 38px;
+  padding: 0 10px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-md);
+  background: var(--surface-soft);
+  color: var(--muted);
+  transition: 0.14s ease;
+}
+
+.usuarios-busca:focus-within,
+.escopo-territorio__busca:focus-within {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+  color: var(--accent);
+}
+
+.usuarios-busca input,
+.escopo-territorio__busca input {
+  width: 100%;
+  min-width: 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+}
+
+.usuarios-busca input::placeholder,
+.escopo-territorio__busca input::placeholder {
+  color: var(--muted);
+}
+
+.usuarios-lista {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-height: min(calc(100vh - 270px), 680px);
+  padding: 6px;
+  overflow-y: auto;
+}
+
+.usuario-linha {
+  min-height: 56px;
+  padding: 7px 9px;
+  content-visibility: auto;
+  contain-intrinsic-size: 0 56px;
+}
+
+.usuario-linha .chip {
+  flex: 0 0 auto;
+  max-width: 118px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.usuario-linha__texto strong {
+  color: var(--text);
+  font-size: 13.5px;
+  font-weight: 650;
+}
+
+.selecao-item.usuario-linha.is-active .usuario-linha__texto strong,
+.selecao-item.usuario-linha.is-active .usuario-linha__texto code {
+  color: var(--accent-contraste);
+}
+
+.usuarios-detalhe {
+  gap: 0;
+  min-width: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  box-shadow: var(--shadow-panel);
+}
+
+.usuarios-detalhe__cabecalho {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 18px 20px;
+}
+
+.usuarios-detalhe__texto h2 {
+  margin: 0 0 3px;
+  color: var(--text);
+  font-size: 17px;
+  line-height: 1.2;
+}
+
+.usuarios-detalhe__secao {
+  display: flex;
+  gap: 14px;
+  padding: 18px 20px;
+  border-top: 1px solid var(--border);
+}
+
+.usuarios-detalhe__perfil {
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.usuarios-detalhe__secao-texto {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.usuarios-detalhe__secao-texto h3 {
+  margin: 0;
+  color: var(--text);
+  font-size: 14.5px;
+  font-weight: 700;
+}
+
+.usuarios-detalhe__secao-texto p {
+  max-width: 68ch;
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.usuarios-detalhe__modulos {
+  flex-direction: column;
+  gap: 14px;
+}
+
+.acoes-usuario {
+  justify-content: flex-end;
+}
+
+.acoes-usuario .botao {
+  min-height: 36px;
+  gap: 7px;
+  border-radius: var(--radius-md);
+  font-size: 12px;
+}
+
+.acoes-usuario .acao-credencial--senha {
+  color: var(--warning);
+}
+
+.acoes-usuario .acao-credencial--senha:hover:not(:disabled) {
+  border-color: var(--warning);
+  background: var(--warning-soft);
+  color: var(--warning);
+}
+
+.acoes-usuario .acao-credencial--perigo {
+  color: var(--danger);
+}
+
+.acoes-usuario .acao-credencial--perigo:hover:not(:disabled) {
+  border-color: var(--danger);
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+
+.matriz-linha__estados--largo {
+  align-self: flex-start;
+  gap: 3px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface-soft);
+}
+
+.matriz-linha__estados--largo .matriz-estado {
+  min-height: 31px;
+  min-width: 86px;
+  border-radius: var(--radius-sm);
+  white-space: nowrap;
+}
+
+.matriz-estado:disabled {
+  background: var(--disabled-bg);
+  color: var(--disabled-fg);
+  cursor: not-allowed;
+}
+
+.matriz-estado.is-ativo:disabled {
+  background: var(--accent-contraste);
+  color: var(--on-dark);
+}
+
+.usuarios-admin-total {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  margin: 0 20px 20px;
+  padding: 16px;
+  border-radius: var(--radius-md);
+  background: var(--accent-soft);
+  color: var(--text);
+}
+
+.usuarios-admin-total__icone {
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 999px;
+  background: var(--accent-contraste);
+  color: var(--on-dark);
+}
+
+.usuarios-admin-total strong {
+  display: block;
+  margin: 1px 0 4px;
+  font-size: 14.5px;
+}
+
+.usuarios-admin-total p {
+  max-width: 72ch;
+  margin: 0;
+  color: var(--text-soft);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.editor-permissao {
+  gap: 14px;
+}
+
+.editor-permissao__atalhos {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 10px 12px;
+  border-radius: var(--radius-md);
+  background: var(--surface-soft);
+}
+
+.editor-permissao__atalhos-texto,
+.editor-permissao__resumo,
+.modulo-permissao__config-texto {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.editor-permissao__atalhos-texto strong,
+.editor-permissao__resumo strong,
+.modulo-permissao__config-texto strong {
+  color: var(--text);
+  font-size: 12.5px;
+  font-weight: 700;
+}
+
+.editor-permissao__atalhos-texto small,
+.editor-permissao__resumo small,
+.modulo-permissao__config-texto small {
+  color: var(--muted);
+  font-size: 11.5px;
+  line-height: 1.4;
+}
+
+.editor-permissao__atalhos-acoes {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+
+.editor-permissao__atalhos-acoes .botao-texto {
+  min-height: 32px;
+  padding: 0 10px;
+  border-radius: var(--radius-sm);
+  font-size: 12px;
+}
+
+.editor-permissao__atalhos-acoes .botao-texto:hover {
+  background: var(--surface-hover);
+  text-decoration: none;
+}
+
+.modulos-permissao {
+  gap: 0;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+}
+
+.modulo-permissao,
+.modulo-permissao.is-ligado {
+  overflow: visible;
+  border: 0;
+  border-bottom: 1px solid var(--border);
+  border-radius: 0;
+  background: var(--surface);
+  box-shadow: none;
+}
+
+.modulo-permissao:last-child {
+  border-bottom: 0;
+}
+
+.modulo-permissao__cabecalho {
+  min-height: 62px;
+  padding: 0;
+  border-bottom: 0;
+}
+
+.modulo-permissao.is-ligado .modulo-permissao__cabecalho {
+  border-bottom: 0;
+}
+
+.modulo-permissao__abrir {
+  display: grid;
+  grid-template-columns: 34px minmax(150px, 1fr) auto 20px;
+  align-items: center;
+  gap: 10px;
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 62px;
+  padding: 8px 10px 8px 14px;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+}
+
+.modulo-permissao__abrir:hover:not(:disabled) {
+  background: var(--surface-hover);
+}
+
+.modulo-permissao__abrir:disabled {
+  color: var(--text-soft);
+  cursor: default;
+}
+
+.modulo-permissao__abrir > svg {
+  color: var(--muted);
+  transform: rotate(0);
+  transition: transform 0.16s ease;
+}
+
+.modulo-permissao.is-aberto .modulo-permissao__abrir > svg {
+  transform: rotate(90deg);
+}
+
+.modulo-permissao__icone {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border-radius: var(--radius-sm);
+  background: var(--surface-soft);
+  color: var(--muted);
+}
+
+.modulo-permissao.is-ligado .modulo-permissao__icone {
+  background: var(--accent-soft);
+  color: var(--accent-contraste);
+}
+
+.modulo-permissao__texto {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.modulo-permissao__texto strong {
+  overflow: hidden;
+  color: inherit;
+  font-size: 14px;
+  font-weight: 650;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.modulo-permissao__texto small {
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 11.5px;
+  font-weight: 400;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.modulo-permissao__nivel-resumo {
+  color: var(--text-soft);
+  font-size: 11.5px;
+  font-weight: 650;
+  white-space: nowrap;
+}
+
+.modulo-permissao__nivel-resumo.is-edicao {
+  color: var(--success);
+}
+
+.modulo-permissao__interruptor {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex: 0 0 auto;
+  min-height: 44px;
+  margin-right: 14px;
+  color: var(--muted);
+  font-size: 11.5px;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.modulo-permissao__interruptor input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+}
+
+.modulo-permissao__trilho {
+  position: relative;
+  width: 36px;
+  height: 20px;
+  border: 1px solid var(--border-strong);
+  border-radius: 999px;
+  background: var(--surface-soft);
+  transition: 0.16s ease;
+}
+
+.modulo-permissao__trilho > span {
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 12px;
+  height: 12px;
+  border-radius: 999px;
+  background: var(--muted);
+  transition: transform 0.16s ease, background 0.16s ease;
+}
+
+.modulo-permissao__interruptor input:checked + .modulo-permissao__trilho {
+  border-color: var(--accent-contraste);
+  background: var(--accent-contraste);
+}
+
+.modulo-permissao__interruptor input:checked + .modulo-permissao__trilho > span {
+  background: var(--on-dark);
+  transform: translateX(16px);
+}
+
+.modulo-permissao__interruptor input:focus-visible + .modulo-permissao__trilho {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.modulo-permissao__config {
+  gap: 18px;
+  padding: 18px;
+  border-top: 1px solid var(--border);
+  background: var(--surface-soft);
+}
+
+.modulo-permissao__config-topo {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+}
+
+.modulo-permissao__escopo {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+}
+
+.modulo-permissao__aviso {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  margin: 0;
+  padding: 11px 12px;
+  border-radius: var(--radius-md);
+  background: var(--warning-soft);
+  color: var(--warning);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.modulo-permissao__aviso svg {
+  flex: 0 0 auto;
+  margin-top: 1px;
+}
+
+.escopo-territorio {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.escopo-territorio__modo {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+}
+
+.escopo-territorio__modo button {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 3px;
+  min-height: 54px;
+  padding: 9px 12px;
+  border: 0;
+  border-right: 1px solid var(--border);
+  background: transparent;
+  color: var(--text-soft);
+  text-align: left;
+  cursor: pointer;
+  transition: 0.14s ease;
+}
+
+.escopo-territorio__modo button:last-child {
+  border-right: 0;
+}
+
+.escopo-territorio__modo button:hover {
+  background: var(--surface-hover);
+}
+
+.escopo-territorio__modo button.is-ativo {
+  background: var(--accent-soft);
+  color: var(--accent-contraste);
+}
+
+.escopo-territorio__modo span {
+  font-size: 12.5px;
+  font-weight: 700;
+}
+
+.escopo-territorio__modo small {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.escopo-territorio__grade {
+  display: grid;
+  grid-template-columns: minmax(230px, 0.8fr) minmax(320px, 1.2fr);
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+}
+
+.escopo-territorio__painel {
+  min-width: 0;
+}
+
+.escopo-territorio__painel + .escopo-territorio__painel {
+  border-left: 1px solid var(--border);
+}
+
+.escopo-territorio__cabecalho {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-height: 52px;
+  padding: 9px 12px;
+  border-bottom: 1px solid var(--border);
+}
+
+.escopo-territorio__cabecalho > span:first-child {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.escopo-territorio__cabecalho strong {
+  overflow: hidden;
+  color: var(--text);
+  font-size: 12.5px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.escopo-territorio__cabecalho small {
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.escopo-territorio__acoes {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.escopo-territorio__acoes .botao-texto {
+  min-height: 28px;
+  padding: 0 7px;
+  border-radius: var(--radius-sm);
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.escopo-territorio__acoes .botao-texto:hover {
+  background: var(--surface-hover);
+  text-decoration: none;
+}
+
+.escopo-territorio__busca {
+  min-height: 34px;
+  margin: 9px 10px;
+}
+
+.escopo-territorio__lista {
+  max-height: 300px;
+  padding: 0 6px 7px;
+  overflow-y: auto;
+}
+
+.escopo-filial {
+  display: flex;
+  align-items: stretch;
+  min-height: 48px;
+  border-radius: var(--radius-sm);
+  content-visibility: auto;
+  contain-intrinsic-size: 0 48px;
+}
+
+.escopo-filial:hover {
+  background: var(--surface-hover);
+}
+
+.escopo-filial.is-ativa {
+  background: var(--accent-soft);
+}
+
+.escopo-filial__check {
+  display: grid;
+  place-items: center;
+  flex: 0 0 40px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+}
+
+.escopo-filial__check[aria-checked="true"] .checkbox-visual,
+.escopo-filial__check[aria-checked="mixed"] .checkbox-visual,
+.escopo-filial__check .checkbox-visual.is-parcial {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: var(--on-dark);
+}
+
+.escopo-filial__abrir {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto 16px;
+  align-items: center;
+  gap: 8px;
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 6px 8px 6px 0;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+}
+
+.escopo-filial__abrir > svg {
+  color: var(--muted);
+}
+
+.escopo-filial__texto {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.escopo-filial__texto strong,
+.escopo-filial__texto small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.escopo-filial__texto strong {
+  font-size: 12.5px;
+  font-weight: 600;
+}
+
+.escopo-filial__texto small {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.escopo-filial code,
+.escopo-centro code {
+  color: var(--muted);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.escopo-centro {
+  position: relative;
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 9px;
+  min-height: 40px;
+  padding: 6px 9px;
+  border-radius: var(--radius-sm);
+  color: var(--text-soft);
+  font-size: 12px;
+  cursor: pointer;
+  content-visibility: auto;
+  contain-intrinsic-size: 0 40px;
+}
+
+.escopo-centro:hover {
+  background: var(--surface-hover);
+  color: var(--text);
+}
+
+.escopo-centro.is-marcado {
+  background: var(--accent-soft);
+  color: var(--text);
+}
+
+.escopo-centro input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+}
+
+.escopo-centro input:checked + .checkbox-visual {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: var(--on-dark);
+}
+
+.escopo-centro input:focus-visible + .checkbox-visual {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.escopo-territorio__vazio {
+  margin: 0;
+  padding: 14px 10px;
+  color: var(--muted);
+  font-size: 12px;
+  text-align: center;
+}
+
+.escopo-territorio__resumo {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: var(--radius-md);
+  background: var(--accent-soft);
+  color: var(--text-soft);
+  font-size: 12px;
+}
+
+.escopo-territorio__resumo svg {
+  flex: 0 0 auto;
+  color: var(--accent-contraste);
+}
+
+.editor-permissao__rodape {
+  position: sticky;
+  bottom: 12px;
+  z-index: 4;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 14px;
+  padding: 11px 12px;
+  border: 0;
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  box-shadow: var(--shadow-panel);
+}
+
+.editor-permissao__estado {
+  padding: 4px 9px;
+  border-radius: 999px;
+  background: var(--success-soft);
+  color: var(--success);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.editor-permissao__estado.is-pendente {
+  background: var(--warning-soft);
+  color: var(--warning);
+}
+
+@media (max-width: 1180px) {
+  .usuarios-master-detalhe {
+    grid-template-columns: 290px minmax(0, 1fr);
+  }
+
+  .escopo-territorio__grade {
+    grid-template-columns: 1fr;
+  }
+
+  .escopo-territorio__painel + .escopo-territorio__painel {
+    border-top: 1px solid var(--border);
+    border-left: 0;
+  }
+
+  .escopo-territorio__lista {
+    max-height: 230px;
+  }
+}
+
+@media (max-width: 900px) {
+  .usuarios-master-detalhe {
+    grid-template-columns: 1fr;
+  }
+
+  .usuarios-coluna {
+    position: static;
+  }
+
+  .usuarios-lista {
+    max-height: 280px;
+  }
+}
+
+@media (max-width: 680px) {
+  .usuarios-detalhe__cabecalho,
+  .usuarios-detalhe__perfil,
+  .modulo-permissao__config-topo,
+  .editor-permissao__atalhos {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .acoes-usuario {
+    justify-content: flex-start;
+  }
+
+  .modulo-permissao__abrir {
+    grid-template-columns: 34px minmax(0, 1fr) 18px;
+  }
+
+  .modulo-permissao__nivel-resumo {
+    display: none;
+  }
+
+  .modulo-permissao__interruptor > span:first-child {
+    display: none;
+  }
+
+  .escopo-territorio__modo {
+    grid-template-columns: 1fr;
+  }
+
+  .escopo-territorio__modo button {
+    border-right: 0;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .escopo-territorio__modo button:last-child {
+    border-bottom: 0;
+  }
+
+  .editor-permissao__rodape {
+    grid-template-columns: 1fr;
+  }
+
+  .editor-permissao__rodape .botao {
+    width: 100%;
   }
 }
 

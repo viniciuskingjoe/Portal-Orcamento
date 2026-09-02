@@ -24,6 +24,18 @@ export function formatarPercentual(valor) {
   return `${percentual.format(Math.trunc(numero * 100) / 100)}%`;
 }
 
+// Duas letras do nome, para avatar. Nome de uma palavra só usa as duas
+// primeiras letras — "V" sozinho num círculo não identifica ninguém.
+export function iniciais(nome) {
+  const partes = String(nome ?? "")
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean);
+  if (!partes.length) return null;
+  if (partes.length === 1) return partes[0].slice(0, 2).toUpperCase();
+  return (partes[0][0] + partes[partes.length - 1][0]).toUpperCase();
+}
+
 const SO_MILHAR = /^\d{1,3}(\.\d{3})+$/;
 
 // Lê número no formato pt-BR.

@@ -5,11 +5,18 @@ import { MODULOS } from "../src/dados/modulos.js";
 import {
   EDITA,
   NADA,
+  TUDO,
   VE,
+  alternarCentroNaArvore,
+  alternarFilialNaArvore,
   descreverAreas,
   gerarConcessoes,
+  gerarConcessoesDeModulos,
   lerAreas,
+  lerModulos,
   matrizVazia,
+  nosDoTerritorio,
+  territorioIrrestrito,
 } from "../src/dados/territorio.js";
 
 const RECEITA = "receita-vendas";
@@ -198,4 +205,276 @@ test("filial e centro juntos aparecem na mesma frase", () => {
 
 test("área sem módulo marcado não vira frase", () => {
   assert.deepEqual(descreverAreas([{ territorio: [], matriz: matrizVazia() }], CATALOGOS), []);
+});
+
+// --------------------------------------------------------------------------
+// Leitura por módulo (tela de permissão módulo-primeiro)
+// --------------------------------------------------------------------------
+
+test("lerModulos: sem acesso nenhum, os oito módulos vêm desligados", () => {
+  const modulos = lerModulos([]);
+  assert.equal(MODULOS.every((m) => modulos[m.id].ligado === false), true);
+});
+
+test("lerModulos: concessão de um módulo só liga aquele módulo", () => {
+  const modulos = lerModulos([
+    { modulo: RECEITA, filial: "000001", centro: "020", podeEditar: true },
+  ]);
+  assert.equal(modulos[RECEITA].ligado, true);
+  assert.deepEqual(modulos[RECEITA].territorio, [{ filial: "000001", centro: "020" }]);
+  assert.equal(modulos[RECEITA].nivel, EDITA);
+  assert.equal(modulos[DEDUCOES].ligado, false);
+});
+
+test("lerModulos: módulo nulo liga todos os módulos com o mesmo lugar", () => {
+  const modulos = lerModulos([{ modulo: null, filial: "000001", centro: null, podeEditar: false }]);
+  assert.equal(
+    MODULOS.every((m) => modulos[m.id].ligado && modulos[m.id].nivel === VE),
+    true
+  );
+});
+
+test("gerarConcessoesDeModulos: módulo desligado não gera concessão", () => {
+  const modulos = lerModulos([]);
+  assert.deepEqual(gerarConcessoesDeModulos(modulos), []);
+});
+
+test("lerModulos + gerarConcessoesDeModulos: ida e volta preserva a permissão", () => {
+  const original = [
+    { modulo: RECEITA, filial: "000001", centro: "020", podeEditar: true },
+    { modulo: RECEITA, filial: "000025", centro: null, podeEditar: true },
+  ];
+  const concessoes = gerarConcessoesDeModulos(lerModulos(original));
+  assert.equal(lerAreas(concessoes).length, lerAreas(original).length);
+  assert.deepEqual(lerAreas(concessoes), lerAreas(original));
+});
+
+test("lerModulos + gerarConcessoesDeModulos: acesso global usa a forma canônica e sobrevive", () => {
+  const original = [{ modulo: RECEITA, filial: null, centro: null, podeEditar: false }];
+  const modulos = lerModulos(original);
+
+  assert.equal(territorioIrrestrito([]), true, "aceita o legado vazio");
+  assert.equal(territorioIrrestrito([TUDO]), true, "aceita a linha explícita");
+  assert.deepEqual(modulos[RECEITA].territorio, [TUDO]);
+  assert.deepEqual(gerarConcessoesDeModulos(modulos), original);
+});
+
+test("lerModulos + gerarConcessoesDeModulos: nível misto não promove quem só vê", () => {
+  const original = [
+    { modulo: RECEITA, filial: "000001", centro: null, podeEditar: true },
+    { modulo: RECEITA, filial: "000025", centro: null, podeEditar: false },
+  ];
+  const modulos = lerModulos(original);
+
+  assert.equal(modulos[RECEITA].nivel, null);
+  assert.deepEqual(gerarConcessoesDeModulos(modulos), original);
+
+  modulos[RECEITA] = { ...modulos[RECEITA], nivel: VE };
+  assert.equal(
+    gerarConcessoesDeModulos(modulos).every((acesso) => acesso.podeEditar === false),
+    true,
+    "só fica uniforme depois de uma escolha explícita"
+  );
+});
+
+// --------------------------------------------------------------------------
+// Árvore de filial × centro
+// --------------------------------------------------------------------------
+
+const CATALOGOS_ARVORE = {
+  filiais: [
+    { id: "000001", nome: "KING&JOE" },
+    { id: "000025", nome: "MEN HUB" },
+  ],
+  centros: [
+    { id: "020", nome: "E-COMMERCE" },
+    { id: "030", nome: "ADMINISTRAÇÃO" },
+  ],
+};
+
+test("alternarFilialNaArvore: marcar uma filial vazia (excluída) adiciona ela inteira", () => {
+  const territorio = alternarFilialNaArvore(
+    [{ filial: "000025", centro: "020" }],
+    CATALOGOS_ARVORE,
+    "000001",
+    "vazio"
+  );
+  assert.deepEqual(territorio, [
+    { filial: "000025", centro: "020" },
+    { filial: "000001", centro: null },
+  ]);
+});
+
+test("alternarFilialNaArvore: desmarcar tira a filial e preserva as outras", () => {
+  const territorio = alternarFilialNaArvore(
+    [
+      { filial: "000001", centro: null },
+      { filial: "000025", centro: "020" },
+    ],
+    CATALOGOS_ARVORE,
+    "000001",
+    "total"
+  );
+  assert.deepEqual(territorio, [{ filial: "000025", centro: "020" }]);
+});
+
+// Vazio já vale "tudo" — desmarcar uma filial a partir daí não pode apagar as
+// outras junto, então a primeira mexida materializa todo mundo por extenso.
+test("alternarFilialNaArvore: desmarcar uma filial a partir de 'tudo' materializa as outras", () => {
+  for (const irrestrito of [[], [TUDO]]) {
+    const territorio = alternarFilialNaArvore(irrestrito, CATALOGOS_ARVORE, "000025", "total");
+    assert.deepEqual(territorio, [{ filial: "000001", centro: null }]);
+  }
+});
+
+test("alternarFilialNaArvore: marcar de volta a última filial que faltava compacta em 'tudo'", () => {
+  const territorio = alternarFilialNaArvore(
+    [{ filial: "000001", centro: null }],
+    CATALOGOS_ARVORE,
+    "000025",
+    "vazio"
+  );
+  assert.deepEqual(territorio, [TUDO]);
+});
+
+test("alternarCentroNaArvore: marcar um centro numa filial vazia (excluída) adiciona só ele", () => {
+  const territorio = alternarCentroNaArvore(
+    [{ filial: "000025", centro: null }],
+    CATALOGOS_ARVORE,
+    "000001",
+    "020",
+    false
+  );
+  assert.deepEqual(territorio, [
+    { filial: "000025", centro: null },
+    { filial: "000001", centro: "020" },
+  ]);
+});
+
+test("alternarCentroNaArvore: desmarcar um centro a partir de 'tudo' materializa as outras filiais", () => {
+  const territorio = alternarCentroNaArvore([], CATALOGOS_ARVORE, "000001", "020", true);
+  assert.deepEqual(territorio, [
+    { filial: "000025", centro: null },
+    { filial: "000001", centro: "030" },
+  ]);
+});
+
+test("alternarCentroNaArvore: marcar todos os centros compacta em filial inteira", () => {
+  const territorio = alternarCentroNaArvore(
+    [{ filial: "000001", centro: "020" }],
+    CATALOGOS_ARVORE,
+    "000001",
+    "030",
+    false
+  );
+  assert.deepEqual(territorio, [{ filial: "000001", centro: null }]);
+});
+
+test("alternarCentroNaArvore: desmarcar um centro de filial inteira materializa o resto", () => {
+  const territorio = alternarCentroNaArvore(
+    [{ filial: "000001", centro: null }],
+    CATALOGOS_ARVORE,
+    "000001",
+    "020",
+    true
+  );
+  assert.deepEqual(territorio, [{ filial: "000001", centro: "030" }]);
+});
+
+test("alternarCentroNaArvore: o último centro não vira vazio, pois vazio significa tudo", () => {
+  const territorio = alternarCentroNaArvore(
+    [{ filial: "000001", centro: "020" }],
+    CATALOGOS_ARVORE,
+    "000001",
+    "020",
+    true
+  );
+  assert.deepEqual(territorio, [{ filial: "000001", centro: "020" }]);
+});
+
+// Vazio é "tudo" pra quem grava — a árvore precisa mostrar isso como tudo
+// marcado, não como nada marcado (senão parece que ninguém tem acesso).
+test("nosDoTerritorio: vazio mostra as duas filiais já marcadas 'total'", () => {
+  const nos = nosDoTerritorio([], CATALOGOS_ARVORE, new Set());
+  assert.equal(nos.length, 2);
+  assert.equal(
+    nos.every((no) => no.nivel === 0 && no.estado === "total" && !no.aberto),
+    true
+  );
+});
+
+test("nosDoTerritorio: vazio expandido mostra os centros também marcados", () => {
+  const nos = nosDoTerritorio([], CATALOGOS_ARVORE, new Set(["000001"]));
+  const centros = nos.filter((no) => no.nivel === 1);
+  assert.equal(centros.length, 2);
+  assert.equal(
+    centros.every((no) => no.estado === "total"),
+    true
+  );
+});
+
+test("nosDoTerritorio: linha explícita de tudo também mostra tudo marcado", () => {
+  const nos = nosDoTerritorio([TUDO], CATALOGOS_ARVORE, new Set(["000001"]));
+  assert.equal(
+    nos.every((no) => no.estado === "total"),
+    true
+  );
+});
+
+test("nosDoTerritorio: centro curinga aparece marcado em todas as filiais e materializa no toggle", () => {
+  const curinga = [{ filial: null, centro: "020" }];
+  const nos = nosDoTerritorio(curinga, CATALOGOS_ARVORE, new Set(["000001", "000025"]));
+  const filiais = nos.filter((no) => no.nivel === 0);
+  const centros020 = nos.filter((no) => no.nivel === 1 && no.codigo === "020");
+
+  assert.equal(filiais.every((no) => no.estado === "parcial" && no.marcadosAbaixo === 1), true);
+  assert.equal(centros020.every((no) => no.estado === "total"), true);
+  assert.deepEqual(gerarConcessoesDeModulos(lerModulos([
+    { modulo: RECEITA, filial: null, centro: "020", podeEditar: false },
+  ])), [
+    { modulo: RECEITA, filial: null, centro: "020", podeEditar: false },
+  ]);
+
+  assert.deepEqual(
+    alternarCentroNaArvore(curinga, CATALOGOS_ARVORE, "000001", "020", true),
+    [{ filial: "000025", centro: "020" }]
+  );
+  assert.deepEqual(
+    alternarFilialNaArvore(curinga, CATALOGOS_ARVORE, "000001", "parcial"),
+    [
+      { filial: "000025", centro: "020" },
+      { filial: "000001", centro: null },
+    ]
+  );
+});
+
+test("nosDoTerritorio: filial inteira aparece 'total', centros marcados quando expande", () => {
+  const nos = nosDoTerritorio(
+    [{ filial: "000001", centro: null }],
+    CATALOGOS_ARVORE,
+    new Set(["000001"])
+  );
+  const filial = nos.find((no) => no.nivel === 0 && no.codigo === "000001");
+  assert.equal(filial.estado, "total");
+  const centros = nos.filter((no) => no.nivel === 1);
+  assert.equal(centros.length, 2);
+  assert.equal(
+    centros.every((no) => no.estado === "total"),
+    true
+  );
+});
+
+test("nosDoTerritorio: um centro marcado deixa a filial 'parcial'", () => {
+  const nos = nosDoTerritorio(
+    [{ filial: "000001", centro: "020" }],
+    CATALOGOS_ARVORE,
+    new Set(["000001"])
+  );
+  const filial = nos.find((no) => no.nivel === 0);
+  assert.equal(filial.estado, "parcial");
+  assert.equal(filial.marcadosAbaixo, 1);
+  const centro020 = nos.find((no) => no.nivel === 1 && no.codigo === "020");
+  const centro030 = nos.find((no) => no.nivel === 1 && no.codigo === "030");
+  assert.equal(centro020.estado, "total");
+  assert.equal(centro030.estado, "vazio");
 });

@@ -11,6 +11,12 @@ const DESENHOS = {
       <path d="M5 12h14" />
     </>
   ),
+  search: (
+    <>
+      <circle cx="11" cy="11" r="7" />
+      <path d="m20 20-4-4" />
+    </>
+  ),
   trash: (
     <>
       <path d="M4 7h16" />

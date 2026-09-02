@@ -1,259 +1,350 @@
 import { useEffect, useState } from "react";
 
+import ArvoreTerritorio from "./ArvoreTerritorio.jsx";
 import Icone from "./Icone.jsx";
-import Seletor from "./Seletor.jsx";
 import ModalConfirmacao from "./ModalConfirmacao.jsx";
 import { MODULOS } from "../dados/modulos.js";
 import {
   EDITA,
-  NADA,
+  TUDO,
   VE,
-  areaVazia,
-  descreverAreas,
-  gerarConcessoes,
-  lerAreas,
-  matrizVazia,
+  gerarConcessoesDeModulos,
+  lerModulos,
+  territorioIrrestrito,
 } from "../dados/territorio.js";
 
-// ============================================================================
-// PERMISSÃO POR ÁREA
-//
-// Cada área responde duas perguntas: ONDE a pessoa atua e O QUE faz lá. Várias
-// áreas somam, que é o que permite "edita na KING&JOE, só vê na MEN HUB" —
-// impossível com um território só.
-//
-// A tela antiga pedia módulo, filial e centro juntos e concedia o produto
-// cartesiano: três módulos, duas filiais e quatro centros viravam 24 linhas que
-// depois ninguém relia.
-//
-// Grava exatamente as mesmas concessões — muda só a autoria.
-// ============================================================================
-
-const ESTADOS = [
-  { valor: NADA, rotulo: "—", titulo: "Sem acesso a este módulo" },
-  { valor: VE, rotulo: "vê", titulo: "Vê os valores, não lança" },
-  { valor: EDITA, rotulo: "edita", titulo: "Vê e lança" },
+const NIVEIS = [
+  {
+    valor: VE,
+    rotulo: "Somente visualizar",
+    titulo: "Pode consultar os valores, mas não pode lançar nem alterar",
+  },
+  {
+    valor: EDITA,
+    rotulo: "Pode editar",
+    titulo: "Pode consultar, lançar e alterar valores",
+  },
 ];
 
-function LinhaModulo({ modulo, estado, onAlternar }) {
-  return (
-    <div className={`matriz-linha matriz-linha--${estado}`}>
-      <span className="matriz-linha__nome">
-        <Icone nome={modulo.icone} tamanho={16} />
-        {modulo.titulo}
-      </span>
-
-      {/* Três botões em vez de um que cicla: com o ciclo, ir de "vê" para
-          "nada" passa por "edita" — numa tela de permissão esse é o deslize que
-          ninguém percebe ter feito. */}
-      <span className="matriz-linha__estados" role="group" aria-label={modulo.titulo}>
-        {ESTADOS.map((opcao) => (
-          <button
-            key={opcao.valor}
-            type="button"
-            className={`matriz-estado ${estado === opcao.valor ? "is-ativo" : ""}`}
-            aria-pressed={estado === opcao.valor}
-            title={opcao.titulo}
-            onClick={() => onAlternar(opcao.valor)}
-          >
-            {opcao.rotulo}
-          </button>
-        ))}
-      </span>
-    </div>
-  );
+function assinaturaDasConcessoes(lista = []) {
+  return lista
+    .map(
+      (acesso) =>
+        `${acesso.modulo ?? "*"}|${acesso.filial ?? "*"}|${acesso.centro ?? "*"}|${acesso.podeEditar ? "1" : "0"}`
+    )
+    .sort()
+    .join("\n");
 }
 
-function Area({ area, indice, total, catalogos, onMudar, onRemover }) {
-  // Lista vazia = todas. É o "tudo" que o modelo de concessão entende por nulo.
-  const filiais = [...new Set(area.territorio.map((l) => l.filial).filter(Boolean))];
-  const centros = [...new Set(area.territorio.map((l) => l.centro).filter(Boolean))];
+function resumoDoTerritorio(territorio = [], catalogos) {
+  if (territorioIrrestrito(territorio)) return "Todas as filiais e centros";
 
-  const trocarLugares = (novasFiliais, novosCentros) => {
-    const territorio = [];
-    (novasFiliais.length ? novasFiliais : [null]).forEach((filial) => {
-      (novosCentros.length ? novosCentros : [null]).forEach((centro) => {
-        territorio.push({ filial, centro });
-      });
-    });
-    onMudar({ ...area, territorio });
-  };
+  const filiais = [...new Set(territorio.map((lugar) => lugar.filial).filter(Boolean))];
+  const filiaisInteiras = new Set(
+    territorio.filter((lugar) => lugar.filial && lugar.centro == null).map((lugar) => lugar.filial)
+  );
+  const centrosGerais = new Set(
+    territorio.filter((lugar) => lugar.filial == null && lugar.centro).map((lugar) => lugar.centro)
+  );
 
-  const marcarTodos = (estado) => {
-    const matriz = matrizVazia();
-    MODULOS.forEach((modulo) => {
-      matriz[modulo.id] = estado;
+  if (!filiais.length && centrosGerais.size) {
+    return `${centrosGerais.size} ${centrosGerais.size === 1 ? "centro" : "centros"} em todas as filiais`;
+  }
+
+  if (filiais.length === 1) {
+    const filial = catalogos.filiais.find((item) => item.id === filiais[0]);
+    if (filiaisInteiras.has(filiais[0])) return `${filial?.nome ?? filiais[0]} · todos os centros`;
+    const quantidade = new Set(
+      territorio
+        .filter((lugar) => lugar.filial === filiais[0] && lugar.centro)
+        .map((lugar) => lugar.centro)
+    ).size;
+    return `${filial?.nome ?? filiais[0]} · ${quantidade} ${quantidade === 1 ? "centro" : "centros"}`;
+  }
+
+  const algumaParcial = filiais.some((filial) => !filiaisInteiras.has(filial));
+  return `${filiais.length} filiais${algumaParcial ? " · centros específicos" : " · todos os centros"}`;
+}
+
+function rotuloDoNivel(config) {
+  if (!config.ligado) return "Sem acesso";
+  if (config.nivel === EDITA) return "Pode editar";
+  if (config.nivel === VE) return "Somente visualiza";
+  return "Níveis diferentes";
+}
+
+function LinhaModuloPermissao({
+  modulo,
+  config,
+  catalogos,
+  aberto,
+  onAbrir,
+  onMudar,
+  somenteLeitura,
+}) {
+  function alternarAcesso(evento) {
+    const ligado = evento.target.checked;
+    onMudar({
+      ...config,
+      ligado,
+      territorio: ligado && !config.territorio.length ? [TUDO] : config.territorio,
     });
-    onMudar({ ...area, matriz });
-  };
+    onAbrir(ligado);
+  }
 
   return (
-    <div className="area-permissao">
-      <div className="area-permissao__topo">
-        <h4>{total > 1 ? `Área ${indice + 1}` : "Onde atua"}</h4>
-        {total > 1 ? (
-          <button
-            type="button"
-            className="botao-texto botao-texto--perigo"
-            onClick={onRemover}
-            title="Remover esta área"
-          >
-            Remover área
-          </button>
-        ) : null}
-      </div>
-
-      <div className="editor-permissao__campos">
-        <label>
-          <span>Filial</span>
-          <Seletor
-            multiplo
-            rotuloTodos="todas as filiais"
-            valor={filiais}
-            opcoes={catalogos.filiais.map((item) => ({ valor: item.id, rotulo: item.nome }))}
-            aoEscolher={(novas) => trocarLugares(novas, centros)}
-            buscaVazia="Nenhuma filial com esse nome."
-          />
-        </label>
-        <label>
-          <span>Centro de custo</span>
-          <Seletor
-            multiplo
-            rotuloTodos="todos os centros"
-            valor={centros}
-            opcoes={catalogos.centros.map((item) => ({
-              valor: item.id,
-              rotulo: item.nome,
-              detalhe: item.id,
-            }))}
-            aoEscolher={(novos) => trocarLugares(filiais, novos)}
-            buscaVazia="Nenhum centro com esse nome."
-          />
-        </label>
-      </div>
-
-      <div className="area-permissao__oque">
-        <span className="area-permissao__rotulo">
-          O que faz aqui
-          {/* Marcar oito módulos um a um para dar leitura geral é o caso mais
-              comum, e o mais chato. */}
-          <span className="area-permissao__atalhos">
-            <button type="button" className="botao-texto" onClick={() => marcarTodos(VE)}>
-              tudo: vê
-            </button>
-            <button type="button" className="botao-texto" onClick={() => marcarTodos(EDITA)}>
-              tudo: edita
-            </button>
-            <button type="button" className="botao-texto" onClick={() => marcarTodos(NADA)}>
-              limpar
-            </button>
+    <div
+      className={`modulo-permissao ${config.ligado ? "is-ligado" : ""} ${aberto ? "is-aberto" : ""}`}
+    >
+      <div className="modulo-permissao__cabecalho">
+        <button
+          type="button"
+          className="modulo-permissao__abrir"
+          aria-expanded={aberto}
+          disabled={!config.ligado}
+          onClick={() => onAbrir(!aberto)}
+        >
+          <span className="modulo-permissao__icone">
+            <Icone nome={modulo.icone} tamanho={17} />
           </span>
-        </span>
+          <span className="modulo-permissao__texto">
+            <strong>{modulo.titulo}</strong>
+            <small>
+              {config.ligado ? resumoDoTerritorio(config.territorio, catalogos) : "Ative para configurar"}
+            </small>
+          </span>
+          <span
+            className={`modulo-permissao__nivel-resumo ${config.nivel === EDITA ? "is-edicao" : ""}`}
+          >
+            {rotuloDoNivel(config)}
+          </span>
+          <Icone nome="chevron" tamanho={17} />
+        </button>
 
-        <div className="matriz-modulos">
-          {MODULOS.map((modulo) => (
-            <LinhaModulo
-              key={modulo.id}
-              modulo={modulo}
-              estado={area.matriz[modulo.id] ?? NADA}
-              onAlternar={(estado) =>
-                onMudar({ ...area, matriz: { ...area.matriz, [modulo.id]: estado } })
-              }
-            />
-          ))}
-        </div>
+        <label className="modulo-permissao__interruptor">
+          <span>Acesso</span>
+          <input
+            type="checkbox"
+            role="switch"
+            checked={config.ligado}
+            disabled={somenteLeitura}
+            aria-label={`Acesso ao módulo ${modulo.titulo}`}
+            onChange={alternarAcesso}
+          />
+          <span className="modulo-permissao__trilho" aria-hidden="true">
+            <span />
+          </span>
+        </label>
       </div>
+
+      {aberto && config.ligado ? (
+        <div className="modulo-permissao__config">
+          <div className="modulo-permissao__config-topo">
+            <span className="modulo-permissao__config-texto">
+              <strong>Permissão no módulo</strong>
+              <small>Defina se a pessoa apenas consulta ou também altera valores.</small>
+            </span>
+            <span
+              className="matriz-linha__estados matriz-linha__estados--largo"
+              role="group"
+              aria-label={`Permissão em ${modulo.titulo}`}
+            >
+              {NIVEIS.map((opcao) => (
+                <button
+                  key={opcao.valor}
+                  type="button"
+                  className={`matriz-estado ${opcao.valor === EDITA ? "matriz-estado--edita" : ""} ${config.nivel === opcao.valor ? "is-ativo" : ""}`}
+                  aria-pressed={config.nivel === opcao.valor}
+                  disabled={somenteLeitura}
+                  title={opcao.titulo}
+                  onClick={() => onMudar({ ...config, nivel: opcao.valor })}
+                >
+                  {opcao.rotulo}
+                </button>
+              ))}
+            </span>
+          </div>
+
+          {config.nivel == null ? (
+            <p className="modulo-permissao__aviso">
+              <Icone nome="info" tamanho={16} />
+              Este módulo tem permissões diferentes conforme o local. Escolha um nível acima para
+              unificar antes de alterar as filiais e centros de custo.
+            </p>
+          ) : (
+            <div className="modulo-permissao__escopo">
+              <span className="modulo-permissao__config-texto">
+                <strong>Filiais e centros de custo</strong>
+                <small>Use acesso total ou escolha o escopo por filial.</small>
+              </span>
+              <ArvoreTerritorio
+                territorio={config.territorio}
+                catalogos={catalogos}
+                somenteLeitura={somenteLeitura}
+                onMudar={(territorio) => onMudar({ ...config, territorio })}
+                onSemEscopo={() => {
+                  onMudar({ ...config, ligado: false });
+                  onAbrir(false);
+                }}
+              />
+            </div>
+          )}
+        </div>
+      ) : null}
     </div>
   );
 }
 
-export default function EditorPermissao({ usuario, catalogos, onSalvar }) {
-  const [areas, setAreas] = useState(() => {
-    const lidas = lerAreas(usuario.acessos ?? []);
-    return lidas.length ? lidas : [areaVazia()];
+export default function EditorPermissao({ usuario, catalogos, onSalvar, onAlteracao, somenteLeitura = false }) {
+  const [inicial] = useState(() => {
+    const modulos = lerModulos(usuario.acessos ?? []);
+    return {
+      modulos,
+      assinatura: assinaturaDasConcessoes(gerarConcessoesDeModulos(modulos)),
+    };
   });
+  const [modulos, setModulos] = useState(inicial.modulos);
+  const [assinaturaSalva, setAssinaturaSalva] = useState(inicial.assinatura);
+  const [moduloAberto, setModuloAberto] = useState(null);
   const [salvando, setSalvando] = useState(false);
   const [confirmandoZerar, setConfirmandoZerar] = useState(false);
 
-  // Trocar de usuário sem fechar o painel precisa recarregar, senão a matriz
-  // mostrada é a da pessoa anterior.
-  useEffect(() => {
-    const lidas = lerAreas(usuario.acessos ?? []);
-    setAreas(lidas.length ? lidas : [areaVazia()]);
-  }, [usuario.login, usuario.acessos]);
-
-  const concessoes = gerarConcessoes(areas);
-  const frases = descreverAreas(areas, catalogos);
-  // Tirar toda a permissão de quem tinha alguma tem efeito quase igual ao de
-  // remover a pessoa do portal — e remover pede confirmação. Salvar vazio sem
-  // perguntar é um clique de distância de deixar alguém sem acesso.
+  const concessoes = gerarConcessoesDeModulos(modulos);
+  const assinaturaAtual = assinaturaDasConcessoes(concessoes);
+  const alterado = assinaturaAtual !== assinaturaSalva;
+  const ativos = MODULOS.filter((modulo) => modulos[modulo.id]?.ligado);
+  const editaveis = ativos.filter((modulo) => modulos[modulo.id]?.nivel === EDITA).length;
+  const apenasVe = ativos.filter((modulo) => modulos[modulo.id]?.nivel === VE).length;
+  const mistos = ativos.filter((modulo) => modulos[modulo.id]?.nivel == null).length;
   const vaiZerar = !concessoes.length && (usuario.acessos ?? []).length > 0;
+
+  useEffect(() => {
+    onAlteracao?.(alterado);
+    return () => onAlteracao?.(false);
+  }, [alterado, onAlteracao]);
 
   async function salvar() {
     setSalvando(true);
     try {
-      await onSalvar(concessoes);
-      setConfirmandoZerar(false);
+      const salvo = await onSalvar(concessoes);
+      if (salvo !== false) {
+        setAssinaturaSalva(assinaturaAtual);
+        setConfirmandoZerar(false);
+      }
     } finally {
       setSalvando(false);
     }
   }
 
+  function aplicarATodos(nivel) {
+    setModulos((atuais) => {
+      const novo = {};
+      for (const modulo of MODULOS) {
+        novo[modulo.id] = nivel
+          ? { ...atuais[modulo.id], ligado: true, territorio: [TUDO], nivel }
+          : { ...atuais[modulo.id], ligado: false };
+      }
+      return novo;
+    });
+    if (!nivel) setModuloAberto(null);
+  }
+
   return (
     <div className="editor-permissao">
-      {areas.map((area, indice) => (
-        <Area
-          key={indice}
-          area={area}
-          indice={indice}
-          total={areas.length}
-          catalogos={catalogos}
-          onMudar={(nova) => setAreas((atuais) => atuais.map((a, i) => (i === indice ? nova : a)))}
-          onRemover={() => setAreas((atuais) => atuais.filter((_, i) => i !== indice))}
-        />
-      ))}
+      <div className="editor-permissao__atalhos">
+        <span className="editor-permissao__atalhos-texto">
+          <strong>Aplicar a todos</strong>
+          <small>Atalhos para configurar os oito módulos de uma vez.</small>
+        </span>
+        <span className="editor-permissao__atalhos-acoes">
+          <button
+            type="button"
+            className="botao-texto"
+            disabled={somenteLeitura}
+            onClick={() => aplicarATodos(VE)}
+          >
+            Somente visualizar
+          </button>
+          <button
+            type="button"
+            className="botao-texto"
+            disabled={somenteLeitura}
+            onClick={() => aplicarATodos(EDITA)}
+          >
+            Pode editar
+          </button>
+          <button
+            type="button"
+            className="botao-texto botao-texto--perigo"
+            disabled={somenteLeitura}
+            onClick={() => aplicarATodos(null)}
+          >
+            Remover todos
+          </button>
+        </span>
+      </div>
 
-      <button
-        type="button"
-        className="botao botao--secundario botao--compacto editor-permissao__nova"
-        onClick={() => setAreas((atuais) => [...atuais, areaVazia()])}
-      >
-        <Icone nome="plus" tamanho={15} />
-        Adicionar área
-      </button>
+      <div className="modulos-permissao">
+        {MODULOS.map((modulo) => (
+          <LinhaModuloPermissao
+            key={modulo.id}
+            modulo={modulo}
+            config={modulos[modulo.id]}
+            catalogos={catalogos}
+            aberto={moduloAberto === modulo.id}
+            onAbrir={(abrir) => setModuloAberto(abrir ? modulo.id : null)}
+            somenteLeitura={somenteLeitura}
+            onMudar={(novo) =>
+              setModulos((atuais) => ({
+                ...atuais,
+                [modulo.id]: novo,
+              }))
+            }
+          />
+        ))}
+      </div>
 
-      <div className="editor-permissao__rodape">
-        {/* A frase é o que a pessoa vai poder; a contagem de concessões descreve
-            o banco e não ajuda a conferir. */}
-        <div className="editor-permissao__previa">
-          {frases.length ? (
-            frases.map((frase, indice) => <p key={indice}>{frase}</p>)
+      <div className={`editor-permissao__rodape ${alterado ? "is-alterado" : ""}`}>
+        <span className="editor-permissao__resumo">
+          <strong>
+            {ativos.length} de {MODULOS.length} módulos com acesso
+          </strong>
+          {ativos.length ? (
+            <small>
+              {editaveis ? `${editaveis} ${editaveis === 1 ? "permite" : "permitem"} editar` : ""}
+              {editaveis && (apenasVe || mistos) ? " · " : ""}
+              {apenasVe ? `${apenasVe} ${apenasVe === 1 ? "é" : "são"} somente leitura` : ""}
+              {mistos ? `${editaveis || apenasVe ? " · " : ""}${mistos} com níveis por local` : ""}
+            </small>
           ) : (
-            <p>
-              Nenhum módulo marcado — salvar assim <strong>tira todo o acesso</strong> desta pessoa.
-            </p>
+            <small>Esta pessoa não verá dados do orçamento.</small>
           )}
-        </div>
+        </span>
+
+        <span className={`editor-permissao__estado ${alterado ? "is-pendente" : ""}`}>
+          {alterado ? "Alterações não salvas" : "Permissões atualizadas"}
+        </span>
+
         <button
           type="button"
           className="botao botao--primario botao--compacto"
           onClick={() => (vaiZerar ? setConfirmandoZerar(true) : salvar())}
-          disabled={salvando}
+          disabled={salvando || !alterado || somenteLeitura}
         >
-          {salvando ? "Salvando…" : "Salvar permissão"}
+          {salvando ? "Salvando…" : "Salvar alterações"}
         </button>
       </div>
 
       {confirmandoZerar ? (
         <ModalConfirmacao
           nome={usuario.nome}
-          titulo="Tirar toda a permissão"
-          verbo="tirar a permissão de"
-          rotuloConfirmar="Tirar permissão"
+          titulo="Remover todos os acessos"
+          verbo="remover as permissões de"
+          rotuloConfirmar="Remover acessos"
           mensagem={
             <>
-              <strong>{usuario.nome}</strong> continua com acesso ao portal, mas não vê nem lança
-              nada até receber permissão de novo.
+              <strong>{usuario.nome}</strong> continua entrando no portal, mas não verá nem poderá
+              alterar dados até receber uma nova permissão.
             </>
           }
           onConfirmar={salvar}

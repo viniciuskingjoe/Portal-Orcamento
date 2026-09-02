@@ -1,16 +1,5 @@
 import Icone from "./Icone.jsx";
-
-// Duas letras do nome, para o avatar. Nome de uma palavra só usa as duas
-// primeiras letras — "V" sozinho num círculo não identifica ninguém.
-function iniciais(nome) {
-  const partes = String(nome ?? "")
-    .trim()
-    .split(/\s+/)
-    .filter(Boolean);
-  if (!partes.length) return null;
-  if (partes.length === 1) return partes[0].slice(0, 2).toUpperCase();
-  return (partes[0][0] + partes[partes.length - 1][0]).toUpperCase();
-}
+import { iniciais } from "../lib/formato.js";
 
 function ItemNav({ id, titulo, icone, badge, ativo, onNavegar }) {
   return (

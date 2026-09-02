@@ -1,14 +1,15 @@
 import { useEffect, useMemo, useState } from "react";
 
+import Botao from "../componentes/Botao.jsx";
 import Cabecalho from "../componentes/Cabecalho.jsx";
 import Icone from "../componentes/Icone.jsx";
 import EditorPermissao from "../componentes/EditorPermissao.jsx";
+import Modal from "../componentes/Modal.jsx";
 import ModalConfirmacao from "../componentes/ModalConfirmacao.jsx";
 import { AvisoErro, Carregando } from "../componentes/Estados.jsx";
 import { MODULOS } from "../dados/modulos.js";
-import {
-  resumirAcessos,
-} from "../dados/permissoes.js";
+import { resumirAcessos } from "../dados/permissoes.js";
+import { iniciais } from "../lib/formato.js";
 import { api } from "../lib/api.js";
 
 // ============================================================================
@@ -18,10 +19,160 @@ import { api } from "../lib/api.js";
 // coisas são separadas de propósito: o AD diz quem existe na empresa, o portal
 // diz quem orça o quê.
 //
-// A tela mostra o resumo do acesso SEM precisar expandir. Quem administra
-// precisa varrer a lista e achar o errado, não abrir doze cartões para
-// descobrir quem ficou sem permissão.
+// Mestre-detalhe em vez de doze cartões abertos ao mesmo tempo: a lista à
+// esquerda é só nome, login e um status — quem administra varre e acha o
+// errado sem ler frase nenhuma; escolher alguém abre a permissão dela por
+// completo à direita, sem precisar expandir/recolher.
 // ============================================================================
+
+// Um status por vez, do mais importante para o mais rotineiro — a lista
+// compacta só tem espaço para um selo, não para acumular todos os que se
+// aplicam.
+function statusUsuario(usuario) {
+  if (usuario.situacao !== "ativo") return { texto: "inativo", classe: "chip--despesa" };
+  if (usuario.inativoNoCadastro) return { texto: "fora do AD", classe: "chip--despesa" };
+  if (usuario.admin) return { texto: "admin", classe: "chip--receita" };
+  if (usuario.semSenhaDoPortal) return { texto: "1º acesso pendente", classe: "chip--leitura" };
+  if (!usuario.acessos.length) return { texto: "sem acesso", classe: "chip--alerta" };
+  return null;
+}
+
+// Cabeçalho + ações + editor de permissão do usuário escolhido na lista. Fica
+// sempre visível para quem está selecionado — nada para expandir ou fechar.
+function UsuarioDetalhe({
+  usuario,
+  euMesmo,
+  catalogos,
+  onAlternarAdmin,
+  onRedefinirSenha,
+  onRemover,
+  onSalvarPermissao,
+  onAlteracao,
+  temAlteracoes,
+}) {
+  return (
+    <>
+      <header className="usuarios-detalhe__cabecalho">
+        <div className="usuarios-detalhe__credencial">
+          <span className="avatar-usuario avatar-usuario--grande">{iniciais(usuario.nome) ?? "?"}</span>
+          <span className="usuarios-detalhe__texto">
+            <h2>{usuario.nome}</h2>
+            <code>{usuario.login}</code>
+          </span>
+          {usuario.semSenhaDoPortal ? (
+            <span
+              className="chip chip--leitura"
+              title="Nunca entrou. No primeiro acesso usa a senha da rede e define a senha do portal."
+            >
+              1º acesso pendente
+            </span>
+          ) : null}
+          {usuario.situacao !== "ativo" ? <span className="chip chip--despesa">inativo</span> : null}
+          {/* O cadastro é compartilhado: quem saiu do AD fica inativo lá e
+              perde o acesso a todos os portais de uma vez. */}
+          {usuario.inativoNoCadastro ? <span className="chip chip--despesa">fora do AD</span> : null}
+        </div>
+
+        <span className="acoes-usuario" aria-label="Ações da credencial">
+          {/* Redefinir derruba as sessões abertas da pessoa e obriga troca no
+              próximo acesso — por isso passa por confirmação em vez de agir
+              no clique. */}
+          <Botao variante="secundario" className="botao--compacto acao-credencial--senha" onClick={onRedefinirSenha}>
+            <Icone nome="chave" tamanho={15} />
+            Redefinir senha
+          </Botao>
+
+          <Botao
+            variante="secundario"
+            className="botao--compacto acao-credencial--perigo"
+            disabled={euMesmo}
+            title={euMesmo ? "Você não pode remover o seu próprio acesso" : undefined}
+            onClick={onRemover}
+          >
+            <Icone nome="trash" tamanho={15} />
+            Remover
+          </Botao>
+        </span>
+      </header>
+
+      <section className="usuarios-detalhe__secao usuarios-detalhe__perfil">
+        <span className="usuarios-detalhe__secao-texto">
+          <h3>Perfil de acesso</h3>
+          <p>Administrador configura o portal inteiro; usuário recebe acesso por módulo.</p>
+        </span>
+        <span className="matriz-linha__estados matriz-linha__estados--largo" role="group" aria-label="Perfil de acesso">
+          <button
+            type="button"
+            className={`matriz-estado ${!usuario.admin ? "is-ativo" : ""}`}
+            aria-pressed={!usuario.admin}
+            disabled={euMesmo || temAlteracoes}
+            title={
+              euMesmo
+                ? "Você não pode alterar o seu próprio perfil de acesso"
+                : temAlteracoes
+                  ? "Salve ou descarte as alterações dos módulos antes de trocar o perfil"
+                  : undefined
+            }
+            onClick={() => usuario.admin && onAlternarAdmin()}
+          >
+            Usuário
+          </button>
+          <button
+            type="button"
+            className={`matriz-estado matriz-estado--edita ${usuario.admin ? "is-ativo" : ""}`}
+            aria-pressed={usuario.admin}
+            disabled={euMesmo || temAlteracoes}
+            title={
+              euMesmo
+                ? "Você não pode alterar o seu próprio perfil de acesso"
+                : temAlteracoes
+                  ? "Salve ou descarte as alterações dos módulos antes de trocar o perfil"
+                  : undefined
+            }
+            onClick={() => !usuario.admin && onAlternarAdmin()}
+          >
+            Administrador
+          </button>
+        </span>
+      </section>
+
+      {usuario.admin ? (
+        <section className="usuarios-admin-total">
+          <span className="usuarios-admin-total__icone">
+            <Icone nome="check" tamanho={18} />
+          </span>
+          <span>
+            <strong>Acesso total</strong>
+            <p>
+              Administradores visualizam e editam todos os módulos, filiais e centros de custo.
+              As permissões granulares ficam guardadas, mas não são usadas enquanto este perfil
+              estiver ativo.
+            </p>
+          </span>
+        </section>
+      ) : (
+        <section className="usuarios-detalhe__secao usuarios-detalhe__modulos">
+          <span className="usuarios-detalhe__secao-texto">
+            <h3>Acesso por módulo</h3>
+            <p>
+              {euMesmo
+                ? "Você pode conferir o seu próprio acesso aqui, mas não alterá-lo — evita se autobloquear sem querer."
+                : "Ative um módulo e abra a linha para definir locais e permissão."}
+            </p>
+          </span>
+          <EditorPermissao
+            key={usuario.login}
+            usuario={usuario}
+            catalogos={catalogos}
+            onSalvar={onSalvarPermissao}
+            onAlteracao={onAlteracao}
+            somenteLeitura={euMesmo}
+          />
+        </section>
+      )}
+    </>
+  );
+}
 
 // Vazio em qualquer dimensão vale por "todos" — e é assim que a concessão sem
 // restrição continua sendo uma linha só, em vez de 42.
@@ -30,6 +181,7 @@ function BuscaNoAd({ jaTem, onAdicionar }) {
   const [achados, setAchados] = useState([]);
   const [buscando, setBuscando] = useState(false);
   const [erro, setErro] = useState("");
+  const [adicionandoLogin, setAdicionandoLogin] = useState(null);
 
   // Espera a digitação parar: o AD é consultado a cada busca, e uma consulta por
   // tecla castigaria o diretório sem precisar.
@@ -40,16 +192,26 @@ function BuscaNoAd({ jaTem, onAdicionar }) {
       setErro("");
       return undefined;
     }
+    let ativo = true;
     const id = setTimeout(() => {
       setBuscando(true);
       setErro("");
       api
         .buscarNoAd(alvo)
-        .then(setAchados)
-        .catch((falha) => setErro(falha.message))
-        .finally(() => setBuscando(false));
+        .then((resultado) => {
+          if (ativo) setAchados(resultado);
+        })
+        .catch((falha) => {
+          if (ativo) setErro(falha.message);
+        })
+        .finally(() => {
+          if (ativo) setBuscando(false);
+        });
     }, 400);
-    return () => clearTimeout(id);
+    return () => {
+      ativo = false;
+      clearTimeout(id);
+    };
   }, [termo]);
 
   const curto = termo.trim().length > 0 && termo.trim().length < 2;
@@ -74,23 +236,29 @@ function BuscaNoAd({ jaTem, onAdicionar }) {
 
       {achados.map((usuario) => {
         const dentro = jaTem.has(usuario.login);
+        const adicionandoEste = adicionandoLogin === usuario.login;
         return (
           <button
             type="button"
             key={usuario.login}
             className="selecao-item selecao-item--conta"
-            disabled={dentro}
+            disabled={dentro || adicionandoLogin != null}
             title={dentro ? "Já tem acesso ao portal" : "Dar acesso ao portal"}
-            onClick={() => {
-              onAdicionar(usuario);
-              setTermo("");
+            onClick={async () => {
+              setAdicionandoLogin(usuario.login);
+              try {
+                const adicionado = await onAdicionar(usuario);
+                if (adicionado !== false) setTermo("");
+              } finally {
+                setAdicionandoLogin(null);
+              }
             }}
           >
             <code>{usuario.login}</code>
             <span>
               {usuario.nome}
               {usuario.email ? ` · ${usuario.email}` : ""}
-              {dentro ? " · já tem acesso" : ""}
+              {dentro ? " · já tem acesso" : adicionandoEste ? " · adicionando…" : ""}
             </span>
           </button>
         );
@@ -103,12 +271,17 @@ export default function TelaUsuarios({ filiais, centros, sessao, onVoltar }) {
   const [usuarios, setUsuarios] = useState([]);
   const [carregando, setCarregando] = useState(true);
   const [erro, setErro] = useState("");
-  const [aberto, setAberto] = useState(null);
+  // Login escolhido na lista à esquerda — não precisa sobreviver a um F5, só à
+  // sessão de trabalho.
+  const [selecionado, setSelecionado] = useState(null);
   const [filtro, setFiltro] = useState("");
+  const [adicionando, setAdicionando] = useState(false);
   // Remover derruba a sessão aberta da pessoa na hora. Um clique de distância é
   // pouco para uma ação que tira alguém do sistema no meio do trabalho.
   const [aRemover, setARemover] = useState(null);
   const [aRedefinir, setARedefinir] = useState(null);
+  const [rascunhoAlterado, setRascunhoAlterado] = useState(false);
+  const [selecaoPendente, setSelecaoPendente] = useState(null);
 
   const catalogos = useMemo(
     () => ({
@@ -123,7 +296,11 @@ export default function TelaUsuarios({ filiais, centros, sessao, onVoltar }) {
 
   async function recarregar() {
     try {
-      setUsuarios(await api.usuarios());
+      const recebidos = await api.usuarios();
+      setUsuarios(recebidos);
+      setSelecionado((atual) =>
+        recebidos.some((usuario) => usuario.login === atual) ? atual : (recebidos[0]?.login ?? null)
+      );
       setErro("");
     } catch (falha) {
       setErro(falha.message);
@@ -136,7 +313,14 @@ export default function TelaUsuarios({ filiais, centros, sessao, onVoltar }) {
     recarregar();
   }, []);
 
-  const executar = (promessa) => promessa.then(recarregar).catch((falha) => setErro(falha.message));
+  const executar = (promessa) =>
+    promessa
+      .then(recarregar)
+      .then(() => true)
+      .catch((falha) => {
+        setErro(falha.message);
+        return false;
+      });
 
   const termo = filtro.trim().toLowerCase();
   const visiveis = termo
@@ -149,6 +333,21 @@ export default function TelaUsuarios({ filiais, centros, sessao, onVoltar }) {
   const semPermissao = usuarios.filter((usuario) => !usuario.admin && !usuario.acessos.length).length;
   const semSenhaDoPortal = usuarios.filter((usuario) => usuario.semSenhaDoPortal);
   const jaTem = useMemo(() => new Set(usuarios.map((usuario) => usuario.login)), [usuarios]);
+
+  // Deriva quem está aberto à direita em vez de sincronizar com um efeito: se
+  // a escolha atual some do filtro (ou ainda não existe), cai no primeiro
+  // visível sem precisar de um estado próprio para isso.
+  const usuarioSelecionado =
+    usuarios.find((usuario) => usuario.login === selecionado) ?? visiveis[0] ?? null;
+
+  function escolherUsuario(login) {
+    if (login === usuarioSelecionado?.login) return;
+    if (rascunhoAlterado) {
+      setSelecaoPendente(login);
+      return;
+    }
+    setSelecionado(login);
+  }
 
   if (carregando) {
     return (
@@ -164,11 +363,15 @@ export default function TelaUsuarios({ filiais, centros, sessao, onVoltar }) {
         titulo="Usuários"
         subtitulo="Quem entra vem do Active Directory; o que cada um pode fazer é definido aqui"
         onVoltar={onVoltar}
+        acao={
+          <Botao onClick={() => setAdicionando(true)}>
+            <Icone nome="plus" tamanho={18} />
+            Adicionar usuário
+          </Botao>
+        }
       />
 
       {erro ? <AvisoErro mensagem={erro} onTentarDeNovo={recarregar} /> : null}
-
-      <BuscaNoAd jaTem={jaTem} onAdicionar={(usuario) => executar(api.darAcesso(usuario))} />
 
       {/* Enquanto alguém está com a senha padrão, a conta dele está aberta a
           quem souber a padrão. Fica no topo, junto com o outro aviso, para ser
@@ -198,178 +401,159 @@ export default function TelaUsuarios({ filiais, centros, sessao, onVoltar }) {
         </p>
       ) : null}
 
-      <div className="usuarios-topo">
-        <label className="campo-busca">
-          <input
-            value={filtro}
-            onChange={(evento) => setFiltro(evento.target.value)}
-            placeholder="Filtrar por nome ou login…"
-            aria-label="Filtrar usuários"
-          />
-        </label>
-        <span className="usuarios-topo__contagem">
-          {visiveis.length} de {usuarios.length}
-        </span>
-      </div>
+      {!usuarios.length ? (
+        <p className="sem-contas">
+          Nenhum usuário com acesso ainda. Use “Adicionar usuário” para buscar no Active Directory.
+        </p>
+      ) : (
+        <div className="usuarios-master-detalhe">
+          <aside className="usuarios-coluna">
+            <div className="usuarios-coluna__topo">
+              <label className="usuarios-busca">
+                <Icone nome="search" tamanho={16} />
+                <input
+                  value={filtro}
+                  onChange={(evento) => setFiltro(evento.target.value)}
+                  placeholder="Buscar por nome ou login…"
+                  aria-label="Buscar usuário"
+                />
+              </label>
+              <span className="usuarios-topo__contagem">
+                {visiveis.length} de {usuarios.length}
+              </span>
+            </div>
 
-      <div className="lista-usuarios">
-        {visiveis.map((usuario) => {
-          const euMesmo = usuario.login === sessao?.login;
-          const expandido = aberto === usuario.login;
-          const travado = !usuario.admin && !usuario.acessos.length;
-
-          return (
-            <section
-              className={`cartao-usuario ${travado ? "is-travado" : ""}`}
-              key={usuario.login}
-            >
-              <header>
-                <span className="cartao-usuario__nome">
-                  <strong>{usuario.nome}</strong>
-                  <code>{usuario.login}</code>
-                </span>
-
-                {/* O resumo é a informação principal do cartão fechado. */}
-                <span className="cartao-usuario__resumo">
-                  {resumirAcessos(usuario, catalogos)}
-                </span>
-
-                <span className="cartao-usuario__marcas">
-                  {usuario.admin ? <span className="chip chip--receita">admin</span> : null}
-                  {usuario.semSenhaDoPortal ? (
-                    <span
-                      className="chip chip--leitura"
-                      title="Nunca entrou. No primeiro acesso usa a senha da rede e define a senha do portal."
-                    >
-                      1º acesso pendente
+            <nav className="usuarios-lista" aria-label="Usuários">
+              {visiveis.map((usuario) => {
+                const status = statusUsuario(usuario);
+                return (
+                  <button
+                    type="button"
+                    key={usuario.login}
+                    className={`selecao-item usuario-linha ${usuarioSelecionado?.login === usuario.login ? "is-active" : ""}`}
+                    title={resumirAcessos(usuario, catalogos)}
+                    onClick={() => escolherUsuario(usuario.login)}
+                  >
+                    <span className="usuario-linha__quem">
+                      <span className="avatar-usuario">{iniciais(usuario.nome) ?? "?"}</span>
+                      <span className="usuario-linha__texto">
+                        <strong>{usuario.nome}</strong>
+                        <code>{usuario.login}</code>
+                      </span>
                     </span>
-                  ) : null}
-                  {usuario.situacao !== "ativo" ? (
-                    <span className="chip chip--despesa">inativo</span>
-                  ) : null}
-                  {/* O cadastro é compartilhado: quem saiu do AD fica inativo lá
-                      e perde o acesso a todos os portais de uma vez. */}
-                  {usuario.inativoNoCadastro ? (
-                    <span className="chip chip--despesa">fora do AD</span>
-                  ) : null}
-                </span>
-
-                <span className="cartao-usuario__acoes">
-                  <button
-                    type="button"
-                    className="botao-texto"
-                    aria-expanded={expandido}
-                    onClick={() => setAberto(expandido ? null : usuario.login)}
-                  >
-                    <Icone nome="eye" tamanho={13} />
-                    {expandido ? "Fechar" : "Permissões"}
+                    {status ? <span className={`chip ${status.classe}`}>{status.texto}</span> : null}
                   </button>
+                );
+              })}
 
-                  <button
-                    type="button"
-                    className="botao-texto"
-                    disabled={euMesmo}
-                    title={euMesmo ? "Você não pode alterar o seu próprio acesso" : undefined}
-                    onClick={() => executar(api.alterarUsuario(usuario.login, { admin: !usuario.admin }))}
-                  >
-                    <Icone nome="settings" tamanho={13} />
-                    {usuario.admin ? "Tirar admin" : "Tornar admin"}
-                  </button>
-
-                  {/* Redefinir derruba as sessões abertas da pessoa e obriga
-                      troca no próximo acesso — por isso passa por confirmação
-                      em vez de agir no clique. */}
-                  <button
-                    type="button"
-                    className="botao-texto botao-texto--aviso"
-                    onClick={() => setARedefinir(usuario)}
-                  >
-                    <Icone nome="chave" tamanho={13} />
-                    Apagar senha
-                  </button>
-
-                  <button
-                    type="button"
-                    className="botao-texto botao-texto--perigo"
-                    disabled={euMesmo}
-                    title={euMesmo ? "Você não pode remover o seu próprio acesso" : undefined}
-                    onClick={() => setARemover(usuario)}
-                  >
-                    <Icone nome="trash" tamanho={13} />
-                    Remover
-                  </button>
-                </span>
-              </header>
-
-              {expandido ? (
-                <div className="cartao-usuario__permissoes">
-                  {usuario.admin ? (
-                    <p className="sem-contas">
-                      Administrador vê e edita tudo — as concessões abaixo não são consultadas
-                      enquanto ele for admin.
-                    </p>
-                  ) : null}
-
-                  <EditorPermissao
-                    usuario={usuario}
-                    catalogos={catalogos}
-                    onSalvar={(lista) => executar(api.definirAcessos(usuario.login, lista))}
-                  />                </div>
+              {!visiveis.length ? (
+                <p className="sem-contas">Nenhum usuário corresponde à busca.</p>
               ) : null}
-            </section>
-          );
-        })}
+            </nav>
+          </aside>
 
-        {aRemover ? (
-          <ModalConfirmacao
-            titulo="Remover acesso ao portal"
-            rotuloConfirmar="Remover acesso"
-            mensagem={
-              <>
-                <strong>{aRemover.nome}</strong> perde o acesso ao Planejamento Orçamentário e a
-                sessão dele é encerrada na hora
-                {aRemover.acessos.length
-                  ? `, junto com ${aRemover.acessos.length} ${aRemover.acessos.length === 1 ? "permissão" : "permissões"}`
-                  : ""}
-                . O cadastro continua para os outros portais.
-              </>
-            }
-            onConfirmar={() => {
-              executar(api.removerUsuario(aRemover.login));
-              setARemover(null);
-            }}
-            onFechar={() => setARemover(null)}
-          />
-        ) : null}
+          <section className="usuarios-detalhe">
+            {usuarioSelecionado ? (
+              <UsuarioDetalhe
+                usuario={usuarioSelecionado}
+                euMesmo={usuarioSelecionado.login === sessao?.login}
+                catalogos={catalogos}
+                onAlternarAdmin={() =>
+                  executar(
+                    api.alterarUsuario(usuarioSelecionado.login, { admin: !usuarioSelecionado.admin })
+                  )
+                }
+                onRedefinirSenha={() => setARedefinir(usuarioSelecionado)}
+                onRemover={() => setARemover(usuarioSelecionado)}
+                onSalvarPermissao={(lista) => executar(api.definirAcessos(usuarioSelecionado.login, lista))}
+                onAlteracao={setRascunhoAlterado}
+                temAlteracoes={rascunhoAlterado}
+              />
+            ) : null}
+          </section>
+        </div>
+      )}
 
-        {aRedefinir ? (
-          <ModalConfirmacao
-            titulo="Apagar a senha do portal"
-            rotuloConfirmar="Apagar a senha"
-            mensagem={
-              <>
-                A senha de <strong>{aRedefinir.nome}</strong> no portal é apagada e as sessões
-                abertas caem na hora. Ele volta a entrar com a senha da rede e define outra no
-                acesso seguinte — você não precisa entregar senha nenhuma.
-              </>
-            }
-            onConfirmar={() => {
-              const alvo = aRedefinir;
-              setARedefinir(null);
-              executar(api.redefinirSenha(alvo.login));
-            }}
-            onFechar={() => setARedefinir(null)}
-          />
-        ) : null}
+      {adicionando ? (
+        <Modal titulo="Adicionar usuário" onFechar={() => setAdicionando(false)} largura="560px">
+          <div className="modal__conteudo">
+            <BuscaNoAd
+              jaTem={jaTem}
+              onAdicionar={async (usuario) => {
+                const adicionado = await executar(api.darAcesso(usuario));
+                if (adicionado) {
+                  setSelecionado(usuario.login);
+                  setAdicionando(false);
+                }
+                return adicionado;
+              }}
+            />
+          </div>
+        </Modal>
+      ) : null}
 
-        {!visiveis.length ? (
-          <p className="sem-contas">
-            {usuarios.length
-              ? "Nenhum usuário corresponde ao filtro."
-              : "Nenhum usuário com acesso ainda. Busque no Active Directory acima para adicionar."}
-          </p>
-        ) : null}
-      </div>
+      {selecaoPendente ? (
+        <ModalConfirmacao
+          titulo="Descartar alterações?"
+          icone="info"
+          perigo={false}
+          rotuloConfirmar="Descartar e trocar"
+          mensagem={
+            <>
+              As alterações de <strong>{usuarioSelecionado?.nome}</strong> ainda não foram salvas.
+              Se você trocar de usuário agora, esse rascunho será perdido.
+            </>
+          }
+          onConfirmar={() => {
+            setRascunhoAlterado(false);
+            setSelecionado(selecaoPendente);
+            setSelecaoPendente(null);
+          }}
+          onFechar={() => setSelecaoPendente(null)}
+        />
+      ) : null}
+
+      {aRemover ? (
+        <ModalConfirmacao
+          titulo="Remover acesso ao portal"
+          rotuloConfirmar="Remover acesso"
+          mensagem={
+            <>
+              <strong>{aRemover.nome}</strong> perde o acesso ao Planejamento Orçamentário e a
+              sessão dele é encerrada na hora
+              {aRemover.acessos.length
+                ? `, junto com ${aRemover.acessos.length} ${aRemover.acessos.length === 1 ? "permissão" : "permissões"}`
+                : ""}
+              . O cadastro continua para os outros portais.
+            </>
+          }
+          onConfirmar={() => {
+            executar(api.removerUsuario(aRemover.login));
+            setARemover(null);
+          }}
+          onFechar={() => setARemover(null)}
+        />
+      ) : null}
+
+      {aRedefinir ? (
+        <ModalConfirmacao
+          titulo="Redefinir senha do portal"
+          rotuloConfirmar="Redefinir senha"
+          mensagem={
+            <>
+              A senha de <strong>{aRedefinir.nome}</strong> no portal é apagada e as sessões
+              abertas caem na hora. Ele volta a entrar com a senha da rede e define outra no
+              acesso seguinte — você não precisa entregar senha nenhuma.
+            </>
+          }
+          onConfirmar={() => {
+            const alvo = aRedefinir;
+            setARedefinir(null);
+            executar(api.redefinirSenha(alvo.login));
+          }}
+          onFechar={() => setARedefinir(null)}
+        />
+      ) : null}
     </main>
   );
 }
