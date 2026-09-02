@@ -117,29 +117,44 @@ export default function ArvoreTerritorio({
     );
   }
 
+  // Com busca ativa, "todos"/"limpar" agem só sobre os centros filtrados
+  // visíveis na tela — do contrário um filtro de 2 resultados concedia (ou
+  // apagava) os outros 40 centros que a pessoa não estava nem olhando.
+  const filtroCentrosAtivo = filtroCentros.trim().length > 0;
+  const centrosAlvo = filtroCentrosAtivo ? centrosVisiveis : catalogos.centros;
+
   function marcarTodosOsCentros() {
     if (emBranco) {
       setEmBranco(false);
-      aplicar([{ filial: filialAtiva.id, centro: null }]);
+      aplicar(
+        centrosAlvo.length === catalogos.centros.length
+          ? [{ filial: filialAtiva.id, centro: null }]
+          : centrosAlvo.map((centro) => ({ filial: filialAtiva.id, centro: centro.id }))
+      );
       return;
     }
-    if (filialAtivaNo?.estado !== "total") {
-      aplicar(
-        alternarFilialNaArvore(
-          territorio,
-          catalogos,
-          filialAtiva.id,
-          filialAtivaNo?.estado ?? "vazio"
-        )
-      );
+    const faltaAlgum = centrosAlvo.some(
+      (centro) => filialAtivaNo?.estado !== "total" && porCentro.get(centro.id)?.estado !== "total"
+    );
+    if (!faltaAlgum) return;
+    let atual = territorio;
+    for (const centro of centrosAlvo) {
+      atual = alternarCentroNaArvore(atual, catalogos, filialAtiva.id, centro.id, false);
     }
+    aplicar(atual);
   }
 
   function limparFilial() {
     if (emBranco) return;
-    if (filialAtivaNo?.estado && filialAtivaNo.estado !== "vazio") {
-      aplicar(alternarFilialNaArvore(territorio, catalogos, filialAtiva.id, "total"));
+    const algumMarcado = centrosAlvo.some(
+      (centro) => filialAtivaNo?.estado === "total" || porCentro.get(centro.id)?.estado === "total"
+    );
+    if (!algumMarcado) return;
+    let atual = territorio;
+    for (const centro of centrosAlvo) {
+      atual = alternarCentroNaArvore(atual, catalogos, filialAtiva.id, centro.id, true);
     }
+    aplicar(atual);
   }
 
   return (
@@ -248,7 +263,7 @@ export default function ArvoreTerritorio({
                   disabled={somenteLeitura}
                   onClick={marcarTodosOsCentros}
                 >
-                  Selecionar todos
+                  {filtroCentrosAtivo ? `Selecionar os ${centrosAlvo.length} visíveis` : "Selecionar todos"}
                 </button>
                 <button
                   type="button"
@@ -256,7 +271,7 @@ export default function ArvoreTerritorio({
                   disabled={somenteLeitura}
                   onClick={limparFilial}
                 >
-                  Limpar
+                  {filtroCentrosAtivo ? "Limpar os visíveis" : "Limpar"}
                 </button>
               </span>
             </header>

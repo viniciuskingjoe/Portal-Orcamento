@@ -243,6 +243,14 @@ function PlanejamentoOrcamentario({ sessao, onSair, trocarSenha }) {
     });
   }
 
+  // TelaUsuarios avisa aqui quando tem permissão editada e não salva —
+  // `navegar` confere isto antes de trocar de tela. Ref, não estado: mudar
+  // não precisa re-renderizar nada, só precisa estar certo na hora do clique.
+  const usuariosRascunhoRef = useRef(false);
+  // Destino que `navegar` adiou pra pedir confirmação — null quando não há
+  // nada pendente.
+  const [navegacaoPendente, setNavegacaoPendente] = useState(null);
+
   // Guardas da atualização de fundo — ver o efeito mais abaixo.
   const gravacoesEmVoo = useRef(0);
   const versaoDasGravacoes = useRef(0);
@@ -461,6 +469,12 @@ function PlanejamentoOrcamentario({ sessao, onSair, trocarSenha }) {
     setPlanos(dados.planos);
     mesclarGrupos(lista);
     realizado.recarregar();
+    // `reconciliarComServidor` só roda a partir de um efeito ou de um handler,
+    // nunca durante o render — falso positivo da regra experimental de pureza
+    // do React Compiler, que passou a marcar esta linha depois de um ramo novo
+    // em `navegar` mudar a análise de alcançabilidade da função (sem relação
+    // real com pureza de render).
+    // eslint-disable-next-line react-hooks/purity -- ver comentário acima
     ultimaAtualizacao.current = Date.now();
   }
 
@@ -632,7 +646,7 @@ function PlanejamentoOrcamentario({ sessao, onSair, trocarSenha }) {
     irParaTopo();
   }
 
-  function navegar(destino) {
+  function executarNavegacao(destino) {
     setEditingCell(null);
     if (destino === "planos") {
       setPlanoAtivoId(null);
@@ -648,6 +662,18 @@ function PlanejamentoOrcamentario({ sessao, onSair, trocarSenha }) {
       setTela(destino);
     }
     irParaTopo();
+  }
+
+  // Sair de Usuários com permissão editada e não salva perdia o rascunho sem
+  // perguntar — só a troca de usuário DENTRO da tela tinha essa confirmação.
+  // Adia a navegação de verdade pro modal decidir, em vez do `window.confirm`
+  // nativo — mesma peça (`ModalConfirmacao`) que o resto do portal já usa.
+  function navegar(destino) {
+    if (tela === "usuarios" && usuariosRascunhoRef.current) {
+      setNavegacaoPendente(destino);
+      return;
+    }
+    executarNavegacao(destino);
   }
 
   function voltar() {
@@ -1515,6 +1541,9 @@ function PlanejamentoOrcamentario({ sessao, onSair, trocarSenha }) {
           centros={erp.centros}
           sessao={sessao}
           onVoltar={voltar}
+          onAlteracaoPendente={(valor) => {
+            usuariosRascunhoRef.current = valor;
+          }}
         />
       );
     }
@@ -1805,6 +1834,28 @@ function PlanejamentoOrcamentario({ sessao, onSair, trocarSenha }) {
             setConfirmarMapeamentoPadrao(false);
           }}
           onFechar={() => setConfirmarMapeamentoPadrao(false)}
+        />
+      ) : null}
+
+      {navegacaoPendente ? (
+        <ModalConfirmacao
+          titulo="Descartar alterações?"
+          icone="info"
+          perigo={false}
+          rotuloConfirmar="Descartar e sair"
+          mensagem={
+            <>
+              Você tem alterações de permissão não salvas. Se sair agora, esse rascunho é
+              perdido.
+            </>
+          }
+          onConfirmar={() => {
+            const destino = navegacaoPendente;
+            usuariosRascunhoRef.current = false;
+            setNavegacaoPendente(null);
+            executarNavegacao(destino);
+          }}
+          onFechar={() => setNavegacaoPendente(null)}
         />
       ) : null}
 

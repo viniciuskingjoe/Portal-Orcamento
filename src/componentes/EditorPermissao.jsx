@@ -153,7 +153,7 @@ function LinhaModuloPermissao({
                 <button
                   key={opcao.valor}
                   type="button"
-                  className={`matriz-estado ${opcao.valor === EDITA ? "matriz-estado--edita" : ""} ${config.nivel === opcao.valor ? "is-ativo" : ""}`}
+                  className={`matriz-estado ${config.nivel === opcao.valor ? "is-ativo" : ""}`}
                   aria-pressed={config.nivel === opcao.valor}
                   disabled={somenteLeitura}
                   title={opcao.titulo}
@@ -204,6 +204,9 @@ export default function EditorPermissao({ usuario, catalogos, onSalvar, onAltera
     };
   });
   const [modulos, setModulos] = useState(inicial.modulos);
+  // Snapshot do que está salvo de verdade — "Descartar" volta pra cá, não pro
+  // estado do primeiro carregamento (que ficaria errado depois do 1º save).
+  const [modulosSalvos, setModulosSalvos] = useState(inicial.modulos);
   const [assinaturaSalva, setAssinaturaSalva] = useState(inicial.assinatura);
   const [moduloAberto, setModuloAberto] = useState(null);
   const [salvando, setSalvando] = useState(false);
@@ -229,11 +232,17 @@ export default function EditorPermissao({ usuario, catalogos, onSalvar, onAltera
       const salvo = await onSalvar(concessoes);
       if (salvo !== false) {
         setAssinaturaSalva(assinaturaAtual);
+        setModulosSalvos(modulos);
         setConfirmandoZerar(false);
       }
     } finally {
       setSalvando(false);
     }
+  }
+
+  function descartar() {
+    setModulos(modulosSalvos);
+    setModuloAberto(null);
   }
 
   function aplicarATodos(nivel) {
@@ -325,14 +334,25 @@ export default function EditorPermissao({ usuario, catalogos, onSalvar, onAltera
           {alterado ? "Alterações não salvas" : "Permissões atualizadas"}
         </span>
 
-        <button
-          type="button"
-          className="botao botao--primario botao--compacto"
-          onClick={() => (vaiZerar ? setConfirmandoZerar(true) : salvar())}
-          disabled={salvando || !alterado || somenteLeitura}
-        >
-          {salvando ? "Salvando…" : "Salvar alterações"}
-        </button>
+        <span className="editor-permissao__rodape-acoes">
+          <button
+            type="button"
+            className="botao botao--secundario botao--compacto"
+            onClick={descartar}
+            disabled={salvando || !alterado || somenteLeitura}
+          >
+            Descartar
+          </button>
+
+          <button
+            type="button"
+            className="botao botao--primario botao--compacto"
+            onClick={() => (vaiZerar ? setConfirmandoZerar(true) : salvar())}
+            disabled={salvando || !alterado || somenteLeitura}
+          >
+            {salvando ? "Salvando…" : "Salvar alterações"}
+          </button>
+        </span>
       </div>
 
       {confirmandoZerar ? (

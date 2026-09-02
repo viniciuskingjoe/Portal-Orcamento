@@ -61,6 +61,10 @@ export async function listarUsuarios() {
     // que a sessão dele já funciona) — sem isto a própria tela de Usuários
     // mostrava esse administrador como se fosse usuário comum.
     admin: linha.ADMIN === true || adminsDoEnv.has(normalizarLogin(linha.LOGIN)),
+    // Separado do `admin` acima porque a tela precisa explicar a diferença:
+    // "Tirar admin" nesta pessoa não teria efeito nenhum, já que o ambiente
+    // sempre vence — sem esta flag a tela nem sabe que deveria avisar isso.
+    adminPorAmbiente: adminsDoEnv.has(normalizarLogin(linha.LOGIN)),
     ultimoLogin: linha.ULTIMO_LOGIN,
     // Ainda entra pela senha do Windows: nunca definiu a do portal.
     semSenhaDoPortal: linha.SEM_SENHA === 1 || linha.SEM_SENHA === true,

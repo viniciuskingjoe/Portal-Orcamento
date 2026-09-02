@@ -98,20 +98,28 @@ function UsuarioDetalhe({
       <section className="usuarios-detalhe__secao usuarios-detalhe__perfil">
         <span className="usuarios-detalhe__secao-texto">
           <h3>Perfil de acesso</h3>
-          <p>Administrador configura o portal inteiro; usuário recebe acesso por módulo.</p>
+          <p>
+            Administrador configura o portal inteiro; usuário recebe acesso por módulo.
+            {usuario.adminPorAmbiente
+              ? " Este login está fixado como administrador na configuração do servidor — não muda por aqui."
+              : ""}
+            {euMesmo ? " Você não pode alterar o seu próprio perfil — evita se autobloquear sem querer." : ""}
+          </p>
         </span>
         <span className="matriz-linha__estados matriz-linha__estados--largo" role="group" aria-label="Perfil de acesso">
           <button
             type="button"
             className={`matriz-estado ${!usuario.admin ? "is-ativo" : ""}`}
             aria-pressed={!usuario.admin}
-            disabled={euMesmo || temAlteracoes}
+            disabled={euMesmo || temAlteracoes || usuario.adminPorAmbiente}
             title={
               euMesmo
                 ? "Você não pode alterar o seu próprio perfil de acesso"
-                : temAlteracoes
-                  ? "Salve ou descarte as alterações dos módulos antes de trocar o perfil"
-                  : undefined
+                : usuario.adminPorAmbiente
+                  ? "Definido na configuração do servidor — não muda por esta tela"
+                  : temAlteracoes
+                    ? "Salve ou descarte as alterações dos módulos antes de trocar o perfil"
+                    : undefined
             }
             onClick={() => usuario.admin && onAlternarAdmin()}
           >
@@ -119,15 +127,17 @@ function UsuarioDetalhe({
           </button>
           <button
             type="button"
-            className={`matriz-estado matriz-estado--edita ${usuario.admin ? "is-ativo" : ""}`}
+            className={`matriz-estado ${usuario.admin ? "is-ativo" : ""}`}
             aria-pressed={usuario.admin}
-            disabled={euMesmo || temAlteracoes}
+            disabled={euMesmo || temAlteracoes || usuario.adminPorAmbiente}
             title={
               euMesmo
                 ? "Você não pode alterar o seu próprio perfil de acesso"
-                : temAlteracoes
-                  ? "Salve ou descarte as alterações dos módulos antes de trocar o perfil"
-                  : undefined
+                : usuario.adminPorAmbiente
+                  ? "Definido na configuração do servidor — não muda por esta tela"
+                  : temAlteracoes
+                    ? "Salve ou descarte as alterações dos módulos antes de trocar o perfil"
+                    : undefined
             }
             onClick={() => !usuario.admin && onAlternarAdmin()}
           >
@@ -147,6 +157,12 @@ function UsuarioDetalhe({
               Administradores visualizam e editam todos os módulos, filiais e centros de custo.
               As permissões granulares ficam guardadas, mas não são usadas enquanto este perfil
               estiver ativo.
+              {usuario.adminPorAmbiente
+                ? " Definido na configuração do servidor — não pode ser removido por esta tela."
+                : ""}
+              {euMesmo && !usuario.adminPorAmbiente
+                ? " Este é o seu usuário — você não pode tirar o seu próprio acesso de administrador."
+                : ""}
             </p>
           </span>
         </section>
@@ -267,7 +283,7 @@ function BuscaNoAd({ jaTem, onAdicionar }) {
   );
 }
 
-export default function TelaUsuarios({ filiais, centros, sessao, onVoltar }) {
+export default function TelaUsuarios({ filiais, centros, sessao, onVoltar, onAlteracaoPendente }) {
   const [usuarios, setUsuarios] = useState([]);
   const [carregando, setCarregando] = useState(true);
   const [erro, setErro] = useState("");
@@ -312,6 +328,19 @@ export default function TelaUsuarios({ filiais, centros, sessao, onVoltar }) {
   useEffect(() => {
     recarregar();
   }, []);
+
+  // Recarregar a página com rascunho pendente perderia a permissão editada
+  // sem aviso nenhum — mesmo risco que trocar de tela, só que sem chance de
+  // confirmar antes.
+  useEffect(() => {
+    if (!rascunhoAlterado) return undefined;
+    function avisar(evento) {
+      evento.preventDefault();
+      evento.returnValue = "";
+    }
+    window.addEventListener("beforeunload", avisar);
+    return () => window.removeEventListener("beforeunload", avisar);
+  }, [rascunhoAlterado]);
 
   const executar = (promessa) =>
     promessa
@@ -466,7 +495,10 @@ export default function TelaUsuarios({ filiais, centros, sessao, onVoltar }) {
                 onRedefinirSenha={() => setARedefinir(usuarioSelecionado)}
                 onRemover={() => setARemover(usuarioSelecionado)}
                 onSalvarPermissao={(lista) => executar(api.definirAcessos(usuarioSelecionado.login, lista))}
-                onAlteracao={setRascunhoAlterado}
+                onAlteracao={(valor) => {
+                  setRascunhoAlterado(valor);
+                  onAlteracaoPendente?.(valor);
+                }}
                 temAlteracoes={rascunhoAlterado}
               />
             ) : null}

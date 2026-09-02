@@ -4379,22 +4379,6 @@ dialog::backdrop {
   color: var(--on-dark);
 }
 
-/* Edita é o estado que dá poder: cor própria para não se confundir com "vê"
-   numa conferência rápida. */
-.matriz-estado--edita.is-ativo {
-  background: var(--success-contraste);
-}
-
-.editor-permissao__rodape {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  flex-wrap: wrap;
-  gap: 10px;
-  padding-top: 12px;
-  border-top: 1px solid var(--border);
-}
-
 .editor-permissao__previa {
   min-width: 0;
   color: var(--muted);
@@ -4813,9 +4797,12 @@ dialog::backdrop {
   color: var(--muted);
 }
 
+/* --accent-contraste é calibrado pra texto sobre --accent sólido (regra do
+   DESIGN.md), não pra ícone sobre --accent-soft — nessa combinação passava
+   2.7:1, abaixo até do piso de 3:1 pra elemento gráfico (achado do critique). */
 .modulo-permissao.is-ligado .modulo-permissao__icone {
   background: var(--accent-soft);
-  color: var(--accent-contraste);
+  color: var(--accent);
 }
 
 .modulo-permissao__texto {
@@ -4850,8 +4837,10 @@ dialog::backdrop {
   white-space: nowrap;
 }
 
+/* Mesma correção do toggle de perfil: "edita" não é estado de sucesso, é
+   nível de acesso — accent, não verde (achado do critique). */
 .modulo-permissao__nivel-resumo.is-edicao {
-  color: var(--success);
+  color: var(--accent);
 }
 
 .modulo-permissao__interruptor {
@@ -5234,7 +5223,7 @@ dialog::backdrop {
 
 .escopo-territorio__resumo svg {
   flex: 0 0 auto;
-  color: var(--accent-contraste);
+  color: var(--accent);
 }
 
 .editor-permissao__rodape {
@@ -5250,6 +5239,12 @@ dialog::backdrop {
   border-radius: var(--radius-md);
   background: var(--surface);
   box-shadow: var(--shadow-panel);
+}
+
+.editor-permissao__rodape-acoes {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
 .editor-permissao__estado {
@@ -5338,6 +5333,10 @@ dialog::backdrop {
 
   .editor-permissao__rodape {
     grid-template-columns: 1fr;
+  }
+
+  .editor-permissao__rodape-acoes {
+    flex-direction: column;
   }
 
   .editor-permissao__rodape .botao {
