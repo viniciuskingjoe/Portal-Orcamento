@@ -33,6 +33,7 @@ export function retiraAdministracao({ adminAtual, situacaoAtual, admin, situacao
 }
 
 export async function listarUsuarios() {
+  const adminsDoEnv = adminsDoAmbiente();
   const [usuarios, acessos] = await Promise.all([
     query(
       `SELECT u.LOGIN, u.NOME, u.EMAIL, u.SITUACAO, u.ULTIMO_LOGIN,
@@ -56,7 +57,10 @@ export async function listarUsuarios() {
     email: linha.EMAIL,
     situacao: linha.SITUACAO_APP,
     inativoNoCadastro: linha.SITUACAO !== "ativo",
-    admin: linha.ADMIN === true,
+    // Quem está em PORTAL_ADMINS é admin mesmo sem a flag no banco (é assim
+    // que a sessão dele já funciona) — sem isto a própria tela de Usuários
+    // mostrava esse administrador como se fosse usuário comum.
+    admin: linha.ADMIN === true || adminsDoEnv.has(normalizarLogin(linha.LOGIN)),
     ultimoLogin: linha.ULTIMO_LOGIN,
     // Ainda entra pela senha do Windows: nunca definiu a do portal.
     semSenhaDoPortal: linha.SEM_SENHA === 1 || linha.SEM_SENHA === true,
